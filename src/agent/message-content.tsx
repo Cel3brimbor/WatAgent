@@ -57,6 +57,13 @@ const COMPONENTS: Components = {
   td: ({ children }) => <td className="md-td">{children}</td>,
 };
 
+function hideToolMarkup(content: string): string {
+  return content
+    .replace(/<tool_call[\s\S]*?<\/tool_call>/gi, "")
+    .replace(/<tool_call[\s\S]*$/i, "")
+    .trim();
+}
+
 export const MessageContent = memo(function MessageContent({
   content,
   pending,
@@ -64,7 +71,8 @@ export const MessageContent = memo(function MessageContent({
   content: string;
   pending?: boolean;
 }) {
-  if (!content) return pending ? <span className="md-pending">…</span> : null;
+  const visible = hideToolMarkup(content);
+  if (!visible) return pending ? <span className="md-pending">…</span> : null;
   return (
     <ReactMarkdown
       remarkPlugins={REMARK_PLUGINS}
@@ -73,7 +81,7 @@ export const MessageContent = memo(function MessageContent({
       components={COMPONENTS}
       skipHtml
     >
-      {content}
+      {visible}
     </ReactMarkdown>
   );
 });

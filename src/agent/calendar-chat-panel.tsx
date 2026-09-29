@@ -83,7 +83,7 @@ export function CalendarChatPanel({
   }
 
   return (
-    <aside className="chat-panel" aria-label="Calendar chat" style={{ width: chatResize.width }}>
+    <aside className="chat-panel" aria-label="Agent" style={{ width: chatResize.width }}>
       <div
         className="chat-resize-handle"
         role="separator"

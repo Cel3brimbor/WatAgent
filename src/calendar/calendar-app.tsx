@@ -648,10 +648,18 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
           ) : null}
           <button
             type="button"
-            className={`ghost-btn${chatOpen ? " is-active" : ""}`}
+            className={`ghost-btn calendar-agent-btn${chatOpen ? " is-active" : ""}`}
+            aria-label="Agent"
+            aria-pressed={chatOpen}
             onClick={() => setChatOpen((value) => !value)}
           >
-            Chat
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 3a7 7 0 0 0-4 12.7V19a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-3.3A7 7 0 0 0 12 3z" />
+              <path d="M9.5 21h5" />
+              <circle cx="10" cy="11" r="0.85" fill="currentColor" stroke="none" />
+              <circle cx="14" cy="11" r="0.85" fill="currentColor" stroke="none" />
+            </svg>
+            Agent
           </button>
         </div>
       </header>
