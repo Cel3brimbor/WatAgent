@@ -797,42 +797,59 @@ select {
   color: var(--danger);
 }
 
-.gcal-connect {
-  position: relative;
-}
-
-.gcal-popover {
-  position: absolute;
-  top: calc(100% + 0.4rem);
-  right: 0;
-  z-index: 30;
+.settings-panel {
   display: grid;
-  gap: 0.4rem;
-  width: min(18rem, calc(100vw - 2rem));
-  padding: 0.85rem;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: var(--panel-solid);
-  box-shadow: var(--shadow);
+  gap: 0.85rem;
+  width: min(28rem, 100%);
 }
 
-.gcal-popover-title {
-  margin: 0;
-  font-size: 0.95rem;
-  font-weight: 700;
+.settings-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
 }
 
-.gcal-popover-meta {
+.settings-head h2 {
   margin: 0;
+}
+
+.settings-account {
+  margin: -0.35rem 0 0;
   color: var(--ink-soft);
   font-size: 0.82rem;
-  line-height: 1.4;
   overflow-wrap: anywhere;
 }
 
-.gcal-popover-actions {
+.settings-section {
+  display: grid;
+  gap: 0.45rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--line);
+}
+
+.settings-section h3 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.settings-status {
+  margin: 0.2rem 0 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.settings-meta {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.82rem;
+}
+
+.settings-actions {
   display: flex;
   justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 0.4rem;
   margin-top: 0.35rem;
 }

@@ -27,7 +27,7 @@ import {
   type CalendarDraft,
 } from "@/calendar/calendar-item-editor";
 import { GoogleEventCard } from "@/calendar/google-event-card";
-import { GoogleCalendarButton } from "@/calendar/google-calendar-button";
+import { SettingsPanel } from "@/calendar/settings-panel";
 import { CalendarChatPanel } from "@/agent/calendar-chat-panel";
 import { readAgentStream } from "@/agent/stream";
 import type { ChatMessage, LiveActivity, ToolEventRecord } from "@/agent/types";
@@ -406,7 +406,8 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
           <h2>{formatFocusLabel(focus, view, weekStartsOn)}</h2>
         </div>
         <div className="calendar-toolbar-right">
-          <GoogleCalendarButton
+          <SettingsPanel
+            accountEmail={user.email}
             onChanged={() => setGoogleVersion((value) => value + 1)}
             onSyncNow={() => googlePullRef.current()}
             onNotice={setNotice}
