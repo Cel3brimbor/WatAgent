@@ -13,7 +13,7 @@ import {
   startOfLocalDay,
   startOfWeek,
 } from "@/calendar/date-utils";
-import { aggregateTimeline, type BusyBlock, type OverlayEvent } from "@/calendar/timeline";
+import { aggregateTimeline, rangesOverlap, type BusyBlock, type OverlayEvent } from "@/calendar/timeline";
 import { readCalendarView, writeCalendarView } from "@/calendar/preferences";
 import { CalendarDayView } from "@/calendar/views/day-view";
 import { CalendarWeekView } from "@/calendar/views/week-view";
@@ -43,6 +43,39 @@ type SendPayload = {
 };
 
 const GOOGLE_POLL_MS = 5 * 60 * 1000;
+
+type FreshRange = { start: number; end: number; at: number };
+
+function rangeIsFresh(covered: FreshRange[], range: Range, now: number): boolean {
+  return covered.some(
+    (entry) =>
+      entry.start <= range.rangeStartUTC &&
+      entry.end >= range.rangeEndUTC &&
+      now - entry.at < GOOGLE_POLL_MS,
+  );
+}
+
+function mergeTimed<T extends { startUTC: number; endUTC: number }>(
+  previous: T[],
+  incoming: T[],
+  range: Range,
+): T[] {
+  return [
+    ...previous.filter(
+      (item) => !rangesOverlap(item.startUTC, item.endUTC, range.rangeStartUTC, range.rangeEndUTC),
+    ),
+    ...incoming,
+  ];
+}
+
+function googleFetchRange(focus: Date, view: CalendarView, weekStartsOn: 0 | 1): Range {
+  if (view === "month") {
+    const start = startOfLocalDay(new Date(focus.getFullYear(), focus.getMonth() - 1, 1));
+    const end = startOfLocalDay(new Date(focus.getFullYear(), focus.getMonth() + 2, 1));
+    return { rangeStartUTC: start.getTime(), rangeEndUTC: end.getTime() };
+  }
+  return googleRange(focus, view, weekStartsOn);
+}
 
 function googleRange(focus: Date, view: CalendarView, weekStartsOn: 0 | 1): Range {
   if (view === "day") {
@@ -132,29 +165,46 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
   );
 
   const googlePullRef = useRef<() => void>(() => undefined);
+  const coveredRef = useRef<FreshRange[]>([]);
+  const pullGenRef = useRef(new Map<string, number>());
+  const seenGoogleVersionRef = useRef(googleVersion);
+  const mountedRef = useRef(true);
   useEffect(() => {
-    let cancelled = false;
-    const range = googleRange(focus, view, weekStartsOn);
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+  useEffect(() => {
+    if (seenGoogleVersionRef.current !== googleVersion) {
+      seenGoogleVersionRef.current = googleVersion;
+      coveredRef.current = [];
+    }
+    const range = googleFetchRange(focus, view, weekStartsOn);
+    const key = `${range.rangeStartUTC}:${range.rangeEndUTC}`;
     async function pull() {
+      const gen = (pullGenRef.current.get(key) ?? 0) + 1;
+      pullGenRef.current.set(key, gen);
       try {
         const pulled = await syncFromGoogle(range);
-        if (cancelled) return;
-        setBusyBlocks(pulled.busyBlocks);
-        setOverlayEvents(pulled.overlayEvents);
+        if (!mountedRef.current || pullGenRef.current.get(key) !== gen) return;
+        setBusyBlocks((prev) => mergeTimed(prev, pulled.busyBlocks, range));
+        setOverlayEvents((prev) => mergeTimed(prev, pulled.overlayEvents, range));
+        const now = Date.now();
+        coveredRef.current = [
+          ...coveredRef.current.filter((entry) => now - entry.at < GOOGLE_POLL_MS),
+          { start: range.rangeStartUTC, end: range.rangeEndUTC, at: now },
+        ];
       } catch {
-        if (!cancelled) {
-          setBusyBlocks([]);
-          setOverlayEvents([]);
-        }
+        // Keep events already loaded for nearby months.
       }
     }
     googlePullRef.current = () => void pull();
-    void pull();
+    if (!rangeIsFresh(coveredRef.current, range, Date.now())) void pull();
     const timer = window.setInterval(() => void pull(), GOOGLE_POLL_MS);
     const onFocus = () => void pull();
     window.addEventListener("focus", onFocus);
     return () => {
-      cancelled = true;
       window.clearInterval(timer);
       window.removeEventListener("focus", onFocus);
     };
