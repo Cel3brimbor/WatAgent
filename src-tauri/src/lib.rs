@@ -4,5 +4,5 @@ pub fn run() {
         .plugin(tauri_plugin_oauth::init())
         .plugin(tauri_plugin_secure_store::init())
         .run(tauri::generate_context!())
-        .expect("error while running WATerflow");
+        .expect("error while running WatAgent");
 }

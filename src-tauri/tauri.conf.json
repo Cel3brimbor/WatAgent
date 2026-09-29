@@ -1,5 +1,5 @@
 {
-  "productName": "WATerflow",
+  "productName": "WatAgent",
   "version": "0.1.0",
   "identifier": "com.standalone.calendar",
   "build": {
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "WATerflow",
+        "title": "WatAgent",
         "width": 1280,
         "height": 860,
         "minWidth": 720,

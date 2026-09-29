@@ -125,7 +125,7 @@ export function CalendarChatPanel({
       <section className="chat-messages" ref={listRef} aria-live="polite">
         {messages.length === 0 ? (
           <div className="empty-state">
-            <p>Chat about the focused day. The assistant can change your WATerflow events and tasks.</p>
+            <p>Chat about the focused day. The assistant can change your WatAgent events and tasks.</p>
           </div>
         ) : (
           <div className="message-list">
@@ -143,7 +143,7 @@ export function CalendarChatPanel({
                     className={`bubble bubble-${m.role}`}
                     data-empty={m.role === "assistant" && !m.content ? "true" : undefined}
                   >
-                    <span className="bubble-role">{m.role === "user" ? "You" : "WATerflow"}</span>
+                    <span className="bubble-role">{m.role === "user" ? "You" : "WatAgent"}</span>
                     <div className="bubble-body">
                       <AgentThinkingBlock events={m.toolEvents} />
                       {status ? <p className="bubble-status">{status}</p> : null}

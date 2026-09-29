@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
   <key>NSLocalNetworkUsageDescription</key>
-  <string>WATerflow connects to your development server on the local network while you test the app.</string>
+  <string>WatAgent connects to your development server on the local network while you test the app.</string>
   <key>NSAppTransportSecurity</key>
   <dict>
     <key>NSAllowsLocalNetworking</key>

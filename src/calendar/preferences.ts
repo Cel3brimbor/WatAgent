@@ -1,6 +1,6 @@
 import type { CalendarView } from "@/calendar/types";
 
-const STORAGE_KEY = "waterflow.calendar.preferences.v1";
+const STORAGE_KEY = "watagent.calendar.preferences.v1";
 const VIEWS = new Set<CalendarView>(["day", "week", "month", "year"]);
 
 export function readCalendarView(defaultView: CalendarView = "week"): CalendarView {

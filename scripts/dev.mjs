@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const apiRoot = path.resolve(root, "..", "waterflow-core-api");
+const apiRoot = path.resolve(root, "..", "watagent-core-api");
 const npm = process.platform === "win32" ? "npm.cmd" : "npm";
 const devHost = process.env.TAURI_DEV_HOST?.trim() || "";
 

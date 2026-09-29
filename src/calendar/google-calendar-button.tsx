@@ -141,7 +141,7 @@ export function GoogleCalendarButton({ onChanged, onSyncNow, onNotice }: Props) 
             <>
               <p className="gcal-popover-title">Google Calendar</p>
               <p className="gcal-popover-meta">
-                Show your Google events alongside WATerflow and keep your WATerflow items in a dedicated calendar.
+                Show your Google events alongside WatAgent and keep your WatAgent items in a dedicated calendar.
               </p>
               <div className="gcal-popover-actions">
                 <button

@@ -15,7 +15,7 @@ export function LoginScreen({ error, onSignIn }: Props) {
   return (
     <main className="login-shell">
       <section className="login-card">
-        <h1>WATerflow</h1>
+        <h1>WatAgent</h1>
         <p className="login-subtitle">Your calendar, with an assistant that can plan it for you.</p>
         {message ? (
           <p className="login-error" role="alert">

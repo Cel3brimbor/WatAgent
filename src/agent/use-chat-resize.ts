@@ -13,7 +13,7 @@ export const CHAT_WIDTH_DEFAULT = 360;
 export const CHAT_WIDTH_MIN = 280;
 export const CHAT_WIDTH_MAX = 560;
 
-const STORAGE_KEY = "waterflow.chat-dock-width";
+const STORAGE_KEY = "watagent.chat-dock-width";
 
 function clampWidth(value: number) {
   return Math.max(CHAT_WIDTH_MIN, Math.min(CHAT_WIDTH_MAX, value));

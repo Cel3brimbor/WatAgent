@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "WATerflow",
+  title: "WatAgent",
   description: "Calendar with an AI planning assistant.",
   referrer: "strict-origin-when-cross-origin",
 };
