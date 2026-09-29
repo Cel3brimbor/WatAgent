@@ -27,7 +27,8 @@ type CalendarContextValue = {
   syncFromGoogle: (range: {
     rangeStartUTC: number;
     rangeEndUTC: number;
-  }) => Promise<{ busyBlocks: BusyBlock[]; overlayEvents: OverlayEvent[] }>;
+  }) => Promise<{ busyBlocks: BusyBlock[]; overlayEvents: OverlayEvent[]; lastSyncedAt: number }>;
+  setAfterWrite: (listener: (() => void) | null) => void;
   upsert: (input: { id?: string; title: string; calendar: CalendarItemMeta }) => void;
   completeTask: (id: string, completed: boolean) => void;
   remove: (id: string) => void;
@@ -154,10 +155,22 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
           return sortItems([...byId.values()]);
         });
       }
-      return { busyBlocks: result.busyBlocks, overlayEvents: result.overlayEvents };
+      return {
+        busyBlocks: result.busyBlocks,
+        overlayEvents: result.overlayEvents,
+        lastSyncedAt: result.lastSyncedAt,
+      };
     },
     [],
   );
+
+  const afterWriteRef = useRef<(() => void) | null>(null);
+  const setAfterWrite = useCallback((listener: (() => void) | null) => {
+    afterWriteRef.current = listener;
+  }, []);
+  const wrote = useCallback(() => {
+    afterWriteRef.current?.();
+  }, []);
 
   const upsert = useCallback(
     (input: { id?: string; title: string; calendar: CalendarItemMeta }) => {
@@ -178,10 +191,13 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
         calendar: input.calendar,
         createdAt: existing?.createdAt ?? now,
       })
-        .then(putItem)
+        .then((saved) => {
+          putItem(saved);
+          wrote();
+        })
         .catch(logFailure("save"));
     },
-    [putItem],
+    [putItem, wrote],
   );
 
   const completeTask = useCallback(
@@ -196,15 +212,16 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
   const remove = useCallback(
     (id: string) => {
       dropItem(id);
-      void deleteCalendarItem(id).catch(logFailure("delete"));
+      void deleteCalendarItem(id).then(wrote).catch(logFailure("delete"));
     },
-    [dropItem],
+    [dropItem, wrote],
   );
 
   const applyRemoteCalendarChange = useCallback(
     (change: CalendarChange) => {
       if (change.action === "delete") {
         dropItem(change.id);
+        wrote();
         return;
       }
       const calendar = parseCalendarMeta(change.calendar);
@@ -218,8 +235,9 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
         createdAt: existing?.createdAt ?? now,
         updatedAt: now,
       });
+      wrote();
     },
-    [dropItem, putItem],
+    [dropItem, putItem, wrote],
   );
 
   const persistChat = useCallback((chatId: string) => {
@@ -368,6 +386,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
       items,
       refresh,
       syncFromGoogle,
+      setAfterWrite,
       upsert,
       completeTask,
       remove,
@@ -392,6 +411,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
       items,
       refresh,
       syncFromGoogle,
+      setAfterWrite,
       upsert,
       completeTask,
       remove,

@@ -31,11 +31,18 @@ export function aggregateTimeline(input: {
 }): TimelineItem[] {
   const { startDateUTC, endDateUTC } = localDayBounds(input.focus);
   const items: TimelineItem[] = [];
+  const seen = new Set<string>();
+
+  function push(item: TimelineItem) {
+    if (seen.has(item.id)) return;
+    seen.add(item.id);
+    items.push(item);
+  }
 
   for (const event of input.events) {
     const meta = event.calendar;
     if (!rangesOverlap(meta.startUTC, meta.endUTC, startDateUTC, endDateUTC)) continue;
-    items.push({
+    push({
       id: event.id,
       kind: meta.kind,
       title: event.title,
@@ -48,7 +55,7 @@ export function aggregateTimeline(input: {
 
   for (const event of input.overlayEvents ?? []) {
     if (!rangesOverlap(event.startUTC, event.endUTC, startDateUTC, endDateUTC)) continue;
-    items.push({
+    push({
       id: `gcal:${event.id}`,
       kind: "gcal_event",
       title: event.title,
@@ -70,7 +77,7 @@ export function aggregateTimeline(input: {
 
   for (const block of input.busyBlocks ?? []) {
     if (!rangesOverlap(block.startUTC, block.endUTC, startDateUTC, endDateUTC)) continue;
-    items.push({
+    push({
       id: `gcal-busy:${block.startUTC}:${block.endUTC}`,
       kind: "gcal_busy",
       title: "Busy",

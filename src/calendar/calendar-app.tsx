@@ -59,13 +59,22 @@ function mergeTimed<T extends { startUTC: number; endUTC: number }>(
   previous: T[],
   incoming: T[],
   range: Range,
+  idOf: (item: T) => string,
 ): T[] {
-  return [
-    ...previous.filter(
-      (item) => !rangesOverlap(item.startUTC, item.endUTC, range.rangeStartUTC, range.rangeEndUTC),
-    ),
-    ...incoming,
-  ];
+  const incomingIds = new Set(incoming.map(idOf));
+  const merged = previous.filter(
+    (item) =>
+      !incomingIds.has(idOf(item)) &&
+      !rangesOverlap(item.startUTC, item.endUTC, range.rangeStartUTC, range.rangeEndUTC),
+  );
+  const seen = new Set(merged.map(idOf));
+  for (const item of incoming) {
+    const id = idOf(item);
+    if (seen.has(id)) continue;
+    seen.add(id);
+    merged.push(item);
+  }
+  return merged;
 }
 
 function googleFetchRange(focus: Date, view: CalendarView, weekStartsOn: 0 | 1): Range {
@@ -102,12 +111,13 @@ function timeZone(): string {
 
 export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: () => void }) {
   const calendar = useCalendar();
-  const { syncFromGoogle, createChat, pruneEmptyChats } = calendar;
+  const { syncFromGoogle, createChat, pruneEmptyChats, setAfterWrite } = calendar;
   const [view, setView] = useState<CalendarView>(() => readCalendarView());
   const [focus, setFocus] = useState(() => startOfLocalDay(new Date()));
   const [busyBlocks, setBusyBlocks] = useState<BusyBlock[]>([]);
   const [overlayEvents, setOverlayEvents] = useState<OverlayEvent[]>([]);
   const [googleVersion, setGoogleVersion] = useState(0);
+  const [googleSyncedAt, setGoogleSyncedAt] = useState<number | null>(null);
   const weekStartsOn = useMemo(() => localeWeekStartsOn(), []);
   const [chatOpen, setChatOpen] = useState(false);
   const [chatResizing, setChatResizing] = useState(false);
@@ -164,7 +174,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
     [dayItems],
   );
 
-  const googlePullRef = useRef<() => void>(() => undefined);
+  const googlePullRef = useRef<() => Promise<number | null>>(async () => null);
   const coveredRef = useRef<FreshRange[]>([]);
   const pullGenRef = useRef(new Map<string, number>());
   const seenGoogleVersionRef = useRef(googleVersion);
@@ -182,33 +192,53 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
     }
     const range = googleFetchRange(focus, view, weekStartsOn);
     const key = `${range.rangeStartUTC}:${range.rangeEndUTC}`;
-    async function pull() {
+    async function pull(): Promise<number | null> {
       const gen = (pullGenRef.current.get(key) ?? 0) + 1;
       pullGenRef.current.set(key, gen);
-      try {
-        const pulled = await syncFromGoogle(range);
-        if (!mountedRef.current || pullGenRef.current.get(key) !== gen) return;
-        setBusyBlocks((prev) => mergeTimed(prev, pulled.busyBlocks, range));
-        setOverlayEvents((prev) => mergeTimed(prev, pulled.overlayEvents, range));
-        const now = Date.now();
-        coveredRef.current = [
-          ...coveredRef.current.filter((entry) => now - entry.at < GOOGLE_POLL_MS),
-          { start: range.rangeStartUTC, end: range.rangeEndUTC, at: now },
-        ];
-      } catch {
-        // Keep events already loaded for nearby months.
-      }
+      const pulled = await syncFromGoogle(range);
+      if (!mountedRef.current || pullGenRef.current.get(key) !== gen) return null;
+      setBusyBlocks((prev) =>
+        mergeTimed(prev, pulled.busyBlocks, range, (block) => `${block.startUTC}:${block.endUTC}`),
+      );
+      setOverlayEvents((prev) => mergeTimed(prev, pulled.overlayEvents, range, (event) => event.id));
+      const now = Date.now();
+      coveredRef.current = [
+        ...coveredRef.current.filter((entry) => now - entry.at < GOOGLE_POLL_MS),
+        { start: range.rangeStartUTC, end: range.rangeEndUTC, at: now },
+      ];
+      setGoogleSyncedAt(pulled.lastSyncedAt);
+      return pulled.lastSyncedAt;
     }
-    googlePullRef.current = () => void pull();
-    if (!rangeIsFresh(coveredRef.current, range, Date.now())) void pull();
-    const timer = window.setInterval(() => void pull(), GOOGLE_POLL_MS);
-    const onFocus = () => void pull();
+    googlePullRef.current = pull;
+    if (!rangeIsFresh(coveredRef.current, range, Date.now())) {
+      void pull().catch(() => undefined);
+    }
+    const timer = window.setInterval(() => {
+      void pull().catch(() => undefined);
+    }, GOOGLE_POLL_MS);
+    const onFocus = () => {
+      void pull().catch(() => undefined);
+    };
     window.addEventListener("focus", onFocus);
     return () => {
       window.clearInterval(timer);
       window.removeEventListener("focus", onFocus);
     };
   }, [focus, view, weekStartsOn, syncFromGoogle, googleVersion]);
+
+  useEffect(() => {
+    let timer = 0;
+    setAfterWrite(() => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        void googlePullRef.current().catch(() => undefined);
+      }, 300);
+    });
+    return () => {
+      window.clearTimeout(timer);
+      setAfterWrite(null);
+    };
+  }, [setAfterWrite]);
 
   useEffect(() => {
     if (chatOpen && calendar.chats.length === 0) createChat();
@@ -459,6 +489,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
           <SettingsPanel
             accountEmail={user.email}
             onChanged={() => setGoogleVersion((value) => value + 1)}
+            syncedAt={googleSyncedAt}
             onSyncNow={() => googlePullRef.current()}
             onNotice={setNotice}
           />

@@ -854,6 +854,31 @@ select {
   margin-top: 0.35rem;
 }
 
+.ghost-btn.is-syncing,
+.ghost-btn.is-syncing:disabled {
+  opacity: 1;
+  min-width: 6.5rem;
+  background: #e4ebe7;
+  color: var(--ink-soft);
+  border-color: #d5dfda;
+  cursor: default;
+}
+
+.sync-spinner {
+  width: 0.9rem;
+  height: 0.9rem;
+  border: 2px solid rgba(61, 82, 73, 0.25);
+  border-top-color: var(--ink-soft);
+  border-radius: 50%;
+  animation: sync-spin 0.7s linear infinite;
+}
+
+@keyframes sync-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .gcal-card {
   position: fixed;
   z-index: 40;

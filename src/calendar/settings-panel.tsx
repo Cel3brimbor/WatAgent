@@ -13,8 +13,9 @@ import { isNativeShell } from "@/shared/platform";
 
 type Props = {
   accountEmail: string | null;
+  syncedAt: number | null;
   onChanged: () => void;
-  onSyncNow: () => void;
+  onSyncNow: () => Promise<number | null>;
   onNotice: (message: string) => void;
 };
 
@@ -28,10 +29,11 @@ function formatSynced(ms: number | null): string {
   })}`;
 }
 
-export function SettingsPanel({ accountEmail, onChanged, onSyncNow, onNotice }: Props) {
+export function SettingsPanel({ accountEmail, syncedAt, onChanged, onSyncNow, onNotice }: Props) {
   const [open, setOpen] = useState(false);
   const [status, setStatus] = useState<GoogleCalendarStatus | null>(null);
   const [working, setWorking] = useState(false);
+  const [syncing, setSyncing] = useState(false);
 
   const loadStatus = useCallback(async () => {
     try {
@@ -40,6 +42,11 @@ export function SettingsPanel({ accountEmail, onChanged, onSyncNow, onNotice }: 
       setStatus({ connected: false, email: null, lastSyncedAt: null });
     }
   }, []);
+
+  useEffect(() => {
+    if (!syncedAt || status?.connected !== true) return;
+    setStatus((prev) => (prev ? { ...prev, lastSyncedAt: syncedAt } : prev));
+  }, [syncedAt, status?.connected]);
 
   useEffect(() => {
     if (!open) return;
@@ -83,6 +90,20 @@ export function SettingsPanel({ accountEmail, onChanged, onSyncNow, onNotice }: 
       onNotice("Google Calendar could not be unlinked.");
     } finally {
       setWorking(false);
+    }
+  }
+
+  async function syncNow() {
+    setSyncing(true);
+    try {
+      const syncedAtMs = await onSyncNow();
+      if (syncedAtMs) {
+        setStatus((prev) => (prev ? { ...prev, lastSyncedAt: syncedAtMs } : prev));
+      }
+    } catch {
+      onNotice("Google Calendar could not be synced.");
+    } finally {
+      setSyncing(false);
     }
   }
 
@@ -130,14 +151,13 @@ export function SettingsPanel({ accountEmail, onChanged, onSyncNow, onNotice }: 
                   <div className="settings-actions">
                     <button
                       type="button"
-                      className="ghost-btn"
-                      disabled={working}
-                      onClick={() => {
-                        onSyncNow();
-                        window.setTimeout(() => void loadStatus(), 1500);
-                      }}
+                      className={`ghost-btn${syncing ? " is-syncing" : ""}`}
+                      disabled={working || syncing}
+                      aria-busy={syncing}
+                      aria-label={syncing ? "Syncing" : "Sync now"}
+                      onClick={() => void syncNow()}
                     >
-                      Sync now
+                      {syncing ? <span className="sync-spinner" aria-hidden="true" /> : "Sync now"}
                     </button>
                     <button type="button" className="danger-btn" disabled={working} onClick={() => void unlink()}>
                       {working ? "Unlinking…" : "Unlink"}
