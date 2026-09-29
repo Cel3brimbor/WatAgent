@@ -9,6 +9,10 @@ export type BusyBlock = { startUTC: number; endUTC: number };
 
 export type OverlayEvent = {
   id: string;
+  calendarId: string;
+  eventId: string;
+  editable: boolean;
+  deletable: boolean;
   title: string;
   startUTC: number;
   endUTC: number;
@@ -63,6 +67,10 @@ export function aggregateTimeline(input: {
       endUTC: event.endUTC,
       allDay: event.allDay,
       google: {
+        calendarId: event.calendarId,
+        eventId: event.eventId,
+        editable: event.editable,
+        deletable: event.deletable,
         location: event.location,
         description: event.description,
         calendarName: event.calendarName,

@@ -34,9 +34,16 @@ function overlayOf(raw: unknown): OverlayEvent | null {
   const startUTC = finite(rec.startUTC);
   const endUTC = finite(rec.endUTC);
   const id = text(rec.id, 512);
-  if (!id || startUTC == null || endUTC == null || endUTC <= startUTC) return null;
+  const calendarId = text(rec.calendarId, 1024);
+  const eventId = text(rec.eventId, 1024);
+  if (!id || !calendarId || !eventId) return null;
+  if (startUTC == null || endUTC == null || endUTC <= startUTC) return null;
   return {
     id,
+    calendarId,
+    eventId,
+    editable: rec.editable === true,
+    deletable: rec.deletable === true,
     title: text(rec.title, 200) ?? "Busy",
     startUTC,
     endUTC,
@@ -121,6 +128,31 @@ export async function disconnectGoogleCalendar(): Promise<void> {
   await apiJson("/api/integrations/google-calendar/disconnect", { method: "POST" });
 }
 
+function timeZone(): string {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+}
+
+export async function updateGoogleEvent(input: {
+  calendarId: string;
+  eventId: string;
+  title: string;
+  startUTC: number;
+  endUTC: number;
+  allDay: boolean;
+}): Promise<void> {
+  await apiJson("/api/integrations/google-calendar/events", {
+    method: "POST",
+    body: JSON.stringify({ ...input, title: input.title.slice(0, 200), timeZone: timeZone() }),
+  });
+}
+
+export async function deleteGoogleEvent(input: { calendarId: string; eventId: string }): Promise<void> {
+  await apiJson("/api/integrations/google-calendar/events", {
+    method: "DELETE",
+    body: JSON.stringify(input),
+  });
+}
+
 export async function syncGoogleCalendar(range: {
   rangeStartUTC: number;
   rangeEndUTC: number;
@@ -131,7 +163,7 @@ export async function syncGoogleCalendar(range: {
       method: "POST",
       body: JSON.stringify({
         ...range,
-        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+        timeZone: timeZone(),
       }),
     },
   );

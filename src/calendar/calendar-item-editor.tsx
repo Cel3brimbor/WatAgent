@@ -1,8 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { CalendarItemKind, CalendarItemMeta } from "@/calendar/types";
+import type { CalendarItemKind, CalendarItemMeta, TimelineItem } from "@/calendar/types";
 import { hourGridMs, startOfLocalDay } from "@/calendar/date-utils";
+
+export type GoogleDraftTarget = {
+  calendarId: string;
+  eventId: string;
+  calendarName?: string;
+  deletable: boolean;
+};
 
 export type CalendarDraft = {
   id?: string;
@@ -12,6 +19,7 @@ export type CalendarDraft = {
   endUTC: number;
   allDay: boolean;
   completed?: boolean;
+  google?: GoogleDraftTarget;
 };
 
 type Props = {
@@ -41,6 +49,11 @@ function toDateInputValue(utc: number): string {
 export function CalendarItemEditor({ draft, onChange, onSave, onCancel, onDelete }: Props) {
   return (
     <div className="calendar-editor" role="dialog" aria-label="Calendar item">
+      {draft.google ? (
+        <p className="calendar-editor-source">
+          Changes save to {draft.google.calendarName || "your Google calendar"} in Google Calendar.
+        </p>
+      ) : null}
       <label className="calendar-editor-field">
         Title
         <input
@@ -53,22 +66,26 @@ export function CalendarItemEditor({ draft, onChange, onSave, onCancel, onDelete
         />
       </label>
       <div className="calendar-editor-row">
-        <label>
-          <input
-            type="radio"
-            checked={draft.kind === "event"}
-            onChange={() => onChange({ ...draft, kind: "event", completed: undefined })}
-          />
-          Event
-        </label>
-        <label>
-          <input
-            type="radio"
-            checked={draft.kind === "task"}
-            onChange={() => onChange({ ...draft, kind: "task", completed: Boolean(draft.completed) })}
-          />
-          Task
-        </label>
+        {draft.google ? null : (
+          <>
+            <label>
+              <input
+                type="radio"
+                checked={draft.kind === "event"}
+                onChange={() => onChange({ ...draft, kind: "event", completed: undefined })}
+              />
+              Event
+            </label>
+            <label>
+              <input
+                type="radio"
+                checked={draft.kind === "task"}
+                onChange={() => onChange({ ...draft, kind: "task", completed: Boolean(draft.completed) })}
+              />
+              Task
+            </label>
+          </>
+        )}
         <label>
           <input
             type="checkbox"
@@ -89,7 +106,8 @@ export function CalendarItemEditor({ draft, onChange, onSave, onCancel, onDelete
               const [y, m, d] = event.target.value.split("-").map(Number);
               const start = new Date(y, m - 1, d).getTime();
               if (!Number.isFinite(start)) return;
-              onChange({ ...draft, startUTC: start, endUTC: start + DAY_MS });
+              const days = Math.max(1, Math.round((draft.endUTC - draft.startUTC) / DAY_MS));
+              onChange({ ...draft, startUTC: start, endUTC: new Date(y, m - 1, d + days).getTime() });
             }}
           />
         </label>
@@ -174,6 +192,24 @@ export function defaultAllDayDraft(day: Date): CalendarDraft {
     startUTC: start.getTime(),
     endUTC: start.getTime() + DAY_MS,
     allDay: true,
+  };
+}
+
+export function draftFromGoogle(item: TimelineItem): CalendarDraft | null {
+  const google = item.google;
+  if (!google?.calendarId || !google.eventId || !google.editable) return null;
+  return {
+    title: item.title,
+    kind: "event",
+    startUTC: item.startUTC,
+    endUTC: item.endUTC,
+    allDay: item.allDay,
+    google: {
+      calendarId: google.calendarId,
+      eventId: google.eventId,
+      calendarName: google.calendarName,
+      deletable: Boolean(google.deletable),
+    },
   };
 }
 

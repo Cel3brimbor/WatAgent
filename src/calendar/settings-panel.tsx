@@ -9,14 +9,18 @@ import {
   startWebGoogleConnect,
   type GoogleCalendarStatus,
 } from "@/calendar/google-calendar-client";
+import { DEFAULT_COLORS, type CalendarColors } from "@/calendar/preferences";
 import { isNativeShell } from "@/shared/platform";
 
 type Props = {
   accountEmail: string | null;
+  colors: CalendarColors;
+  onColorsChange: (colors: CalendarColors) => void;
   syncedAt: number | null;
   onChanged: () => void;
   onSyncNow: () => Promise<number | null>;
   onNotice: (message: string) => void;
+  onSignOut: () => void;
 };
 
 function formatSynced(ms: number | null): string {
@@ -29,8 +33,22 @@ function formatSynced(ms: number | null): string {
   })}`;
 }
 
-export function SettingsPanel({ accountEmail, syncedAt, onChanged, onSyncNow, onNotice }: Props) {
-  const [open, setOpen] = useState(false);
+const COLOR_FIELDS: Array<{ key: "event" | "task" | "google"; label: string }> = [
+  { key: "event", label: "WatAgent events" },
+  { key: "task", label: "WatAgent tasks" },
+  { key: "google", label: "Google events" },
+];
+
+export function SettingsPanel({
+  accountEmail,
+  colors,
+  onColorsChange,
+  syncedAt,
+  onChanged,
+  onSyncNow,
+  onNotice,
+  onSignOut,
+}: Props) {
   const [status, setStatus] = useState<GoogleCalendarStatus | null>(null);
   const [working, setWorking] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -49,14 +67,8 @@ export function SettingsPanel({ accountEmail, syncedAt, onChanged, onSyncNow, on
   }, [syncedAt, status?.connected]);
 
   useEffect(() => {
-    if (!open) return;
     void loadStatus();
-    function onKey(event: KeyboardEvent) {
-      if (event.key === "Escape") setOpen(false);
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, loadStatus]);
+  }, [loadStatus]);
 
   async function connect() {
     setWorking(true);
@@ -110,76 +122,88 @@ export function SettingsPanel({ accountEmail, syncedAt, onChanged, onSyncNow, on
   const connected = status?.connected === true;
 
   return (
-    <>
-      <button
-        type="button"
-        className={`ghost-btn${open ? " is-active" : ""}`}
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        onClick={() => setOpen(true)}
-      >
-        Settings
-      </button>
-      {open ? (
-        <div className="modal-backdrop" role="presentation" onClick={() => setOpen(false)}>
-          <div
-            className="modal settings-panel"
-            role="dialog"
-            aria-labelledby="settings-title"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="settings-head">
-              <h2 id="settings-title">Settings</h2>
-              <button type="button" className="ghost-btn" aria-label="Close settings" onClick={() => setOpen(false)}>
-                ×
+    <section className="settings-page" aria-labelledby="settings-title">
+      <h2 id="settings-title">Settings</h2>
+      {accountEmail ? <p className="settings-account">{accountEmail}</p> : null}
+
+      <section className="settings-section" aria-labelledby="settings-gcal">
+        <h3 id="settings-gcal">Google Calendar</h3>
+        <p className="modal-hint">
+          Show your Google events on this calendar and keep WatAgent items in a dedicated Google calendar. You can
+          link or unlink at any time.
+        </p>
+        {connected ? (
+          <>
+            <p className="settings-status">Linked{status?.email ? ` as ${status.email}` : ""}</p>
+            <p className="settings-meta">{formatSynced(status?.lastSyncedAt ?? null)}</p>
+            <div className="settings-actions">
+              <button
+                type="button"
+                className={`ghost-btn${syncing ? " is-syncing" : ""}`}
+                disabled={working || syncing}
+                aria-busy={syncing}
+                aria-label={syncing ? "Syncing" : "Sync now"}
+                onClick={() => void syncNow()}
+              >
+                {syncing ? <span className="sync-spinner" aria-hidden="true" /> : "Sync now"}
+              </button>
+              <button type="button" className="danger-btn" disabled={working} onClick={() => void unlink()}>
+                {working ? "Unlinking…" : "Unlink"}
               </button>
             </div>
-            {accountEmail ? <p className="settings-account">{accountEmail}</p> : null}
-
-            <section className="settings-section" aria-labelledby="settings-gcal">
-              <h3 id="settings-gcal">Google Calendar</h3>
-              <p className="modal-hint">
-                Show your Google events on this calendar and keep WatAgent items in a dedicated Google calendar. You
-                can link or unlink at any time.
-              </p>
-              {connected ? (
-                <>
-                  <p className="settings-status">
-                    Linked{status?.email ? ` as ${status.email}` : ""}
-                  </p>
-                  <p className="settings-meta">{formatSynced(status?.lastSyncedAt ?? null)}</p>
-                  <div className="settings-actions">
-                    <button
-                      type="button"
-                      className={`ghost-btn${syncing ? " is-syncing" : ""}`}
-                      disabled={working || syncing}
-                      aria-busy={syncing}
-                      aria-label={syncing ? "Syncing" : "Sync now"}
-                      onClick={() => void syncNow()}
-                    >
-                      {syncing ? <span className="sync-spinner" aria-hidden="true" /> : "Sync now"}
-                    </button>
-                    <button type="button" className="danger-btn" disabled={working} onClick={() => void unlink()}>
-                      {working ? "Unlinking…" : "Unlink"}
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <div className="settings-actions">
-                  <button
-                    type="button"
-                    className="primary-btn"
-                    disabled={working || status === null}
-                    onClick={() => void connect()}
-                  >
-                    {working ? "Linking…" : "Link Google Calendar"}
-                  </button>
-                </div>
-              )}
-            </section>
+          </>
+        ) : (
+          <div className="settings-actions">
+            <button
+              type="button"
+              className="primary-btn"
+              disabled={working || status === null}
+              onClick={() => void connect()}
+            >
+              {working ? "Linking…" : "Link Google Calendar"}
+            </button>
           </div>
+        )}
+      </section>
+
+      <section className="settings-section" aria-labelledby="settings-colors">
+        <h3 id="settings-colors">Colors</h3>
+        <div className="settings-colors">
+          {COLOR_FIELDS.map((field) => {
+            const disabled = field.key === "google" && colors.useGoogleColors;
+            return (
+              <label key={field.key} className={`settings-color${disabled ? " is-disabled" : ""}`}>
+                <input
+                  type="color"
+                  value={colors[field.key]}
+                  disabled={disabled}
+                  onChange={(event) => onColorsChange({ ...colors, [field.key]: event.target.value })}
+                />
+                <span>{field.label}</span>
+              </label>
+            );
+          })}
+          <label className="settings-check">
+            <input
+              type="checkbox"
+              checked={colors.useGoogleColors}
+              onChange={(event) => onColorsChange({ ...colors, useGoogleColors: event.target.checked })}
+            />
+            Use each Google calendar&apos;s own color
+          </label>
         </div>
-      ) : null}
-    </>
+        <div className="settings-actions">
+          <button type="button" className="ghost-btn" onClick={() => onColorsChange(DEFAULT_COLORS)}>
+            Reset colors
+          </button>
+        </div>
+      </section>
+
+      <div className="settings-actions">
+        <button type="button" className="ghost-btn" onClick={onSignOut}>
+          Sign out
+        </button>
+      </div>
+    </section>
   );
 }

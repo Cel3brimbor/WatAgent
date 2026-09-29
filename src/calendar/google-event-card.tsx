@@ -8,6 +8,8 @@ type Props = {
   item: TimelineItem;
   anchor: DOMRect;
   onClose: () => void;
+  onEdit?: () => void;
+  onDelete?: () => void;
 };
 
 function safeHttps(raw: string | undefined, hosts?: string[]): string | undefined {
@@ -45,7 +47,7 @@ function Icon({ children }: { children: ReactNode }) {
   );
 }
 
-export function GoogleEventCard({ item, anchor, onClose }: Props) {
+export function GoogleEventCard({ item, anchor, onClose, onEdit, onDelete }: Props) {
   const cardRef = useRef<HTMLDivElement | null>(null);
   const [box, setBox] = useState(() => {
     const width = 420;
@@ -63,7 +65,7 @@ export function GoogleEventCard({ item, anchor, onClose }: Props) {
   const calendarName = details?.calendarName?.trim() || "Google Calendar";
   const color = /^#[0-9a-fA-F]{6}$/.test(details?.calendarColor ?? "")
     ? details?.calendarColor
-    : "#039be5";
+    : "var(--gcal-color)";
   const htmlLink = safeHttps(details?.htmlLink, ["google.com"]);
   const meetLink = safeHttps(details?.meetLink, ["meet.google.com"]);
   const locationHref = location
@@ -114,6 +116,34 @@ export function GoogleEventCard({ item, anchor, onClose }: Props) {
       <header className="gcal-card-head">
         <h3>{item.title}</h3>
         <div className="gcal-card-actions">
+          {onEdit ? (
+            <button type="button" className="gcal-card-icon-btn" aria-label="Edit event" onClick={onEdit}>
+              <Icon>
+                <path
+                  d="M5 19h3.2L18.4 8.8a1.9 1.9 0 0 0 0-2.7l-.5-.5a1.9 1.9 0 0 0-2.7 0L5 15.8V19z"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.7"
+                  strokeLinejoin="round"
+                />
+                <path d="M13.8 7l3.2 3.2" fill="none" stroke="currentColor" strokeWidth="1.7" />
+              </Icon>
+            </button>
+          ) : null}
+          {onDelete ? (
+            <button type="button" className="gcal-card-icon-btn" aria-label="Delete event" onClick={onDelete}>
+              <Icon>
+                <path
+                  d="M5 7h14M10 7V5.5h4V7M7 7l.8 11.2a1 1 0 0 0 1 .8h6.4a1 1 0 0 0 1-.8L17 7"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.7"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </Icon>
+            </button>
+          ) : null}
           {htmlLink ? (
             <a
               className="gcal-card-icon-btn"

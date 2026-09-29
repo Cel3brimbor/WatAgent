@@ -20,6 +20,10 @@ export type CalendarItemDoc = {
 export type TimelineKind = "event" | "task" | "gcal_busy" | "gcal_event";
 
 export type GoogleEventDetails = {
+  calendarId?: string;
+  eventId?: string;
+  editable?: boolean;
+  deletable?: boolean;
   location?: string;
   description?: string;
   calendarName?: string;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import type { CalendarItemMeta, CalendarView, TimelineItem } from "@/calendar/types";
 import { useCalendar } from "@/calendar/store";
 import {
@@ -14,7 +14,20 @@ import {
   startOfWeek,
 } from "@/calendar/date-utils";
 import { aggregateTimeline, rangesOverlap, type BusyBlock, type OverlayEvent } from "@/calendar/timeline";
-import { readCalendarView, writeCalendarView } from "@/calendar/preferences";
+import {
+  ALL_SOURCES,
+  readCalendarColors,
+  readCalendarView,
+  readSourceFilter,
+  writeCalendarColors,
+  writeCalendarView,
+  writeSourceFilter,
+  type CalendarColors,
+  type CalendarSourceFilter,
+} from "@/calendar/preferences";
+import { CalendarFilters } from "@/calendar/calendar-filters";
+import { deleteGoogleEvent, updateGoogleEvent } from "@/calendar/google-calendar-client";
+import { ConfirmDialog } from "@/shared/confirm-dialog";
 import { CalendarDayView } from "@/calendar/views/day-view";
 import { CalendarWeekView } from "@/calendar/views/week-view";
 import { CalendarMonthView } from "@/calendar/views/month-view";
@@ -23,11 +36,15 @@ import {
   CalendarItemEditor,
   defaultAllDayDraft,
   defaultTimedDraft,
+  draftFromGoogle,
   draftFromMeta,
   type CalendarDraft,
+  type GoogleDraftTarget,
 } from "@/calendar/calendar-item-editor";
 import { GoogleEventCard } from "@/calendar/google-event-card";
 import { SettingsPanel } from "@/calendar/settings-panel";
+import { SideNav, type AppSection } from "@/calendar/side-nav";
+import { TodoList } from "@/calendar/todo-list";
 import { CalendarChatPanel } from "@/agent/calendar-chat-panel";
 import { readAgentStream } from "@/agent/stream";
 import type { ChatMessage, LiveActivity, ToolEventRecord } from "@/agent/types";
@@ -113,6 +130,8 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
   const calendar = useCalendar();
   const { syncFromGoogle, createChat, pruneEmptyChats, setAfterWrite } = calendar;
   const [view, setView] = useState<CalendarView>(() => readCalendarView());
+  const [section, setSection] = useState<AppSection>("calendar");
+  const [navCollapsed, setNavCollapsed] = useState(false);
   const [focus, setFocus] = useState(() => startOfLocalDay(new Date()));
   const [busyBlocks, setBusyBlocks] = useState<BusyBlock[]>([]);
   const [overlayEvents, setOverlayEvents] = useState<OverlayEvent[]>([]);
@@ -128,11 +147,60 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
   const [streamingAssistantId, setStreamingAssistantId] = useState<string | null>(null);
   const [liveActivity, setLiveActivity] = useState<LiveActivity | null>(null);
   const [googlePeek, setGooglePeek] = useState<{ item: TimelineItem; anchor: DOMRect } | null>(null);
+  const [googleDelete, setGoogleDelete] = useState<(GoogleDraftTarget & { title: string }) | null>(null);
+  const [sources, setSources] = useState<CalendarSourceFilter>(() => readSourceFilter());
+  const [colors, setColors] = useState<CalendarColors>(() => readCalendarColors());
   const abortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    writeCalendarColors(colors);
+  }, [colors]);
+
+  const colorVars = useMemo(
+    () =>
+      ({
+        "--event-color": colors.event,
+        "--task-color": colors.task,
+        "--gcal-color": colors.google,
+      }) as CSSProperties,
+    [colors],
+  );
+
+  const shownOverlayEvents = useMemo(
+    () =>
+      colors.useGoogleColors
+        ? overlayEvents
+        : overlayEvents.map((event) => ({ ...event, calendarColor: undefined })),
+    [overlayEvents, colors.useGoogleColors],
+  );
 
   useEffect(() => {
     writeCalendarView(view);
   }, [view]);
+
+  useEffect(() => {
+    writeSourceFilter(sources);
+  }, [sources]);
+
+  useEffect(() => {
+    try {
+      setNavCollapsed(window.localStorage.getItem("watagent.nav.collapsed") === "1");
+    } catch {
+      return;
+    }
+  }, []);
+
+  function toggleNav() {
+    setNavCollapsed((current) => {
+      const next = !current;
+      try {
+        window.localStorage.setItem("watagent.nav.collapsed", next ? "1" : "0");
+      } catch {
+        return next;
+      }
+      return next;
+    });
+  }
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -142,22 +210,24 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
     window.history.replaceState(null, "", window.location.pathname);
   }, []);
 
-  const itemsForDay = useCallback(
-    (date: Date) =>
+  const timelineFor = useCallback(
+    (date: Date, filter: CalendarSourceFilter) =>
       aggregateTimeline({
         focus: date,
-        events: calendar.items,
-        busyBlocks: overlayEvents.length > 0 ? [] : busyBlocks,
-        overlayEvents,
+        events: filter.app ? calendar.items : [],
+        busyBlocks: !filter.google || shownOverlayEvents.length > 0 ? [] : busyBlocks,
+        overlayEvents: filter.google ? shownOverlayEvents : [],
       }),
-    [calendar.items, busyBlocks, overlayEvents],
+    [calendar.items, busyBlocks, shownOverlayEvents],
   );
+
+  const itemsForDay = useCallback((date: Date) => timelineFor(date, sources), [timelineFor, sources]);
 
   const dayItems = useMemo(() => itemsForDay(focus), [itemsForDay, focus]);
 
   const timelineDigest = useMemo(
     () =>
-      dayItems
+      timelineFor(focus, ALL_SOURCES)
         .slice(0, 80)
         .map((item) => {
           const when = item.allDay ? "all-day" : `${formatTime(item.startUTC)}–${formatTime(item.endUTC)}`;
@@ -171,7 +241,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
         })
         .join("\n")
         .slice(0, 12_000),
-    [dayItems],
+    [timelineFor, focus],
   );
 
   const googlePullRef = useRef<() => Promise<number | null>>(async () => null);
@@ -293,10 +363,68 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
     if (existing) setDraft(draftFromMeta(existing.id, existing.title, existing.calendar));
   }
 
+  function patchOverlay(
+    target: { calendarId: string; eventId: string },
+    patch: (event: OverlayEvent) => OverlayEvent | null,
+  ) {
+    setOverlayEvents((prev) =>
+      prev.flatMap((event) => {
+        if (event.calendarId !== target.calendarId || event.eventId !== target.eventId) return [event];
+        const next = patch(event);
+        return next ? [next] : [];
+      }),
+    );
+  }
+
+  async function saveGoogleDraft(pending: CalendarDraft, target: GoogleDraftTarget) {
+    const title = pending.title.trim() || "Event";
+    const timing = { startUTC: pending.startUTC, endUTC: pending.endUTC, allDay: pending.allDay };
+    patchOverlay(target, (event) => ({ ...event, title, ...timing }));
+    try {
+      await updateGoogleEvent({ calendarId: target.calendarId, eventId: target.eventId, title, ...timing });
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : "The Google event could not be updated.");
+    } finally {
+      setGoogleVersion((value) => value + 1);
+    }
+  }
+
+  async function confirmGoogleDelete() {
+    const target = googleDelete;
+    if (!target) return;
+    setGoogleDelete(null);
+    setDraft(null);
+    patchOverlay(target, () => null);
+    try {
+      await deleteGoogleEvent({ calendarId: target.calendarId, eventId: target.eventId });
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : "The Google event could not be deleted.");
+    } finally {
+      setGoogleVersion((value) => value + 1);
+    }
+  }
+
+  function googleTargetOf(item: TimelineItem): GoogleDraftTarget | null {
+    const google = item.google;
+    if (!google?.calendarId || !google.eventId) return null;
+    return {
+      calendarId: google.calendarId,
+      eventId: google.eventId,
+      calendarName: google.calendarName,
+      deletable: Boolean(google.deletable),
+    };
+  }
+
   function saveDraft() {
     if (!draft) return;
     if (!draft.allDay && draft.endUTC <= draft.startUTC) {
       setNotice("End time must be after the start time.");
+      return;
+    }
+    if (draft.google) {
+      const pending = draft;
+      setDraft(null);
+      void saveGoogleDraft(pending, draft.google);
       return;
     }
     const calendarMeta: CalendarItemMeta = {
@@ -460,39 +588,43 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
 
   return (
     <div
-      className={`calendar-shell${chatResizing ? " is-resizing-chat" : ""}`}
+      className={`app-frame${navCollapsed ? " is-nav-collapsed" : ""}${chatResizing ? " is-resizing-chat" : ""}`}
+      style={colorVars}
     >
+      <SideNav section={section} collapsed={navCollapsed} onSection={setSection} onToggle={toggleNav} />
+      <div className="calendar-shell">
       <header className="calendar-toolbar">
         <div className="calendar-toolbar-left">
-          <button type="button" className="ghost-btn" onClick={() => setFocus(startOfLocalDay(new Date()))}>
-            Today
-          </button>
-          <button
-            type="button"
-            className="ghost-btn"
-            aria-label="Previous"
-            onClick={() => setFocus((current) => shiftFocus(current, view, -1))}
-          >
-            ‹
-          </button>
-          <button
-            type="button"
-            className="ghost-btn"
-            aria-label="Next"
-            onClick={() => setFocus((current) => shiftFocus(current, view, 1))}
-          >
-            ›
-          </button>
-          <h2>{formatFocusLabel(focus, view, weekStartsOn)}</h2>
+          {section === "calendar" ? (
+            <>
+              <button type="button" className="ghost-btn" onClick={() => setFocus(startOfLocalDay(new Date()))}>
+                Today
+              </button>
+              <button
+                type="button"
+                className="ghost-btn"
+                aria-label="Previous"
+                onClick={() => setFocus((current) => shiftFocus(current, view, -1))}
+              >
+                ‹
+              </button>
+              <button
+                type="button"
+                className="ghost-btn"
+                aria-label="Next"
+                onClick={() => setFocus((current) => shiftFocus(current, view, 1))}
+              >
+                ›
+              </button>
+              <h2>{formatFocusLabel(focus, view, weekStartsOn)}</h2>
+            </>
+          ) : (
+            <h2>{section === "tasks" ? "To-do list" : "Settings"}</h2>
+          )}
         </div>
         <div className="calendar-toolbar-right">
-          <SettingsPanel
-            accountEmail={user.email}
-            onChanged={() => setGoogleVersion((value) => value + 1)}
-            syncedAt={googleSyncedAt}
-            onSyncNow={() => googlePullRef.current()}
-            onNotice={setNotice}
-          />
+          {section === "calendar" ? <CalendarFilters value={sources} onChange={setSources} /> : null}
+          {section === "calendar" ? (
           <select
             className="calendar-view-select"
             value={view}
@@ -504,20 +636,22 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
             <option value="month">Month</option>
             <option value="year">Year</option>
           </select>
+          ) : null}
+          {section === "tasks" ? (
+            <button
+              type="button"
+              className="primary-btn"
+              onClick={() => setDraft({ ...defaultAllDayDraft(startOfLocalDay(new Date())), kind: "task" })}
+            >
+              Add task
+            </button>
+          ) : null}
           <button
             type="button"
             className={`ghost-btn${chatOpen ? " is-active" : ""}`}
             onClick={() => setChatOpen((value) => !value)}
           >
             Chat
-          </button>
-          <button
-            type="button"
-            className="ghost-btn"
-            title={user.email ?? undefined}
-            onClick={onSignOut}
-          >
-            Sign out
           </button>
         </div>
       </header>
@@ -541,7 +675,27 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
 
       <div className="calendar-body">
         <div className="calendar-stage">
-          {view === "day" ? (
+          {section === "tasks" ? (
+            <TodoList
+              items={calendar.items}
+              onOpen={(item) => setDraft(draftFromMeta(item.id, item.title, item.calendar))}
+              onComplete={calendar.completeTask}
+              onCreate={() => setDraft({ ...defaultAllDayDraft(startOfLocalDay(new Date())), kind: "task" })}
+            />
+          ) : null}
+          {section === "settings" ? (
+            <SettingsPanel
+              accountEmail={user.email}
+              colors={colors}
+              onColorsChange={setColors}
+              syncedAt={googleSyncedAt}
+              onChanged={() => setGoogleVersion((value) => value + 1)}
+              onSyncNow={() => googlePullRef.current()}
+              onNotice={setNotice}
+              onSignOut={onSignOut}
+            />
+          ) : null}
+          {section === "calendar" && view === "day" ? (
             <CalendarDayView
               focus={focus}
               items={dayItems}
@@ -551,7 +705,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
               onCompleteTask={calendar.completeTask}
             />
           ) : null}
-          {view === "week" ? (
+          {section === "calendar" && view === "week" ? (
             <CalendarWeekView
               focus={focus}
               weekStartsOn={weekStartsOn}
@@ -566,7 +720,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
               onCompleteTask={calendar.completeTask}
             />
           ) : null}
-          {view === "month" ? (
+          {section === "calendar" && view === "month" ? (
             <CalendarMonthView
               focus={focus}
               weekStartsOn={weekStartsOn}
@@ -576,7 +730,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
               onCompleteTask={calendar.completeTask}
             />
           ) : null}
-          {view === "year" ? (
+          {section === "calendar" && view === "year" ? (
             <CalendarYearView
               focus={focus}
               weekStartsOn={weekStartsOn}
@@ -614,7 +768,38 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
       </div>
 
       {googlePeek ? (
-        <GoogleEventCard item={googlePeek.item} anchor={googlePeek.anchor} onClose={() => setGooglePeek(null)} />
+        <GoogleEventCard
+          item={googlePeek.item}
+          anchor={googlePeek.anchor}
+          onClose={() => setGooglePeek(null)}
+          onEdit={
+            googlePeek.item.google?.editable
+              ? () => {
+                  const next = draftFromGoogle(googlePeek.item);
+                  setGooglePeek(null);
+                  if (next) setDraft(next);
+                }
+              : undefined
+          }
+          onDelete={
+            googlePeek.item.google?.deletable
+              ? () => {
+                  const target = googleTargetOf(googlePeek.item);
+                  setGooglePeek(null);
+                  if (target) setGoogleDelete({ ...target, title: googlePeek.item.title });
+                }
+              : undefined
+          }
+        />
+      ) : null}
+
+      {googleDelete ? (
+        <ConfirmDialog
+          title={`Delete “${googleDelete.title}”?`}
+          message={`This deletes it from ${googleDelete.calendarName || "your calendar"} in Google Calendar. If it repeats, only this occurrence is removed.`}
+          onCancel={() => setGoogleDelete(null)}
+          onConfirm={() => void confirmGoogleDelete()}
+        />
       ) : null}
 
       {draft ? (
@@ -625,16 +810,21 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
             onSave={saveDraft}
             onCancel={() => setDraft(null)}
             onDelete={
-              draft.id
-                ? () => {
-                    calendar.remove(draft.id as string);
-                    setDraft(null);
-                  }
-                : undefined
+              draft.google
+                ? draft.google.deletable
+                  ? () => setGoogleDelete({ ...(draft.google as GoogleDraftTarget), title: draft.title || "Event" })
+                  : undefined
+                : draft.id
+                  ? () => {
+                      calendar.remove(draft.id as string);
+                      setDraft(null);
+                    }
+                  : undefined
             }
           />
         </div>
       ) : null}
+    </div>
     </div>
   );
 }

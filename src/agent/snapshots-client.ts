@@ -1,7 +1,29 @@
 import { apiJson } from "@/shared/api-base";
-import type { ChatMessage, ChatSession } from "@/agent/types";
+import type { ChatMessage, ChatSession, ToolEventRecord } from "@/agent/types";
 
 const SAFE_ID = /^[A-Za-z0-9._:-]{1,128}$/;
+const TOOL_NAME = /^[A-Za-z0-9_]{1,64}$/;
+const MAX_TOOL_EVENTS = 40;
+
+function toolEventOf(raw: unknown): ToolEventRecord | null {
+  if (!raw || typeof raw !== "object") return null;
+  const rec = raw as Record<string, unknown>;
+  if (typeof rec.id !== "string" || !SAFE_ID.test(rec.id)) return null;
+  if (typeof rec.tool !== "string" || !TOOL_NAME.test(rec.tool)) return null;
+  if (rec.state !== "calling" && rec.state !== "succeeded" && rec.state !== "failed") return null;
+  return {
+    id: rec.id,
+    tool: rec.tool,
+    state: rec.state,
+    resultSummary: typeof rec.resultSummary === "string" ? rec.resultSummary.slice(0, 500) : undefined,
+  };
+}
+
+function toolEventsOf(raw: unknown): ToolEventRecord[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const events = raw.map(toolEventOf).filter((event): event is ToolEventRecord => event != null);
+  return events.length > 0 ? events.slice(0, MAX_TOOL_EVENTS) : undefined;
+}
 
 function messageOf(raw: unknown): ChatMessage | null {
   if (!raw || typeof raw !== "object") return null;
@@ -14,6 +36,7 @@ function messageOf(raw: unknown): ChatMessage | null {
     role: rec.role,
     content: rec.content.slice(0, 20_000),
     createdAt: Number(rec.createdAt) || undefined,
+    toolEvents: rec.role === "assistant" ? toolEventsOf(rec.toolEvents) : undefined,
   };
 }
 
@@ -42,14 +65,23 @@ export async function loadChatSessions(): Promise<ChatSession[]> {
 
 export async function saveChatSession(chat: ChatSession): Promise<void> {
   const messages = chat.messages
-    .filter((message) => message.content.trim().length > 0)
+    .filter((message) => message.content.trim().length > 0 || (message.toolEvents?.length ?? 0) > 0)
     .slice(-200)
-    .map((message) => ({
-      id: message.id,
-      role: message.role,
-      content: message.content.slice(0, 20_000),
-      createdAt: message.createdAt,
-    }));
+    .map((message) => {
+      const toolEvents = message.toolEvents?.slice(0, MAX_TOOL_EVENTS).map((event) => ({
+        id: event.id,
+        tool: event.tool.slice(0, 64),
+        state: event.state,
+        resultSummary: event.resultSummary?.slice(0, 500),
+      }));
+      return {
+        id: message.id,
+        role: message.role,
+        content: message.content.slice(0, 20_000),
+        createdAt: message.createdAt,
+        toolEvents: message.role === "assistant" && toolEvents?.length ? toolEvents : undefined,
+      };
+    });
   if (messages.length === 0) return;
   await apiJson("/api/calendar/chats", {
     method: "POST",

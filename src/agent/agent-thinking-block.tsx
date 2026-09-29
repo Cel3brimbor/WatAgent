@@ -37,7 +37,13 @@ export function AgentThinkingBlock({ events }: { events?: ToolEventRecord[] }) {
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
       >
-        <span>{summary}</span>
+        <span className="agent-thinking-chevron" aria-hidden>
+          ›
+        </span>
+        <span className="agent-thinking-summary">{summary}</span>
+        <span className="agent-thinking-count">
+          {events.length} step{events.length === 1 ? "" : "s"}
+        </span>
       </button>
       {open ? (
         <ol className="agent-thinking-timeline">
