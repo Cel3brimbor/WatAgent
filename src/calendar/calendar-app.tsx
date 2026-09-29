@@ -82,7 +82,6 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [modelUsed, setModelUsed] = useState<string | null>(null);
   const [streamingAssistantId, setStreamingAssistantId] = useState<string | null>(null);
   const [liveActivity, setLiveActivity] = useState<LiveActivity | null>(null);
   const [googlePeek, setGooglePeek] = useState<{ item: TimelineItem; anchor: DOMRect } | null>(null);
@@ -278,7 +277,6 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
 
     let assistantText = "";
     const toolEvents: ToolEventRecord[] = [];
-    let usedModel: string | undefined;
     const writeAssistant = () => {
       calendar.setChatMessages(
         currentMessages().map((message) =>
@@ -287,7 +285,6 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
                 ...message,
                 content: assistantText,
                 toolEvents: toolEvents.length > 0 ? toolEvents.map((event) => ({ ...event })) : undefined,
-                model: usedModel,
               }
             : message,
         ),
@@ -310,8 +307,6 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
             .map((message) => ({ role: message.role, content: message.content })),
         }),
       });
-      usedModel = res.headers.get("X-WF-Model")?.trim().slice(0, 200) || undefined;
-      if (usedModel) setModelUsed(usedModel);
       if (!res.ok) {
         const errPayload = (await res.json().catch(() => null)) as { error?: unknown } | null;
         throw new Error(
@@ -519,7 +514,6 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
           messages={calendar.activeChat?.messages ?? []}
           busy={busy}
           error={error}
-          modelUsed={modelUsed}
           streamingAssistantId={streamingAssistantId}
           liveActivity={liveActivity}
           onSend={(payload) => void handleSend(payload)}

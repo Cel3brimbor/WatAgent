@@ -110,13 +110,3 @@ export function ChatBubbleTools({
     </div>
   );
 }
-
-export function MessageModelHover({ model }: { model?: string }) {
-  const label = model?.trim();
-  if (!label) return null;
-  return (
-    <p className="bubble-model" title={label}>
-      {label}
-    </p>
-  );
-}

@@ -7,13 +7,12 @@ const MAX_CHARS = 20_000;
 type Props = {
   busy: boolean;
   error: string | null;
-  modelUsed: string | null;
   onSend: (payload: { text: string }) => void;
   onStop: () => void;
   onError: (message: string | null) => void;
 };
 
-export function ChatComposer({ busy, error, modelUsed, onSend, onStop, onError }: Props) {
+export function ChatComposer({ busy, error, onSend, onStop, onError }: Props) {
   const [text, setText] = useState("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -67,7 +66,6 @@ export function ChatComposer({ busy, error, modelUsed, onSend, onStop, onError }
           </button>
         )}
       </div>
-      {modelUsed ? <p className="composer-model">{modelUsed}</p> : null}
     </form>
   );
 }

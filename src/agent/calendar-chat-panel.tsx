@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { AgentThinkingBlock } from "@/agent/agent-thinking-block";
-import { ChatBubbleTools, MessageModelHover } from "@/agent/bubble-tools";
+import { ChatBubbleTools } from "@/agent/bubble-tools";
 import { ChatComposer } from "@/agent/chat-composer";
 import { ChatTabStrip } from "@/agent/chat-tab-strip";
 import { MessageContent } from "@/agent/message-content";
@@ -21,7 +21,6 @@ type Props = {
   messages: ChatMessage[];
   busy: boolean;
   error: string | null;
-  modelUsed: string | null;
   streamingAssistantId: string | null;
   liveActivity: LiveActivity | null;
   onSend: (payload: SendPayload) => void;
@@ -45,7 +44,6 @@ export function CalendarChatPanel({
   messages,
   busy,
   error,
-  modelUsed,
   streamingAssistantId,
   liveActivity,
   onSend,
@@ -195,7 +193,6 @@ export function CalendarChatPanel({
                         setEditDraft(m.content);
                       }}
                     />
-                    {m.role === "assistant" ? <MessageModelHover model={m.model} /> : null}
                   </div>
                 </div>
               );
@@ -206,7 +203,6 @@ export function CalendarChatPanel({
       <ChatComposer
         busy={busy}
         error={error}
-        modelUsed={modelUsed}
         onSend={onSend}
         onStop={onStop}
         onError={onError}

@@ -13,7 +13,6 @@ export type ChatMessage = {
   content: string;
   createdAt?: number;
   toolEvents?: ToolEventRecord[];
-  model?: string;
 };
 
 export type ChatSession = {
