@@ -1,0 +1,12 @@
+{
+  "identifier": "default",
+  "windows": ["main"],
+  "webviews": ["main"],
+  "platforms": ["iOS"],
+  "permissions": [
+    "oauth:allow-start",
+    "secure-store:allow-store-refresh-token",
+    "secure-store:allow-load-refresh-token",
+    "secure-store:allow-clear-session"
+  ]
+}

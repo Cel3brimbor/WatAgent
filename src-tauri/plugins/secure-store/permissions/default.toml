@@ -1,0 +1,6 @@
+[default]
+permissions = [
+  "allow-store-refresh-token",
+  "allow-load-refresh-token",
+  "allow-clear-session",
+]

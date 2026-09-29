@@ -1,0 +1,74 @@
+{
+  "productName": "WATerflow",
+  "version": "0.1.0",
+  "identifier": "com.standalone.calendar",
+  "build": {
+    "frontendDist": "../out",
+    "devUrl": "http://localhost:3000",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build"
+  },
+  "app": {
+    "withGlobalTauri": false,
+    "windows": [
+      {
+        "label": "main",
+        "title": "WATerflow",
+        "width": 1280,
+        "height": 860,
+        "minWidth": 720,
+        "minHeight": 560,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "csp": {
+        "default-src": ["'self'"],
+        "script-src": ["'self'"],
+        "style-src": ["'self'", "'unsafe-inline'"],
+        "img-src": ["'self'", "data:", "blob:"],
+        "font-src": ["'self'"],
+        "connect-src": ["'self'", "ipc:", "http://ipc.localhost", "http://localhost:4000"],
+        "frame-src": ["'none'"],
+        "object-src": ["'none'"],
+        "base-uri": ["'self'"],
+        "form-action": ["'self'"]
+      },
+      "devCsp": {
+        "default-src": ["'self'"],
+        "script-src": ["'self'", "'unsafe-eval'"],
+        "style-src": ["'self'", "'unsafe-inline'"],
+        "img-src": ["'self'", "data:", "blob:"],
+        "font-src": ["'self'"],
+        "connect-src": [
+          "'self'",
+          "ipc:",
+          "http://ipc.localhost",
+          "http://localhost:3000",
+          "ws://localhost:3000",
+          "http://localhost:4000",
+          "http://127.0.0.1:3000",
+          "ws://127.0.0.1:3000",
+          "http://127.0.0.1:4000"
+        ],
+        "frame-src": ["'none'"],
+        "object-src": ["'none'"],
+        "base-uri": ["'self'"],
+        "form-action": ["'self'"]
+      },
+      "freezePrototype": true,
+      "capabilities": ["default"]
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  }
+}
