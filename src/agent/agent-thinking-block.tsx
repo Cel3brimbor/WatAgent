@@ -7,6 +7,8 @@ import { Disclosure } from "@/shared/disclosure";
 
 const PROGRESS: Record<string, string> = {
   list_calendar_items: "Checking your calendar…",
+  search_calendar_history: "Searching past events…",
+  search_upcoming_events: "Searching upcoming events…",
   add_calendar_item: "Adding to your calendar…",
   update_calendar_item: "Updating your calendar…",
   delete_calendar_item: "Removing from your calendar…",
