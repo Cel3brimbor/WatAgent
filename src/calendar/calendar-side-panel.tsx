@@ -10,6 +10,7 @@ import {
   isSidebarHidden,
   type CalendarColors,
   type CalendarSourceFilter,
+  type SidePanelSectionsOpen,
 } from "@/calendar/preferences";
 import type { SmartTag, SmartTagTarget } from "@/calendar/smart-tags";
 import { SmartTagsPanel } from "@/calendar/smart-tags-panel";
@@ -49,6 +50,8 @@ type Props = {
   smartTags: SmartTag[];
   onSmartTags: (next: SmartTag[]) => void;
   smartTagSamples: SmartTagTarget[];
+  sidePanelSections: SidePanelSectionsOpen;
+  onSidePanelSections: (next: SidePanelSectionsOpen) => void;
 };
 
 function sameDay(a: Date, b: Date): boolean {
@@ -74,12 +77,13 @@ export function CalendarSidePanel({
   smartTags,
   onSmartTags,
   smartTagSamples,
+  sidePanelSections,
+  onSidePanelSections,
 }: Props) {
   const [cursor, setCursor] = useState(() => startOfLocalDay(focus));
   const [menu, setMenu] = useState<MenuState | null>(null);
   const menuPresence = usePresence(menu);
   const shownMenu = menuPresence.value;
-  const [openGroups, setOpenGroups] = useState({ watagent: true, other: true, hidden: true });
   const menuRef = useRef<HTMLDivElement | null>(null);
   const headingId = useId();
 
@@ -280,8 +284,10 @@ export function CalendarSidePanel({
         <CalendarGroup
           title="WatAgent Calendars"
           headingId={headingId}
-          open={openGroups.watagent}
-          onToggle={() => setOpenGroups((current) => ({ ...current, watagent: !current.watagent }))}
+          open={sidePanelSections.watagent}
+          onToggle={() =>
+            onSidePanelSections({ ...sidePanelSections, watagent: !sidePanelSections.watagent })
+          }
           rows={watagentRows}
           menuId={menu?.id}
           onToggleRow={toggle}
@@ -290,8 +296,8 @@ export function CalendarSidePanel({
         {otherRows.length > 0 ? (
           <CalendarGroup
             title="Other calendars"
-            open={openGroups.other}
-            onToggle={() => setOpenGroups((current) => ({ ...current, other: !current.other }))}
+            open={sidePanelSections.other}
+            onToggle={() => onSidePanelSections({ ...sidePanelSections, other: !sidePanelSections.other })}
             rows={otherRows}
             menuId={menu?.id}
             onToggleRow={toggle}
@@ -303,12 +309,14 @@ export function CalendarSidePanel({
           onChange={onSmartTags}
           calendars={smartTagCalendars}
           samples={smartTagSamples}
+          open={sidePanelSections.smartTags}
+          onOpenChange={(open) => onSidePanelSections({ ...sidePanelSections, smartTags: open })}
         />
         {hiddenRows.length > 0 ? (
           <CalendarGroup
             title="Hidden calendars"
-            open={openGroups.hidden}
-            onToggle={() => setOpenGroups((current) => ({ ...current, hidden: !current.hidden }))}
+            open={sidePanelSections.hidden}
+            onToggle={() => onSidePanelSections({ ...sidePanelSections, hidden: !sidePanelSections.hidden })}
             rows={hiddenRows}
             hidden
             onUnhide={unhideCalendar}

@@ -13,9 +13,11 @@ import {
   writeCalendarColors,
   writeCalendarView,
   writeColorOverrides,
+  writeSidePanelSections,
   writeSourceFilter,
   type CalendarColors,
   type CalendarSourceFilter,
+  type SidePanelSectionsOpen,
 } from "@/calendar/preferences";
 import { writeSmartTags, type SmartTag } from "@/calendar/smart-tags";
 import type { CalendarView } from "@/calendar/types";
@@ -29,6 +31,7 @@ export type CalendarPreferencesState = {
   colorOverrides: Record<string, string>;
   smartTags: SmartTag[];
   navCollapsed: boolean;
+  sidePanelSections: SidePanelSectionsOpen;
 };
 
 function writeLocalCache(doc: UserCalendarPreferencesV1): void {
@@ -37,6 +40,7 @@ function writeLocalCache(doc: UserCalendarPreferencesV1): void {
   writeCalendarColors(doc.colors);
   writeColorOverrides(doc.colorOverrides);
   writeSmartTags(doc.smartTags);
+  writeSidePanelSections(doc.sidePanelSections);
   try {
     window.localStorage.setItem("watagent.nav.collapsed", doc.navCollapsed ? "1" : "0");
   } catch {
@@ -55,6 +59,7 @@ type ApplyPatch = {
   setColorOverrides: (overrides: Record<string, string>) => void;
   setSmartTags: (tags: SmartTag[]) => void;
   setNavCollapsed: (collapsed: boolean) => void;
+  setSidePanelSections: (sections: SidePanelSectionsOpen) => void;
 };
 
 function applyDoc(doc: UserCalendarPreferencesV1, apply: ApplyPatch): void {
@@ -64,6 +69,7 @@ function applyDoc(doc: UserCalendarPreferencesV1, apply: ApplyPatch): void {
   apply.setColorOverrides(doc.colorOverrides);
   apply.setSmartTags(doc.smartTags);
   apply.setNavCollapsed(doc.navCollapsed);
+  apply.setSidePanelSections(doc.sidePanelSections);
   writeLocalCache(doc);
 }
 
@@ -103,16 +109,16 @@ export function useCalendarPreferencesSync(ready: boolean, state: CalendarPrefer
     };
   }, [ready]);
 
-  const { view, sources, colors, colorOverrides, smartTags, navCollapsed } = state;
+  const { view, sources, colors, colorOverrides, smartTags, navCollapsed, sidePanelSections } = state;
 
   useEffect(() => {
     if (!ready || skipSaveRef.current) return;
-    const doc = toDoc({ view, sources, colors, colorOverrides, smartTags, navCollapsed });
+    const doc = toDoc({ view, sources, colors, colorOverrides, smartTags, navCollapsed, sidePanelSections });
     writeLocalCache(doc);
     window.clearTimeout(saveTimerRef.current);
     saveTimerRef.current = window.setTimeout(() => {
       void saveCalendarPreferences(doc).catch(() => undefined);
     }, SAVE_DEBOUNCE_MS);
     return () => window.clearTimeout(saveTimerRef.current);
-  }, [ready, view, sources, colors, colorOverrides, smartTags, navCollapsed]);
+  }, [ready, view, sources, colors, colorOverrides, smartTags, navCollapsed, sidePanelSections]);
 }

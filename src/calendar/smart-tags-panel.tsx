@@ -29,10 +29,11 @@ type Props = {
   onChange: (next: SmartTag[]) => void;
   calendars: SmartTagCalendarOption[];
   samples: SmartTagTarget[];
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 };
 
-export function SmartTagsPanel({ tags, onChange, calendars, samples }: Props) {
-  const [open, setOpen] = useState(true);
+export function SmartTagsPanel({ tags, onChange, calendars, samples, open, onOpenChange }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const listRef = useRef<HTMLUListElement>(null);
   useFlip(listRef, tags.map((tag) => tag.id).join("|"));
@@ -46,7 +47,7 @@ export function SmartTagsPanel({ tags, onChange, calendars, samples }: Props) {
     const tag = newSmartTag(tags);
     onChange([...tags, tag]);
     setEditingId(tag.id);
-    setOpen(true);
+    onOpenChange(true);
   }
 
   function remove(id: string) {
@@ -66,7 +67,12 @@ export function SmartTagsPanel({ tags, onChange, calendars, samples }: Props) {
   return (
     <section className="side-cal-list smart-tags">
       <div className="smart-tags-head">
-        <button type="button" className="side-cal-heading" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
+        <button
+          type="button"
+          className="side-cal-heading"
+          aria-expanded={open}
+          onClick={() => onOpenChange(!open)}
+        >
           <span>Smart tags</span>
           <ChevronIcon open={open} />
         </button>

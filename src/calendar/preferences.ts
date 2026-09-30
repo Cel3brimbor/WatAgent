@@ -194,3 +194,49 @@ export function writeSourceFilter(filter: CalendarSourceFilter): void {
     return;
   }
 }
+
+const SIDE_PANEL_SECTIONS_KEY = "watagent.calendar.sidePanelSections.v1";
+
+export type SidePanelSectionsOpen = {
+  watagent: boolean;
+  other: boolean;
+  hidden: boolean;
+  smartTags: boolean;
+};
+
+export const DEFAULT_SIDE_PANEL_SECTIONS: SidePanelSectionsOpen = {
+  watagent: true,
+  other: true,
+  hidden: true,
+  smartTags: true,
+};
+
+function sidePanelSectionBool(raw: unknown, fallback: boolean): boolean {
+  return typeof raw === "boolean" ? raw : fallback;
+}
+
+export function readSidePanelSections(): SidePanelSectionsOpen {
+  if (typeof window === "undefined") return DEFAULT_SIDE_PANEL_SECTIONS;
+  try {
+    const raw = window.localStorage.getItem(SIDE_PANEL_SECTIONS_KEY);
+    if (!raw) return DEFAULT_SIDE_PANEL_SECTIONS;
+    const parsed = JSON.parse(raw) as Partial<SidePanelSectionsOpen>;
+    return {
+      watagent: sidePanelSectionBool(parsed.watagent, DEFAULT_SIDE_PANEL_SECTIONS.watagent),
+      other: sidePanelSectionBool(parsed.other, DEFAULT_SIDE_PANEL_SECTIONS.other),
+      hidden: sidePanelSectionBool(parsed.hidden, DEFAULT_SIDE_PANEL_SECTIONS.hidden),
+      smartTags: sidePanelSectionBool(parsed.smartTags, DEFAULT_SIDE_PANEL_SECTIONS.smartTags),
+    };
+  } catch {
+    return DEFAULT_SIDE_PANEL_SECTIONS;
+  }
+}
+
+export function writeSidePanelSections(sections: SidePanelSectionsOpen): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(SIDE_PANEL_SECTIONS_KEY, JSON.stringify(sections));
+  } catch {
+    return;
+  }
+}

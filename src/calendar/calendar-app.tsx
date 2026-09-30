@@ -19,10 +19,12 @@ import {
   readCalendarColors,
   readCalendarView,
   readColorOverrides,
+  readSidePanelSections,
   readSourceFilter,
   isSidebarHidden,
   type CalendarColors,
   type CalendarSourceFilter,
+  type SidePanelSectionsOpen,
 } from "@/calendar/preferences";
 import { isExcludedGoogleCalendarName } from "@/calendar/calendar-lists";
 import {
@@ -84,6 +86,7 @@ type SendPayload = {
 };
 
 const GOOGLE_POLL_MS = 5 * 60 * 1000;
+const GOOGLE_SYNC_MAX_RANGE_MS = 120 * 24 * 60 * 60 * 1000;
 
 type FreshRange = { start: number; end: number; at: number };
 
@@ -118,12 +121,53 @@ function mergeTimed<T extends { startUTC: number; endUTC: number }>(
   return merged;
 }
 
-function googleFetchRange(focus: Date, view: CalendarView, weekStartsOn: 0 | 1): Range {
-  if (view === "month") {
-    const start = startOfLocalDay(new Date(focus.getFullYear(), focus.getMonth() - 1, 1));
-    const end = startOfLocalDay(new Date(focus.getFullYear(), focus.getMonth() + 2, 1));
-    return { rangeStartUTC: start.getTime(), rangeEndUTC: end.getTime() };
+function rangeUnion(a: Range, b: Range): Range {
+  return {
+    rangeStartUTC: Math.min(a.rangeStartUTC, b.rangeStartUTC),
+    rangeEndUTC: Math.max(a.rangeEndUTC, b.rangeEndUTC),
+  };
+}
+
+function googleSyncChunks(desired: Range): Range[] {
+  const span = desired.rangeEndUTC - desired.rangeStartUTC;
+  if (span <= GOOGLE_SYNC_MAX_RANGE_MS) return [desired];
+  const chunks: Range[] = [];
+  let start = desired.rangeStartUTC;
+  while (start < desired.rangeEndUTC) {
+    const end = Math.min(start + GOOGLE_SYNC_MAX_RANGE_MS, desired.rangeEndUTC);
+    chunks.push({ rangeStartUTC: start, rangeEndUTC: end });
+    if (end <= start) break;
+    start = end;
   }
+  return chunks;
+}
+
+function googleSyncDesiredFresh(covered: FreshRange[], desired: Range, now: number): boolean {
+  return googleSyncChunks(desired).every((chunk) => rangeIsFresh(covered, chunk, now));
+}
+
+//wider than the visible month so prev/next month navigation stays in cache
+function googleMonthLoadRange(focus: Date): Range {
+  const start = startOfLocalDay(new Date(focus.getFullYear(), focus.getMonth() - 2, 1));
+  const end = startOfLocalDay(new Date(focus.getFullYear(), focus.getMonth() + 3, 1));
+  return { rangeStartUTC: start.getTime(), rangeEndUTC: end.getTime() };
+}
+
+//two weeks before and after the focused week (five weeks total)
+function googleWeekLoadRange(focus: Date, weekStartsOn: 0 | 1): Range {
+  const weekStart = startOfWeek(focus, weekStartsOn);
+  return {
+    rangeStartUTC: addDays(weekStart, -14).getTime(),
+    rangeEndUTC: addDays(weekStart, 28).getTime(),
+  };
+}
+
+function googleFetchRange(focus: Date, view: CalendarView, weekStartsOn: 0 | 1): Range {
+  if (view === "month") return googleMonthLoadRange(focus);
+  if (view === "week") {
+    return rangeUnion(googleWeekLoadRange(focus, weekStartsOn), googleMonthLoadRange(focus));
+  }
+  if (view === "day") return googleWeekLoadRange(focus, weekStartsOn);
   return googleRange(focus, view, weekStartsOn);
 }
 
@@ -213,6 +257,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
   const [colors, setColors] = useState<CalendarColors>(() => readCalendarColors());
   const [colorOverrides, setColorOverrides] = useState<Record<string, string>>(() => readColorOverrides());
   const [smartTags, setSmartTags] = useState<SmartTag[]>(() => readSmartTags());
+  const [sidePanelSections, setSidePanelSections] = useState<SidePanelSectionsOpen>(() => readSidePanelSections());
   const smartTagMatcher = useMemo(() => compileSmartTags(smartTags), [smartTags]);
   const [googleCalendars, setGoogleCalendars] = useState<GoogleCalendarRef[]>([]);
   const sidebarCalendars = useMemo(() => {
@@ -258,7 +303,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
 
   useCalendarPreferencesSync(
     calendar.hydrated,
-    { view, sources, colors, colorOverrides, smartTags, navCollapsed },
+    { view, sources, colors, colorOverrides, smartTags, navCollapsed, sidePanelSections },
     {
       setView,
       setSources,
@@ -266,6 +311,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
       setColorOverrides,
       setSmartTags,
       setNavCollapsed,
+      setSidePanelSections,
     },
   );
 
@@ -380,28 +426,38 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
       seenGoogleVersionRef.current = googleVersion;
       coveredRef.current = [];
     }
-    const range = googleFetchRange(focus, view, weekStartsOn);
-    const key = `${range.rangeStartUTC}:${range.rangeEndUTC}`;
+    const desired = googleFetchRange(focus, view, weekStartsOn);
+    const key = `${desired.rangeStartUTC}:${desired.rangeEndUTC}`;
     async function pull(): Promise<number | null> {
       const gen = (pullGenRef.current.get(key) ?? 0) + 1;
       pullGenRef.current.set(key, gen);
-      const pulled = await syncFromGoogle(range);
-      if (!mountedRef.current || pullGenRef.current.get(key) !== gen) return null;
-      setBusyBlocks((prev) =>
-        mergeTimed(prev, pulled.busyBlocks, range, (block) => `${block.startUTC}:${block.endUTC}`),
-      );
-      setOverlayEvents((prev) => mergeTimed(prev, pulled.overlayEvents, range, (event) => event.id));
-      setGoogleCalendars(pulled.calendars.filter((calendar) => !isExcludedGoogleCalendarName(calendar.name)));
-      const now = Date.now();
-      coveredRef.current = [
-        ...coveredRef.current.filter((entry) => now - entry.at < GOOGLE_POLL_MS),
-        { start: range.rangeStartUTC, end: range.rangeEndUTC, at: now },
-      ];
-      setGoogleSyncedAt(pulled.lastSyncedAt);
-      return pulled.lastSyncedAt;
+      const chunks = googleSyncChunks(desired);
+      let lastSyncedAt: number | null = null;
+      for (const chunk of chunks) {
+        if (!mountedRef.current || pullGenRef.current.get(key) !== gen) return null;
+        const pulled = await syncFromGoogle(chunk);
+        if (!mountedRef.current || pullGenRef.current.get(key) !== gen) return null;
+        setBusyBlocks((prev) =>
+          mergeTimed(prev, pulled.busyBlocks, chunk, (block) => `${block.startUTC}:${block.endUTC}`),
+        );
+        setOverlayEvents((prev) => mergeTimed(prev, pulled.overlayEvents, chunk, (event) => event.id));
+        if (pulled.calendars.length > 0) {
+          setGoogleCalendars(
+            pulled.calendars.filter((calendar) => !isExcludedGoogleCalendarName(calendar.name)),
+          );
+        }
+        const now = Date.now();
+        coveredRef.current = [
+          ...coveredRef.current.filter((entry) => now - entry.at < GOOGLE_POLL_MS),
+          { start: chunk.rangeStartUTC, end: chunk.rangeEndUTC, at: now },
+        ];
+        lastSyncedAt = pulled.lastSyncedAt;
+      }
+      if (lastSyncedAt != null) setGoogleSyncedAt(lastSyncedAt);
+      return lastSyncedAt;
     }
     googlePullRef.current = pull;
-    if (!rangeIsFresh(coveredRef.current, range, Date.now())) {
+    if (!googleSyncDesiredFresh(coveredRef.current, desired, Date.now())) {
       void pull().catch(() => undefined);
     }
     const timer = window.setInterval(() => {
@@ -737,6 +793,8 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
           smartTags={smartTags}
           onSmartTags={setSmartTags}
           smartTagSamples={smartTagSamples}
+          sidePanelSections={sidePanelSections}
+          onSidePanelSections={setSidePanelSections}
         />
       </SideNav>
       <div className="calendar-shell">

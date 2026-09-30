@@ -5,9 +5,12 @@ import {
   readCalendarColors,
   readCalendarView,
   readColorOverrides,
+  readSidePanelSections,
   readSourceFilter,
+  DEFAULT_SIDE_PANEL_SECTIONS,
   type CalendarColors,
   type CalendarSourceFilter,
+  type SidePanelSectionsOpen,
 } from "@/calendar/preferences";
 import { parseSmartTagsFromUnknown, readSmartTags, type SmartTag } from "@/calendar/smart-tags";
 import type { CalendarView } from "@/calendar/types";
@@ -20,6 +23,7 @@ export type UserCalendarPreferencesV1 = {
   colorOverrides: Record<string, string>;
   smartTags: SmartTag[];
   navCollapsed: boolean;
+  sidePanelSections: SidePanelSectionsOpen;
 };
 
 const VIEWS = new Set<CalendarView>(["day", "week", "month", "year"]);
@@ -56,6 +60,17 @@ function colorsOf(raw: unknown): CalendarColors | null {
   };
 }
 
+function sidePanelSectionsOf(raw: unknown, fallbacks: SidePanelSectionsOpen): SidePanelSectionsOpen {
+  if (!raw || typeof raw !== "object") return fallbacks;
+  const rec = raw as Record<string, unknown>;
+  return {
+    watagent: typeof rec.watagent === "boolean" ? rec.watagent : fallbacks.watagent,
+    other: typeof rec.other === "boolean" ? rec.other : fallbacks.other,
+    hidden: typeof rec.hidden === "boolean" ? rec.hidden : fallbacks.hidden,
+    smartTags: typeof rec.smartTags === "boolean" ? rec.smartTags : fallbacks.smartTags,
+  };
+}
+
 function overridesOf(raw: unknown): Record<string, string> {
   if (!raw || typeof raw !== "object") return {};
   const next: Record<string, string> = {};
@@ -81,6 +96,7 @@ export function readLocalCalendarPreferences(): UserCalendarPreferencesV1 {
     colorOverrides: readColorOverrides(),
     smartTags: readSmartTags(),
     navCollapsed,
+    sidePanelSections: readSidePanelSections(),
   };
 }
 
@@ -104,12 +120,17 @@ export function parseUserCalendarPreferencesDoc(
     colorOverrides: rec.colorOverrides !== undefined ? overridesOf(rec.colorOverrides) : fallbacks.colorOverrides,
     smartTags: rec.smartTags !== undefined ? parseSmartTagsFromUnknown(rec.smartTags) : fallbacks.smartTags,
     navCollapsed: typeof rec.navCollapsed === "boolean" ? rec.navCollapsed : fallbacks.navCollapsed,
+    sidePanelSections:
+      rec.sidePanelSections !== undefined
+        ? sidePanelSectionsOf(rec.sidePanelSections, fallbacks.sidePanelSections)
+        : fallbacks.sidePanelSections,
   };
 }
 
 export function preferencesDocHasContent(doc: UserCalendarPreferencesV1): boolean {
   if (doc.smartTags.length > 0) return true;
   if (doc.navCollapsed) return true;
+  if (JSON.stringify(doc.sidePanelSections) !== JSON.stringify(DEFAULT_SIDE_PANEL_SECTIONS)) return true;
   if (doc.view !== "week") return true;
   if (JSON.stringify(doc.sources) !== JSON.stringify(ALL_SOURCES)) return true;
   if (JSON.stringify(doc.colors) !== JSON.stringify(DEFAULT_COLORS)) return true;
