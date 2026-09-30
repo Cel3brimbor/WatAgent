@@ -9,11 +9,19 @@ export type GoogleCalendarStatus = {
   lastSyncedAt: number | null;
 };
 
+export type GoogleCalendarRef = {
+  id: string;
+  name: string;
+  color?: string;
+  group: "mine" | "other";
+};
+
 export type GoogleSyncResult = {
   items: CalendarItemDoc[];
   deletedIds: string[];
   busyBlocks: BusyBlock[];
   overlayEvents: OverlayEvent[];
+  calendars: GoogleCalendarRef[];
   lastSyncedAt: number;
 };
 
@@ -65,6 +73,17 @@ function overlayOf(raw: unknown): OverlayEvent | null {
       : undefined,
     reminder: text(rec.reminder, 200),
   };
+}
+
+function calendarRefOf(raw: unknown): GoogleCalendarRef | null {
+  if (!raw || typeof raw !== "object") return null;
+  const rec = raw as Record<string, unknown>;
+  const id = text(rec.id, 1024);
+  const name = text(rec.name, 120);
+  if (!id || !name) return null;
+  const color =
+    typeof rec.color === "string" && COLOR_RE.test(rec.color) ? rec.color.toLowerCase() : undefined;
+  return { id, name, color, group: rec.group === "mine" ? "mine" : "other" };
 }
 
 function busyOf(raw: unknown): BusyBlock | null {
@@ -177,6 +196,11 @@ export async function syncGoogleCalendar(range: {
       : [],
     overlayEvents: Array.isArray(payload.overlayEvents)
       ? payload.overlayEvents.map(overlayOf).filter((event): event is OverlayEvent => event != null)
+      : [],
+    calendars: Array.isArray(payload.calendars)
+      ? payload.calendars
+          .map(calendarRefOf)
+          .filter((calendar): calendar is GoogleCalendarRef => calendar != null)
       : [],
     lastSyncedAt: finite(payload.lastSyncedAt) ?? Date.now(),
   };

@@ -9,13 +9,10 @@ import {
   startWebGoogleConnect,
   type GoogleCalendarStatus,
 } from "@/calendar/google-calendar-client";
-import { DEFAULT_COLORS, type CalendarColors } from "@/calendar/preferences";
 import { isNativeShell } from "@/shared/platform";
 
 type Props = {
   accountEmail: string | null;
-  colors: CalendarColors;
-  onColorsChange: (colors: CalendarColors) => void;
   syncedAt: number | null;
   onChanged: () => void;
   onSyncNow: () => Promise<number | null>;
@@ -35,16 +32,8 @@ function formatSynced(ms: number | null): string {
   })}`;
 }
 
-const COLOR_FIELDS: Array<{ key: "event" | "task" | "google"; label: string }> = [
-  { key: "event", label: "WatAgent events" },
-  { key: "task", label: "WatAgent tasks" },
-  { key: "google", label: "Google events" },
-];
-
 export function SettingsPanel({
   accountEmail,
-  colors,
-  onColorsChange,
   syncedAt,
   onChanged,
   onSyncNow,
@@ -184,39 +173,6 @@ export function SettingsPanel({
           When on, the Agent queues adds, updates, and deletes for you to approve or reject. Pending changes stay saved
           until you decide and are not sent to Google Calendar until approved.
         </p>
-      </section>
-
-      <section className="settings-section" aria-labelledby="settings-colors">
-        <h3 id="settings-colors">Colors</h3>
-        <div className="settings-colors">
-          {COLOR_FIELDS.map((field) => {
-            const disabled = field.key === "google" && colors.useGoogleColors;
-            return (
-              <label key={field.key} className={`settings-color${disabled ? " is-disabled" : ""}`}>
-                <input
-                  type="color"
-                  value={colors[field.key]}
-                  disabled={disabled}
-                  onChange={(event) => onColorsChange({ ...colors, [field.key]: event.target.value })}
-                />
-                <span>{field.label}</span>
-              </label>
-            );
-          })}
-          <label className="settings-check">
-            <input
-              type="checkbox"
-              checked={colors.useGoogleColors}
-              onChange={(event) => onColorsChange({ ...colors, useGoogleColors: event.target.checked })}
-            />
-            Use each Google calendar&apos;s own color
-          </label>
-        </div>
-        <div className="settings-actions">
-          <button type="button" className="ghost-btn" onClick={() => onColorsChange(DEFAULT_COLORS)}>
-            Reset colors
-          </button>
-        </div>
       </section>
 
       <div className="settings-actions">

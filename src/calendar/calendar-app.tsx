@@ -18,15 +18,19 @@ import {
   ALL_SOURCES,
   readCalendarColors,
   readCalendarView,
+  readColorOverrides,
   readSourceFilter,
   writeCalendarColors,
   writeCalendarView,
+  writeColorOverrides,
   writeSourceFilter,
+  isSidebarHidden,
   type CalendarColors,
   type CalendarSourceFilter,
 } from "@/calendar/preferences";
-import { CalendarFilters } from "@/calendar/calendar-filters";
-import { deleteGoogleEvent, updateGoogleEvent } from "@/calendar/google-calendar-client";
+import { isExcludedGoogleCalendarName } from "@/calendar/calendar-lists";
+import { CalendarSidePanel } from "@/calendar/calendar-side-panel";
+import { deleteGoogleEvent, updateGoogleEvent, type GoogleCalendarRef } from "@/calendar/google-calendar-client";
 import { ConfirmDialog } from "@/shared/confirm-dialog";
 import { CalendarDayView } from "@/calendar/views/day-view";
 import { CalendarWeekView } from "@/calendar/views/week-view";
@@ -151,11 +155,33 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
   const [googleDelete, setGoogleDelete] = useState<(GoogleDraftTarget & { title: string }) | null>(null);
   const [sources, setSources] = useState<CalendarSourceFilter>(() => readSourceFilter());
   const [colors, setColors] = useState<CalendarColors>(() => readCalendarColors());
+  const [colorOverrides, setColorOverrides] = useState<Record<string, string>>(() => readColorOverrides());
+  const [googleCalendars, setGoogleCalendars] = useState<GoogleCalendarRef[]>([]);
+  const sidebarCalendars = useMemo(() => {
+    if (googleCalendars.length > 0) return googleCalendars;
+    const byId = new Map<string, GoogleCalendarRef>();
+    for (const event of overlayEvents) {
+      if (!event.calendarId || byId.has(event.calendarId)) continue;
+      const name = event.calendarName || "Calendar";
+      if (isExcludedGoogleCalendarName(name)) continue;
+      byId.set(event.calendarId, {
+        id: event.calendarId,
+        name,
+        color: event.calendarColor,
+        group: "other",
+      });
+    }
+    return [...byId.values()].filter((calendar) => !isExcludedGoogleCalendarName(calendar.name));
+  }, [googleCalendars, overlayEvents]);
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     writeCalendarColors(colors);
   }, [colors]);
+
+  useEffect(() => {
+    writeColorOverrides(colorOverrides);
+  }, [colorOverrides]);
 
   const colorVars = useMemo(
     () =>
@@ -169,10 +195,11 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
 
   const shownOverlayEvents = useMemo(
     () =>
-      colors.useGoogleColors
-        ? overlayEvents
-        : overlayEvents.map((event) => ({ ...event, calendarColor: undefined })),
-    [overlayEvents, colors.useGoogleColors],
+      overlayEvents.map((event) => ({
+        ...event,
+        calendarColor: colorOverrides[event.calendarId] || event.calendarColor || colors.google,
+      })),
+    [overlayEvents, colorOverrides, colors.google],
   );
 
   useEffect(() => {
@@ -215,9 +242,20 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
     (date: Date, filter: CalendarSourceFilter) =>
       aggregateTimeline({
         focus: date,
-        events: filter.app ? calendar.displayItems : [],
+        events: calendar.displayItems.filter((item) => {
+          if (item.calendar.kind === "task") {
+            return filter.tasks && !isSidebarHidden(filter, "tasks");
+          }
+          return filter.events && !isSidebarHidden(filter, "events");
+        }),
         busyBlocks: !filter.google || shownOverlayEvents.length > 0 ? [] : busyBlocks,
-        overlayEvents: filter.google ? shownOverlayEvents : [],
+        overlayEvents: filter.google
+          ? shownOverlayEvents.filter(
+              (event) =>
+                !isSidebarHidden(filter, event.calendarId) &&
+                !filter.mutedGoogleIds.includes(event.calendarId),
+            )
+          : [],
       }),
     [calendar.displayItems, busyBlocks, shownOverlayEvents],
   );
@@ -272,6 +310,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
         mergeTimed(prev, pulled.busyBlocks, range, (block) => `${block.startUTC}:${block.endUTC}`),
       );
       setOverlayEvents((prev) => mergeTimed(prev, pulled.overlayEvents, range, (event) => event.id));
+      setGoogleCalendars(pulled.calendars.filter((calendar) => !isExcludedGoogleCalendarName(calendar.name)));
       const now = Date.now();
       coveredRef.current = [
         ...coveredRef.current.filter((entry) => now - entry.at < GOOGLE_POLL_MS),
@@ -596,7 +635,24 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
       className={`app-frame${navCollapsed ? " is-nav-collapsed" : ""}${chatResizing ? " is-resizing-chat" : ""}`}
       style={colorVars}
     >
-      <SideNav section={section} collapsed={navCollapsed} onSection={setSection} onToggle={toggleNav} />
+      <SideNav section={section} collapsed={navCollapsed} onSection={setSection} onToggle={toggleNav}>
+        <CalendarSidePanel
+          focus={focus}
+          view={view}
+          weekStartsOn={weekStartsOn}
+          onFocus={(date) => {
+            setFocus(date);
+            if (view === "year") setView("day");
+          }}
+          sources={sources}
+          onSources={setSources}
+          colors={colors}
+          onColors={setColors}
+          googleCalendars={sidebarCalendars}
+          colorOverrides={colorOverrides}
+          onColorOverrides={setColorOverrides}
+        />
+      </SideNav>
       <div className="calendar-shell">
       <header className="calendar-toolbar">
         <div className="calendar-toolbar-left">
@@ -628,7 +684,6 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
           )}
         </div>
         <div className="calendar-toolbar-right">
-          {section === "calendar" ? <CalendarFilters value={sources} onChange={setSources} /> : null}
           {section === "calendar" ? (
           <select
             className="calendar-view-select"
@@ -705,8 +760,6 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
           {section === "settings" ? (
             <SettingsPanel
               accountEmail={user.email}
-              colors={colors}
-              onColorsChange={setColors}
               requireAiApproval={calendar.requireAiApproval}
               onRequireAiApprovalChange={(value) =>
                 void calendar.setRequireAiApproval(value).catch(() => setNotice("Unable to save Agent settings."))

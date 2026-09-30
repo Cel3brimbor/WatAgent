@@ -29,17 +29,56 @@ export function writeCalendarView(view: CalendarView): void {
 
 const SOURCES_KEY = "watagent.calendar.sources.v1";
 
-export type CalendarSourceFilter = { app: boolean; google: boolean };
+export type CalendarSourceFilter = {
+  events: boolean;
+  tasks: boolean;
+  google: boolean;
+  /** Google calendars unchecked in the sidebar (hidden from the grid only). */
+  mutedGoogleIds: string[];
+  /** Calendars moved to the Hidden calendars section. */
+  hiddenIds: string[];
+};
 
-export const ALL_SOURCES: CalendarSourceFilter = { app: true, google: true };
+export const ALL_SOURCES: CalendarSourceFilter = {
+  events: true,
+  tasks: true,
+  google: true,
+  mutedGoogleIds: [],
+  hiddenIds: [],
+};
+
+export function isSidebarHidden(filter: CalendarSourceFilter, id: string): boolean {
+  return filter.hiddenIds.includes(id);
+}
+
+function idList(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((id): id is string => typeof id === "string" && id.length > 0 && id.length <= 1024).slice(0, 200);
+}
 
 export function readSourceFilter(): CalendarSourceFilter {
   if (typeof window === "undefined") return ALL_SOURCES;
   try {
     const raw = window.localStorage.getItem(SOURCES_KEY);
     if (!raw) return ALL_SOURCES;
-    const parsed = JSON.parse(raw) as { app?: unknown; google?: unknown };
-    return { app: parsed.app !== false, google: parsed.google !== false };
+    const parsed = JSON.parse(raw) as {
+      app?: unknown;
+      events?: unknown;
+      tasks?: unknown;
+      google?: unknown;
+      hiddenGoogleIds?: unknown;
+      mutedGoogleIds?: unknown;
+      hiddenIds?: unknown;
+    };
+    const legacyApp = parsed.app !== false;
+    const legacyMuted = idList(parsed.hiddenGoogleIds);
+    return {
+      events: typeof parsed.events === "boolean" ? parsed.events : legacyApp,
+      tasks: typeof parsed.tasks === "boolean" ? parsed.tasks : legacyApp,
+      google: parsed.google !== false,
+      mutedGoogleIds: idList(parsed.mutedGoogleIds).length > 0 ? idList(parsed.mutedGoogleIds) : legacyMuted,
+      hiddenIds: idList(parsed.hiddenIds),
+    };
   } catch {
     return ALL_SOURCES;
   }
@@ -87,6 +126,34 @@ export function writeCalendarColors(colors: CalendarColors): void {
   if (typeof window === "undefined") return;
   try {
     window.localStorage.setItem(COLORS_KEY, JSON.stringify(colors));
+  } catch {
+    return;
+  }
+}
+
+const OVERRIDES_KEY = "watagent.calendar.colorOverrides.v1";
+
+export function readColorOverrides(): Record<string, string> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(OVERRIDES_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const next: Record<string, string> = {};
+    for (const [key, value] of Object.entries(parsed)) {
+      if (key.length > 1024 || !HEX_COLOR.test(String(value))) continue;
+      next[key] = String(value).toLowerCase();
+    }
+    return next;
+  } catch {
+    return {};
+  }
+}
+
+export function writeColorOverrides(overrides: Record<string, string>): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(OVERRIDES_KEY, JSON.stringify(overrides));
   } catch {
     return;
   }

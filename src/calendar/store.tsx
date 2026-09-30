@@ -44,7 +44,12 @@ type CalendarContextValue = {
   syncFromGoogle: (range: {
     rangeStartUTC: number;
     rangeEndUTC: number;
-  }) => Promise<{ busyBlocks: BusyBlock[]; overlayEvents: OverlayEvent[]; lastSyncedAt: number }>;
+  }) => Promise<{
+    busyBlocks: BusyBlock[];
+    overlayEvents: OverlayEvent[];
+    calendars: Array<{ id: string; name: string; color?: string; group: "mine" | "other" }>;
+    lastSyncedAt: number;
+  }>;
   setAfterWrite: (listener: (() => void) | null) => void;
   upsert: (input: { id?: string; title: string; calendar: CalendarItemMeta }) => void;
   completeTask: (id: string, completed: boolean) => void;
@@ -195,6 +200,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
       return {
         busyBlocks: result.busyBlocks,
         overlayEvents: result.overlayEvents,
+        calendars: result.calendars,
         lastSyncedAt: result.lastSyncedAt,
       };
     },

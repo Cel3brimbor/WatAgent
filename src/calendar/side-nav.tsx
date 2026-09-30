@@ -1,5 +1,7 @@
 "use client";
 
+import type { ReactNode } from "react";
+
 export type AppSection = "calendar" | "tasks" | "settings";
 
 type Props = {
@@ -7,6 +9,7 @@ type Props = {
   collapsed: boolean;
   onSection: (section: AppSection) => void;
   onToggle: () => void;
+  children?: ReactNode;
 };
 
 const BARS: Array<{ id: AppSection; label: string }> = [
@@ -14,7 +17,7 @@ const BARS: Array<{ id: AppSection; label: string }> = [
   { id: "tasks", label: "To-do list" },
 ];
 
-export function SideNav({ section, collapsed, onSection, onToggle }: Props) {
+export function SideNav({ section, collapsed, onSection, onToggle, children }: Props) {
   return (
     <nav className="side-nav" aria-label="Sections">
       <button
@@ -41,6 +44,7 @@ export function SideNav({ section, collapsed, onSection, onToggle }: Props) {
           </button>
         ))}
       </div>
+      <div className="side-nav-extra">{children}</div>
       <button
         type="button"
         className={`side-nav-bar side-nav-settings${section === "settings" ? " is-active" : ""}`}
