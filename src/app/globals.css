@@ -569,6 +569,25 @@ select {
   height: 100%;
   min-height: 100%;
   align-items: flex-start;
+  overflow: hidden;
+}
+
+.calendar-timed-item .calendar-strip.is-card {
+  padding: 0.18rem 0.35rem;
+}
+
+.calendar-timed-item.is-timed-short .calendar-strip.is-card {
+  padding: 0.1rem 0.3rem;
+}
+
+.calendar-timed-item.is-timed-short .calendar-strip-time,
+.calendar-timed-item.is-timed-short .calendar-strip-location,
+.calendar-timed-item.is-timed-medium .calendar-strip-location {
+  display: none;
+}
+
+.calendar-timed-item .calendar-strip-main {
+  gap: 0.06rem;
 }
 
 .calendar-now-line {
@@ -871,6 +890,105 @@ select {
   opacity: 0.7;
 }
 
+.calendar-strip.is-pending {
+  border-style: dashed;
+  opacity: 0.92;
+}
+
+.calendar-strip.is-pending .calendar-strip-title::after {
+  content: " · pending";
+  font-size: 0.68rem;
+  font-weight: 650;
+  opacity: 0.85;
+}
+
+.ai-approval-panel {
+  flex-shrink: 0;
+  display: grid;
+  gap: 0.5rem;
+  max-height: min(40vh, 16rem);
+  padding: 0.65rem 0.75rem;
+  border-top: 1px solid var(--line);
+  background: var(--panel-solid);
+  overflow: hidden;
+}
+
+.ai-approval-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.ai-approval-head h3 {
+  margin: 0;
+  font-size: 0.92rem;
+}
+
+.ai-approval-head p {
+  margin: 0.15rem 0 0;
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.ai-approval-bulk {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  flex-shrink: 0;
+}
+
+.ai-approval-list {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.ai-approval-list li {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper);
+  min-width: 0;
+}
+
+.ai-approval-copy {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ai-approval-action {
+  color: var(--accent-deep);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.ai-approval-when {
+  color: var(--ink-soft);
+  font-size: 0.76rem;
+}
+
+.ai-approval-row-actions {
+  display: flex;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
 .calendar-strip-title {
   flex: 1;
   min-width: 0;
@@ -883,6 +1001,69 @@ select {
   color: var(--ink-soft);
   font-size: 0.68rem;
   white-space: nowrap;
+}
+
+.calendar-strip.is-card {
+  align-items: flex-start;
+  gap: 0.35rem;
+}
+
+.calendar-strip-main {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.12rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.calendar-strip.is-card .calendar-strip-title {
+  flex: none;
+  width: 100%;
+  font-size: 0.8rem;
+  font-weight: 650;
+  line-height: 1.15;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.calendar-timed-item .calendar-strip.is-card .calendar-strip-title {
+  font-size: 0.74rem;
+  font-weight: 650;
+}
+
+.calendar-timed-item.is-timed-tall .calendar-strip.is-card .calendar-strip-title {
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.calendar-strip.is-card .calendar-strip-time {
+  font-size: 0.68rem;
+  line-height: 1.15;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.calendar-strip-location {
+  color: var(--ink-soft);
+  font-size: 0.65rem;
+  line-height: 1.15;
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.calendar-timed-item.is-timed-tall .calendar-strip-location {
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
 }
 
 .calendar-strip-check {

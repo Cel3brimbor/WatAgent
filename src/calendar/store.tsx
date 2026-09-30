@@ -18,11 +18,28 @@ import type { BusyBlock, OverlayEvent } from "@/calendar/timeline";
 import type { CalendarChange } from "@/agent/stream";
 import type { ChatMessage, ChatSession } from "@/agent/types";
 import { deleteChatSession, loadChatSessions, saveChatSession } from "@/agent/snapshots-client";
+import {
+  approvePending,
+  getCalendarSettings,
+  listPendingChanges,
+  rejectPending,
+  setRequireAiApproval,
+  type PendingAiChange,
+} from "@/calendar/approval-client";
+import { mergePendingIntoItems } from "@/calendar/merge-pending";
 
 type CalendarContextValue = {
   hydrated: boolean;
   loadError: string | null;
   items: CalendarItemDoc[];
+  displayItems: CalendarItemDoc[];
+  requireAiApproval: boolean;
+  pendingChanges: PendingAiChange[];
+  approvalBusy: boolean;
+  setRequireAiApproval: (value: boolean) => Promise<void>;
+  refreshPending: () => Promise<void>;
+  approvePendingChanges: (input: { ids?: string[]; all?: boolean }) => Promise<void>;
+  rejectPendingChanges: (input: { ids?: string[]; all?: boolean }) => Promise<void>;
   refresh: () => Promise<void>;
   syncFromGoogle: (range: {
     rangeStartUTC: number;
@@ -93,6 +110,9 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
   const [hydrated, setHydrated] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [chatState, setChatState] = useState<ChatState>({ chats: [], activeChatId: null });
+  const [requireAiApproval, setRequireAiApprovalState] = useState(false);
+  const [pendingChanges, setPendingChanges] = useState<PendingAiChange[]>([]);
+  const [approvalBusy, setApprovalBusy] = useState(false);
   const itemsRef = useRef(items);
   itemsRef.current = items;
   const chatStateRef = useRef(chatState);
@@ -124,10 +144,27 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const refreshPending = useCallback(async () => {
+    try {
+      setPendingChanges(await listPendingChanges());
+    } catch {
+      logFailure("pending load")();
+    }
+  }, []);
+
+  const refreshSettings = useCallback(async () => {
+    try {
+      const settings = await getCalendarSettings();
+      setRequireAiApprovalState(settings.requireAiApproval);
+    } catch {
+      logFailure("settings load")();
+    }
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      await refresh();
+      await Promise.all([refresh(), refreshPending(), refreshSettings()]);
       try {
         const chats = await loadChatSessions();
         if (cancelled) return;
@@ -142,7 +179,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [refresh, updateChats]);
+  }, [refresh, refreshPending, refreshSettings, updateChats]);
 
   const syncFromGoogle = useCallback(
     async (range: { rangeStartUTC: number; rangeEndUTC: number }) => {
@@ -219,6 +256,10 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
 
   const applyRemoteCalendarChange = useCallback(
     (change: CalendarChange) => {
+      if (change.pending) {
+        void refreshPending();
+        return;
+      }
       if (change.action === "delete") {
         dropItem(change.id);
         wrote();
@@ -237,7 +278,44 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
       });
       wrote();
     },
-    [dropItem, putItem, wrote],
+    [dropItem, putItem, refreshPending, wrote],
+  );
+
+  const updateRequireAiApproval = useCallback(async (value: boolean) => {
+    await setRequireAiApproval(value);
+    setRequireAiApprovalState(value);
+  }, []);
+
+  const approvePendingChanges = useCallback(
+    async (input: { ids?: string[]; all?: boolean }) => {
+      setApprovalBusy(true);
+      try {
+        await approvePending(input);
+        await Promise.all([refresh(), refreshPending()]);
+        wrote();
+      } finally {
+        setApprovalBusy(false);
+      }
+    },
+    [refresh, refreshPending, wrote],
+  );
+
+  const rejectPendingChanges = useCallback(
+    async (input: { ids?: string[]; all?: boolean }) => {
+      setApprovalBusy(true);
+      try {
+        await rejectPending(input);
+        await refreshPending();
+      } finally {
+        setApprovalBusy(false);
+      }
+    },
+    [refreshPending],
+  );
+
+  const displayItems = useMemo(
+    () => mergePendingIntoItems(items, pendingChanges),
+    [items, pendingChanges],
   );
 
   const persistChat = useCallback((chatId: string) => {
@@ -384,6 +462,14 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
       hydrated,
       loadError,
       items,
+      displayItems,
+      requireAiApproval,
+      pendingChanges,
+      approvalBusy,
+      setRequireAiApproval: updateRequireAiApproval,
+      refreshPending,
+      approvePendingChanges,
+      rejectPendingChanges,
       refresh,
       syncFromGoogle,
       setAfterWrite,
@@ -409,6 +495,14 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
       hydrated,
       loadError,
       items,
+      displayItems,
+      requireAiApproval,
+      pendingChanges,
+      approvalBusy,
+      updateRequireAiApproval,
+      refreshPending,
+      approvePendingChanges,
+      rejectPendingChanges,
       refresh,
       syncFromGoogle,
       setAfterWrite,

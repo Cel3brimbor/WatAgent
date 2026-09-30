@@ -42,6 +42,7 @@ import {
   type GoogleDraftTarget,
 } from "@/calendar/calendar-item-editor";
 import { GoogleEventCard } from "@/calendar/google-event-card";
+import { AiApprovalPanel } from "@/calendar/ai-approval-panel";
 import { SettingsPanel } from "@/calendar/settings-panel";
 import { SideNav, type AppSection } from "@/calendar/side-nav";
 import { TodoList } from "@/calendar/todo-list";
@@ -214,11 +215,11 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
     (date: Date, filter: CalendarSourceFilter) =>
       aggregateTimeline({
         focus: date,
-        events: filter.app ? calendar.items : [],
+        events: filter.app ? calendar.displayItems : [],
         busyBlocks: !filter.google || shownOverlayEvents.length > 0 ? [] : busyBlocks,
         overlayEvents: filter.google ? shownOverlayEvents : [],
       }),
-    [calendar.items, busyBlocks, shownOverlayEvents],
+    [calendar.displayItems, busyBlocks, shownOverlayEvents],
   );
 
   const itemsForDay = useCallback((date: Date) => timelineFor(date, sources), [timelineFor, sources]);
@@ -359,6 +360,10 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
       return;
     }
     if (item.kind === "gcal_busy") return;
+    if (item.pendingApproval) {
+      setNotice("Approve or reject this Agent change in the review panel below.");
+      return;
+    }
     const existing = calendar.items.find((row) => row.id === item.id);
     if (existing) setDraft(draftFromMeta(existing.id, existing.title, existing.calendar));
   }
@@ -685,8 +690,14 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
         <div className="calendar-stage">
           {section === "tasks" ? (
             <TodoList
-              items={calendar.items}
-              onOpen={(item) => setDraft(draftFromMeta(item.id, item.title, item.calendar))}
+              items={calendar.displayItems}
+              onOpen={(item) => {
+                if (item.pendingApproval) {
+                  setNotice("Approve or reject this Agent change in the review panel below.");
+                  return;
+                }
+                setDraft(draftFromMeta(item.id, item.title, item.calendar));
+              }}
               onComplete={calendar.completeTask}
               onCreate={() => setDraft({ ...defaultAllDayDraft(startOfLocalDay(new Date())), kind: "task" })}
             />
@@ -696,6 +707,10 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
               accountEmail={user.email}
               colors={colors}
               onColorsChange={setColors}
+              requireAiApproval={calendar.requireAiApproval}
+              onRequireAiApprovalChange={(value) =>
+                void calendar.setRequireAiApproval(value).catch(() => setNotice("Unable to save Agent settings."))
+              }
               syncedAt={googleSyncedAt}
               onChanged={() => setGoogleVersion((value) => value + 1)}
               onSyncNow={() => googlePullRef.current()}
@@ -774,6 +789,23 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
           onClose={() => setChatOpen(false)}
         />
       </div>
+
+      <AiApprovalPanel
+        items={calendar.pendingChanges}
+        busy={calendar.approvalBusy}
+        onApprove={(id) =>
+          void calendar.approvePendingChanges({ ids: [id] }).catch(() => setNotice("Unable to approve the change."))
+        }
+        onReject={(id) =>
+          void calendar.rejectPendingChanges({ ids: [id] }).catch(() => setNotice("Unable to reject the change."))
+        }
+        onApproveAll={() =>
+          void calendar.approvePendingChanges({ all: true }).catch(() => setNotice("Unable to approve changes."))
+        }
+        onRejectAll={() =>
+          void calendar.rejectPendingChanges({ all: true }).catch(() => setNotice("Unable to reject changes."))
+        }
+      />
 
       {googlePeek ? (
         <GoogleEventCard

@@ -17,6 +17,7 @@ import {
   hourFromClientY,
   layoutOverlappingBlocks,
   nowLineTop,
+  timedItemClass,
   timedItemStyle,
 } from "@/calendar/calendar-grid";
 import { useNowMs } from "@/calendar/calendar-item-editor";
@@ -74,7 +75,7 @@ export function CalendarWeekView({
                 <TimelineStrip
                   key={item.id}
                   item={item}
-                  compact
+                  layout="card"
                   onOpen={onOpen}
                   onCompleteTask={onCompleteTask}
                 />
@@ -138,13 +139,13 @@ export function CalendarWeekView({
               {timed.map((layout) => (
                 <div
                   key={layout.item.id}
-                  className="calendar-timed-item"
+                  className={`calendar-timed-item ${timedItemClass(layout.height)}`}
                   style={timedItemStyle(layout)}
                   onPointerDown={(event) => event.stopPropagation()}
                 >
                   <TimelineStrip
                     item={layout.item}
-                    compact
+                    layout="card"
                     onOpen={onOpen}
                     onCompleteTask={onCompleteTask}
                   />

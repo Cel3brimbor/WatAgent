@@ -6,6 +6,8 @@ import { formatTime } from "@/calendar/date-utils";
 type Props = {
   item: TimelineItem;
   compact?: boolean;
+  /** Stacked title → time → location (day/week grid cards). */
+  layout?: "inline" | "card";
   onOpen: (item: TimelineItem, anchor?: DOMRect) => void;
   onCompleteTask?: (id: string, completed: boolean) => void;
 };
@@ -14,7 +16,31 @@ function timeRange(item: TimelineItem): string {
   return `${formatTime(item.startUTC)}${item.endUTC > item.startUTC ? `–${formatTime(item.endUTC)}` : ""}`;
 }
 
-export function TimelineStrip({ item, compact, onOpen, onCompleteTask }: Props) {
+function itemLocation(item: TimelineItem): string | null {
+  const loc = item.google?.location?.trim();
+  return loc ? loc : null;
+}
+
+function StripCardBody({
+  item,
+  timeLabel,
+}: {
+  item: TimelineItem;
+  timeLabel: string | null;
+}) {
+  const location = itemLocation(item);
+  return (
+    <span className="calendar-strip-main">
+      <span className="calendar-strip-title">{item.title}</span>
+      {timeLabel ? <span className="calendar-strip-time">{timeLabel}</span> : null}
+      {location ? <span className="calendar-strip-location">{location}</span> : null}
+    </span>
+  );
+}
+
+export function TimelineStrip({ item, compact, layout = "inline", onOpen, onCompleteTask }: Props) {
+  const isCard = layout === "card";
+  const layoutClass = isCard ? " is-card" : "";
   if (item.kind === "gcal_busy") {
     return (
       <div
@@ -34,7 +60,7 @@ export function TimelineStrip({ item, compact, onOpen, onCompleteTask }: Props) 
     return (
       <button
         type="button"
-        className={`calendar-strip is-gcal-event${compact ? " is-compact" : ""}`}
+        className={`calendar-strip is-gcal-event${compact ? " is-compact" : ""}${layoutClass}`}
         aria-label={item.title}
         style={
           color
@@ -49,8 +75,14 @@ export function TimelineStrip({ item, compact, onOpen, onCompleteTask }: Props) 
           onOpen(item, event.currentTarget.getBoundingClientRect());
         }}
       >
-        <span className="calendar-strip-title">{item.title}</span>
-        {timeLabel ? <span className="calendar-strip-time">{timeLabel}</span> : null}
+        {isCard ? (
+          <StripCardBody item={item} timeLabel={timeLabel} />
+        ) : (
+          <>
+            <span className="calendar-strip-title">{item.title}</span>
+            {timeLabel ? <span className="calendar-strip-time">{timeLabel}</span> : null}
+          </>
+        )}
       </button>
     );
   }
@@ -60,7 +92,7 @@ export function TimelineStrip({ item, compact, onOpen, onCompleteTask }: Props) 
   return (
     <button
       type="button"
-      className={`calendar-strip is-${item.kind}${item.completed ? " is-done" : ""}${compact ? " is-compact" : ""}`}
+      className={`calendar-strip is-${item.kind}${item.completed ? " is-done" : ""}${item.pendingApproval ? " is-pending" : ""}${compact ? " is-compact" : ""}${layoutClass}`}
       onClick={(event) => {
         event.stopPropagation();
         onOpen(item);
@@ -79,8 +111,14 @@ export function TimelineStrip({ item, compact, onOpen, onCompleteTask }: Props) 
           {item.completed ? "✓" : "○"}
         </span>
       ) : null}
-      <span className="calendar-strip-title">{item.title}</span>
-      {timeLabel ? <span className="calendar-strip-time">{timeLabel}</span> : null}
+      {isCard ? (
+        <StripCardBody item={item} timeLabel={timeLabel} />
+      ) : (
+        <>
+          <span className="calendar-strip-title">{item.title}</span>
+          {timeLabel ? <span className="calendar-strip-time">{timeLabel}</span> : null}
+        </>
+      )}
     </button>
   );
 }

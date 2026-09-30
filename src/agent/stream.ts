@@ -6,6 +6,8 @@ export type CalendarChange = {
   id: string;
   title?: string;
   calendar?: CalendarItemMeta;
+  pending?: boolean;
+  pendingId?: string;
 };
 
 export type AgentStreamEvent =
@@ -31,6 +33,8 @@ function calendarChangeOf(raw: unknown): CalendarChange | undefined {
     id: rec.id,
     title: typeof rec.title === "string" ? rec.title.slice(0, 200) : undefined,
     calendar: parseCalendarMeta(rec.calendar),
+    pending: rec.pending === true,
+    pendingId: typeof rec.pendingId === "string" ? rec.pendingId : undefined,
   };
 }
 

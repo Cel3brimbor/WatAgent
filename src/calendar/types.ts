@@ -15,6 +15,9 @@ export type CalendarItemDoc = {
   calendar: CalendarItemMeta;
   createdAt: number;
   updatedAt: number;
+  pendingApproval?: boolean;
+  pendingChangeId?: string;
+  pendingAction?: "upsert" | "delete";
 };
 
 export type TimelineKind = "event" | "task" | "gcal_busy" | "gcal_event";
@@ -42,6 +45,7 @@ export type TimelineItem = {
   endUTC: number;
   allDay: boolean;
   completed?: boolean;
+  pendingApproval?: boolean;
   google?: GoogleEventDetails;
 };
 

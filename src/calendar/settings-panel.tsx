@@ -20,6 +20,8 @@ type Props = {
   onChanged: () => void;
   onSyncNow: () => Promise<number | null>;
   onNotice: (message: string) => void;
+  requireAiApproval: boolean;
+  onRequireAiApprovalChange: (value: boolean) => void;
   onSignOut: () => void;
 };
 
@@ -47,6 +49,8 @@ export function SettingsPanel({
   onChanged,
   onSyncNow,
   onNotice,
+  requireAiApproval,
+  onRequireAiApprovalChange,
   onSignOut,
 }: Props) {
   const [status, setStatus] = useState<GoogleCalendarStatus | null>(null);
@@ -164,6 +168,22 @@ export function SettingsPanel({
             </button>
           </div>
         )}
+      </section>
+
+      <section className="settings-section" aria-labelledby="settings-agent">
+        <h3 id="settings-agent">Agent</h3>
+        <label className="settings-check">
+          <input
+            type="checkbox"
+            checked={requireAiApproval}
+            onChange={(event) => onRequireAiApprovalChange(event.target.checked)}
+          />
+          Require approval for Agent calendar edits
+        </label>
+        <p className="modal-hint">
+          When on, the Agent queues adds, updates, and deletes for you to approve or reject. Pending changes stay saved
+          until you decide and are not sent to Google Calendar until approved.
+        </p>
       </section>
 
       <section className="settings-section" aria-labelledby="settings-colors">

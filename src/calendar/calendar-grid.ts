@@ -81,6 +81,12 @@ export function layoutOverlappingBlocks(items: TimelineItem[], dayStartMs: numbe
   return laid;
 }
 
+export function timedItemClass(height: number): string {
+  if (height < 34) return "is-timed-short";
+  if (height < 50) return "is-timed-medium";
+  return "is-timed-tall";
+}
+
 export function timedItemStyle(layout: TimedLayout): CSSProperties {
   const gap = 2;
   const widthPct = 100 / layout.cols;

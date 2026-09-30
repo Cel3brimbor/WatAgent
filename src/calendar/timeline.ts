@@ -54,6 +54,7 @@ export function aggregateTimeline(input: {
       endUTC: meta.endUTC,
       allDay: meta.allDay,
       completed: meta.completed,
+      pendingApproval: event.pendingApproval,
     });
   }
 
