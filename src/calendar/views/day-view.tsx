@@ -17,11 +17,14 @@ import {
 import { useNowMs } from "@/calendar/calendar-item-editor";
 import { useSlotDrag } from "@/calendar/use-slot-drag";
 import { SlotDraft } from "@/calendar/slot-draft";
+import type { CalendarDraft } from "@/calendar/calendar-item-editor";
+import { timedDraftSlotForDay } from "@/calendar/editor-draft";
 import { PlusIcon } from "@/shared/icons";
 
 type Props = {
   focus: Date;
   items: TimelineItem[];
+  editorDraft?: CalendarDraft | null;
   onOpen: (item: TimelineItem) => void;
   onCreateTimed: (hour: number, minute?: number, endHour?: number) => void;
   onCreateAllDay: () => void;
@@ -31,6 +34,7 @@ type Props = {
 export function CalendarDayView({
   focus,
   items,
+  editorDraft,
   onOpen,
   onCreateTimed,
   onCreateAllDay,
@@ -45,6 +49,10 @@ export function CalendarDayView({
   );
   const nowTop = nowLineTop(now, dayStart.getTime());
   const slots = useSlotDrag<"day">((_key, startHour, endHour) => onCreateTimed(startHour, 0, endHour));
+  const dragSlot = slots.selection;
+  const draftSlot = dragSlot ?? timedDraftSlotForDay(editorDraft ?? null, focus);
+  const draftLabel = editorDraft?.title;
+  const draftKind = editorDraft?.kind;
 
   return (
     <div className="calendar-day">
@@ -106,7 +114,14 @@ export function CalendarDayView({
               />
             </div>
           ))}
-          {slots.selection ? <SlotDraft start={slots.selection.start} end={slots.selection.end} /> : null}
+          {draftSlot ? (
+            <SlotDraft
+              start={draftSlot.start}
+              end={draftSlot.end}
+              kind={draftKind}
+              title={draftLabel}
+            />
+          ) : null}
           {nowTop != null ? (
             <div className="calendar-now-line" style={{ top: nowTop }} />
           ) : null}

@@ -53,7 +53,7 @@ export function TodoList({ items, onOpen, onComplete, onCreate }: Props) {
           {tasks.map((item) => {
             const done = Boolean(item.calendar.completed);
             return (
-              <li key={item.id} data-flip-id={item.id} className={done ? "is-done" : undefined}>
+              <li key={item.id} data-flip-id={item.id} className={`${done ? "is-done" : ""}${item.editorDraft ? " is-editor-draft" : ""}`.trim() || undefined}>
                 <button
                   type="button"
                   className={`todo-check${done ? " is-checked" : ""}`}

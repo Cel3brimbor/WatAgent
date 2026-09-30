@@ -21,12 +21,15 @@ import {
 import { useNowMs } from "@/calendar/calendar-item-editor";
 import { useSlotDrag } from "@/calendar/use-slot-drag";
 import { SlotDraft } from "@/calendar/slot-draft";
+import type { CalendarDraft } from "@/calendar/calendar-item-editor";
+import { timedDraftSlotForDay } from "@/calendar/editor-draft";
 import { PlusIcon } from "@/shared/icons";
 
 type Props = {
   focus: Date;
   weekStartsOn: 0 | 1;
   itemsForDay: (date: Date) => TimelineItem[];
+  editorDraft?: CalendarDraft | null;
   onOpen: (item: TimelineItem) => void;
   onCreateTimed: (date: Date, hour: number, endHour?: number) => void;
   onCreateAllDay: (date: Date) => void;
@@ -38,6 +41,7 @@ export function CalendarWeekView({
   focus,
   weekStartsOn,
   itemsForDay,
+  editorDraft,
   onOpen,
   onCreateTimed,
   onCreateAllDay,
@@ -112,7 +116,10 @@ export function CalendarWeekView({
             dayStart.getTime(),
           );
           const nowTop = isToday(date) ? nowLineTop(now, dayStart.getTime()) : null;
-          const selection = slots.selection?.key === dayIndex ? slots.selection : null;
+          const selection =
+            slots.selection?.key === dayIndex
+              ? slots.selection
+              : timedDraftSlotForDay(editorDraft ?? null, date);
           return (
             <div key={date.toISOString()} className="calendar-week-col" {...slots.bind(dayIndex)}>
               {HOURS.map((hour) => (
@@ -140,7 +147,14 @@ export function CalendarWeekView({
                   />
                 </div>
               ))}
-              {selection ? <SlotDraft start={selection.start} end={selection.end} /> : null}
+              {selection ? (
+                <SlotDraft
+                  start={selection.start}
+                  end={selection.end}
+                  kind={editorDraft?.kind}
+                  title={editorDraft?.title}
+                />
+              ) : null}
               {nowTop != null ? (
                 <div className="calendar-now-line" style={{ top: nowTop }} />
               ) : null}

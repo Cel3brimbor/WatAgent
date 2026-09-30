@@ -1551,6 +1551,11 @@ select {
   font-size: 0.68rem;
 }
 
+.calendar-slot-draft.is-task {
+  border-left-color: var(--task-color);
+  background: color-mix(in srgb, var(--task-color) 30%, var(--panel-solid));
+}
+
 .calendar-day-grid,
 .calendar-week-body {
   display: grid;
@@ -1971,6 +1976,11 @@ select {
   opacity: 0.85;
 }
 
+.calendar-strip.is-editor-draft {
+  border-style: dashed;
+  opacity: 0.92;
+}
+
 /*sits under the transcript and scales with the chat column*/
 .ai-approval-panel {
   flex-shrink: 0;
@@ -2341,6 +2351,11 @@ select {
   transition-duration: var(--dur-exit);
 }
 
+.calendar-editor-overlay[data-state="open"],
+.modal-backdrop[data-state="open"] {
+  opacity: 1;
+}
+
 .calendar-editor-overlay[data-state="closed"] .calendar-editor,
 .modal-backdrop[data-state="closed"] .modal {
   opacity: 0;
@@ -2349,16 +2364,75 @@ select {
 }
 
 .calendar-editor {
+  display: flex;
+  flex-direction: column;
   width: min(520px, 100%);
-  max-height: 90dvh;
-  overflow: auto;
-  padding: 1.1rem 1.15rem 1rem;
-  border-radius: 18px;
+  max-height: min(90dvh, 44rem);
+  overflow: hidden;
+  padding: 0;
+  border-radius: 20px;
   background: var(--panel-solid);
   box-shadow: var(--shadow-dialog);
   transition:
     opacity 220ms var(--ease-out),
     transform var(--dur-spring) var(--ease-spring);
+}
+
+.calendar-editor-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 1.15rem 1.15rem 0.85rem;
+  -webkit-overflow-scrolling: touch;
+}
+
+.calendar-editor-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin: 0.65rem 0 0.85rem;
+}
+
+.calendar-editor-section {
+  margin: 0 0 0.75rem;
+}
+
+.calendar-editor-group {
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--line) 88%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--paper) 72%, var(--panel-solid));
+}
+
+.calendar-editor-cell {
+  display: grid;
+  grid-template-columns: minmax(4.5rem, 5.25rem) minmax(0, 1fr);
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.55rem 0.75rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+  margin: 0;
+  color: var(--ink);
+  font-size: 0.9rem;
+}
+
+.calendar-editor-cell:last-child {
+  border-bottom: 0;
+}
+
+.calendar-editor-cell.is-multiline {
+  align-items: start;
+  padding-top: 0.65rem;
+  padding-bottom: 0.65rem;
+}
+
+.calendar-editor-cell-label {
+  color: var(--ink-soft);
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
 }
 
 .calendar-editor-source {
@@ -2369,15 +2443,16 @@ select {
 
 .calendar-editor-title {
   width: 100%;
-  padding: 0.15rem 0 0.55rem;
+  padding: 0.1rem 0 0.45rem;
   border: 0;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
   border-radius: 0;
   background: transparent;
   color: var(--ink);
-  font-size: 1.3rem;
+  font-size: clamp(1.2rem, 2.8vw, 1.45rem);
   font-weight: 650;
-  letter-spacing: -0.015em;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
   transition: border-color var(--dur-fast) var(--ease-out);
 }
 
@@ -2423,14 +2498,141 @@ select {
   box-shadow: 0 0 0 3px var(--glow);
 }
 
-.calendar-editor-row {
+.calendar-editor-input-inset {
+  min-height: 2rem;
+  padding: 0.2rem 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.calendar-editor-input-inset:focus {
+  box-shadow: none;
+}
+
+.calendar-editor-area {
+  min-height: 3.6rem;
+  resize: vertical;
+  font-variant-numeric: normal;
+  line-height: 1.45;
+}
+
+.place-location-block {
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+}
+
+.place-location-head {
+  display: grid;
+  grid-template-columns: minmax(4.5rem, 5.25rem) minmax(0, 1fr);
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.55rem 0.75rem;
+}
+
+.place-dropdown {
+  display: grid;
+  gap: 0.05rem;
+  max-height: 11rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0.15rem 0 0.35rem;
+  border-top: 1px solid color-mix(in srgb, var(--line) 65%, transparent);
+  background: color-mix(in srgb, var(--paper) 50%, var(--panel-solid));
+}
+
+.place-dropdown-list {
+  display: grid;
+  gap: 0.02rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.place-menu-label {
+  padding: 0.35rem 0.75rem 0.1rem;
+  color: var(--ink-soft);
+  font-size: 0.68rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.place-option {
+  display: grid;
+  gap: 0.05rem;
+  width: 100%;
+  padding: 0.42rem 0.75rem;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 0.88rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-align: left;
+  text-transform: none;
+}
+
+.place-option small {
+  color: var(--ink-soft);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.place-option.is-active,
+.place-option:hover {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.place-ask {
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.4rem 0.5rem 0.5rem;
+}
+
+.place-ask p,
+.place-note {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.8rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1.35;
+  text-transform: none;
+}
+
+.place-ask p {
+  color: var(--ink);
+}
+
+.place-ask-actions {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.8rem;
-  margin: 0.75rem 0 0.5rem;
-  font-size: 0.88rem;
+  gap: 0.4rem;
+}
+
+.place-ask-btn {
+  min-height: 2rem;
+  padding: 0.25rem 0.7rem;
+  font-size: 0.8rem;
+}
+
+.place-use-location {
+  justify-self: start;
+  margin: 0.15rem 0.75rem 0.35rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.place-ask,
+.place-note {
+  padding-left: 0.75rem;
+  padding-right: 0.75rem;
 }
 
 .calendar-editor-toggle,
@@ -2448,9 +2650,13 @@ select {
 
 .calendar-editor-actions {
   display: flex;
+  flex-shrink: 0;
   justify-content: space-between;
   gap: 0.5rem;
-  margin-top: 0.8rem;
+  margin: 0;
+  padding: 0.75rem 1.15rem 1rem;
+  border-top: 1px solid color-mix(in srgb, var(--line) 75%, transparent);
+  background: color-mix(in srgb, var(--panel-solid) 92%, var(--paper));
 }
 
 .calendar-editor-actions-right {
@@ -2641,6 +2847,11 @@ select {
   color: var(--ink-soft);
   text-decoration: line-through;
   text-decoration-color: color-mix(in srgb, var(--ink-soft) 60%, transparent);
+}
+
+.todo-list li.is-editor-draft {
+  border: 1px dashed color-mix(in srgb, var(--task-color) 55%, var(--line));
+  opacity: 0.92;
 }
 
 .todo-check {

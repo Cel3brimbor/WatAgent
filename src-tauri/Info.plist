@@ -4,5 +4,7 @@
 <dict>
   <key>NSLocationWhenInUseUsageDescription</key>
   <string>WatAgent uses your location to suggest nearby places when you add an event.</string>
+  <key>NSLocationUsageDescription</key>
+  <string>WatAgent uses your location to suggest nearby places when you add an event.</string>
 </dict>
 </plist>

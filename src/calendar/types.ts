@@ -7,6 +7,8 @@ export type CalendarItemMeta = {
   allDay: boolean;
   completed?: boolean;
   googleEventId?: string;
+  location?: string;
+  description?: string;
 };
 
 export type CalendarItemDoc = {
@@ -18,6 +20,8 @@ export type CalendarItemDoc = {
   pendingApproval?: boolean;
   pendingChangeId?: string;
   pendingAction?: "upsert" | "delete";
+  /** Optimistic row while the item editor is open. */
+  editorDraft?: boolean;
 };
 
 export type TimelineKind = "event" | "task" | "gcal_busy" | "gcal_event";
@@ -46,7 +50,10 @@ export type TimelineItem = {
   allDay: boolean;
   completed?: boolean;
   pendingApproval?: boolean;
+  editorDraft?: boolean;
   google?: GoogleEventDetails;
+  location?: string;
+  description?: string;
   /** Display-only overlay; never sent to Google or the API. */
   smartTag?: { id: string; name: string; color: string };
 };
@@ -58,6 +65,13 @@ function googleEventIdOf(raw: unknown): string | undefined {
   const trimmed = raw.trim();
   if (!/^[A-Za-z0-9._:-]{1,1024}$/.test(trimmed)) return undefined;
   return trimmed;
+}
+
+function optionalText(raw: unknown, max: number, block: boolean): string | undefined {
+  if (typeof raw !== "string") return undefined;
+  const text = (block ? raw.replace(/\r\n/g, "\n") : raw.replace(/\s+/g, " ")).trim();
+  if (!text) return undefined;
+  return text.slice(0, max);
 }
 
 export function parseCalendarMeta(raw: unknown): CalendarItemMeta | undefined {
@@ -74,6 +88,8 @@ export function parseCalendarMeta(raw: unknown): CalendarItemMeta | undefined {
     allDay: Boolean(rec.allDay),
     completed: kind === "task" ? Boolean(rec.completed) : undefined,
     googleEventId: googleEventIdOf(rec.googleEventId),
+    location: optionalText(rec.location, 300, false),
+    description: optionalText(rec.description, 4000, true),
   };
 }
 
@@ -84,6 +100,8 @@ export function calendarMetaEqual(a: CalendarItemMeta, b: CalendarItemMeta): boo
     a.endUTC === b.endUTC &&
     a.allDay === b.allDay &&
     a.completed === b.completed &&
-    a.googleEventId === b.googleEventId
+    a.googleEventId === b.googleEventId &&
+    a.location === b.location &&
+    a.description === b.description
   );
 }

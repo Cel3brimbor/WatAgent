@@ -50,6 +50,8 @@ export async function upsertCalendarItem(input: {
         endUTC: input.calendar.endUTC,
         allDay: input.calendar.allDay,
         completed: input.calendar.kind === "task" ? Boolean(input.calendar.completed) : undefined,
+        ...(input.calendar.location ? { location: input.calendar.location } : {}),
+        ...(input.calendar.description ? { description: input.calendar.description } : {}),
       },
     }),
   });

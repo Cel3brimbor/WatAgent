@@ -50,7 +50,9 @@ import {
   type CalendarDraft,
   type GoogleDraftTarget,
 } from "@/calendar/calendar-item-editor";
+import { mergeEditorDraft } from "@/calendar/editor-draft";
 import { GoogleEventCard } from "@/calendar/google-event-card";
+import { rememberPlace } from "@/calendar/place-memory";
 import { SettingsPanel } from "@/calendar/settings-panel";
 import { useCalendarPreferencesSync } from "@/calendar/use-calendar-preferences-sync";
 import { SideNav, type AppSection } from "@/calendar/side-nav";
@@ -200,7 +202,12 @@ function smartTagTargetOf(item: TimelineItem): SmartTagTarget | null {
       description: item.google.description,
     };
   }
-  return { calendarId: item.kind === "task" ? "tasks" : "events", title: item.title };
+    return {
+      calendarId: item.kind === "task" ? "tasks" : "events",
+      title: item.title,
+      location: item.location,
+      description: item.description,
+    };
 }
 
 function applySmartTags(items: TimelineItem[], matcher: SmartTagMatcher): TimelineItem[] {
@@ -251,6 +258,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
   const [streamingAssistantId, setStreamingAssistantId] = useState<string | null>(null);
   const [googlePeek, setGooglePeek] = useState<{ item: TimelineItem; anchor: DOMRect } | null>(null);
   const [googleDelete, setGoogleDelete] = useState<(GoogleDraftTarget & { title: string }) | null>(null);
+  const [itemDelete, setItemDelete] = useState<{ id: string; title: string; kind: "event" | "task" } | null>(null);
   const [sources, setSources] = useState<CalendarSourceFilter>(() => readSourceFilter());
   const [colors, setColors] = useState<CalendarColors>(() => readCalendarColors());
   const [colorOverrides, setColorOverrides] = useState<Record<string, string>>(() => readColorOverrides());
@@ -278,12 +286,22 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
   const peek = usePresence(googlePeek);
   const shownPeek = peek.value;
   const deletePrompt = usePresence(googleDelete);
+  const itemDeletePrompt = usePresence(itemDelete);
   const editor = usePresence(draft);
   const shownDraft = editor.value;
   const banner = usePresence(notice ?? calendar.loadError);
   //stable so overlay effects don't re-subscribe every render
   const closePeek = useCallback(() => setGooglePeek(null), []);
   const closeEditor = useCallback(() => setDraft(null), []);
+
+  useEffect(() => {
+    if (draft) setGooglePeek(null);
+  }, [draft]);
+
+  const itemsForUi = useMemo(
+    () => mergeEditorDraft(calendar.displayItems, draft),
+    [calendar.displayItems, draft],
+  );
 
   const period = periodStart(focus, view, weekStartsOn);
   const lastPeriodRef = useRef({ period, view, section });
@@ -337,6 +355,8 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
       ...calendar.displayItems.map((item) => ({
         calendarId: item.calendar.kind === "task" ? "tasks" : "events",
         title: item.title,
+        location: item.calendar.location,
+        description: item.calendar.description,
       })),
       ...overlayEvents.map((event) => ({
         calendarId: event.calendarId,
@@ -364,7 +384,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
     (date: Date, filter: CalendarSourceFilter) =>
       aggregateTimeline({
         focus: date,
-        events: calendar.displayItems.filter((item) => {
+        events: itemsForUi.filter((item) => {
           if (item.calendar.kind === "task") {
             return filter.tasks && !isSidebarHidden(filter, "tasks");
           }
@@ -379,7 +399,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
             )
           : [],
       }),
-    [calendar.displayItems, busyBlocks, shownOverlayEvents],
+    [itemsForUi, busyBlocks, shownOverlayEvents],
   );
 
   const itemsForDay = useCallback(
@@ -401,7 +421,9 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
             return `- ${item.kind} "${item.title}" ${when}${where}${calendarName} (read-only Google calendar)`;
           }
           const done = item.kind === "task" ? ` completed=${item.completed ? "true" : "false"}` : "";
-          return `- ${item.kind} id=${item.id} "${item.title}" ${when}${done}`;
+          const where = item.location ? ` @ ${item.location}` : "";
+          const about = item.description ? ` — ${item.description.replace(/\s+/g, " ").slice(0, 140)}` : "";
+          return `- ${item.kind} id=${item.id} "${item.title}" ${when}${where}${about}${done}`;
         })
         .join("\n")
         .slice(0, 12_000),
@@ -535,16 +557,18 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
   }
 
   function onOpenItem(item: TimelineItem, anchor?: DOMRect) {
-    if (item.kind === "gcal_event") {
+    if (item.editorDraft) return;
+    if (item.kind === "gcal_busy") return;
+    if (item.pendingApproval) {
+      setNotice("Approve or undo this Agent change in the chat.");
+      return;
+    }
+    if (item.kind === "gcal_event" || item.kind === "event") {
+      setDraft(null);
       setGooglePeek({
         item,
         anchor: anchor ?? new DOMRect(window.innerWidth / 2 - 180, 96, 0, 0),
       });
-      return;
-    }
-    if (item.kind === "gcal_busy") return;
-    if (item.pendingApproval) {
-      setNotice("Approve or undo this Agent change in the chat.");
       return;
     }
     const existing = calendar.items.find((row) => row.id === item.id);
@@ -575,6 +599,15 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
     } finally {
       setGoogleVersion((value) => value + 1);
     }
+  }
+
+  function confirmItemDelete() {
+    const target = itemDelete;
+    if (!target) return;
+    setItemDelete(null);
+    setDraft(null);
+    setGooglePeek(null);
+    calendar.remove(target.id);
   }
 
   async function confirmGoogleDelete() {
@@ -615,13 +648,18 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
       void saveGoogleDraft(pending, draft.google);
       return;
     }
+    const location = draft.location?.replace(/\s+/g, " ").trim().slice(0, 300) || undefined;
+    const description = draft.description?.replace(/\r\n/g, "\n").trim().slice(0, 4000) || undefined;
     const calendarMeta: CalendarItemMeta = {
       kind: draft.kind,
       startUTC: draft.startUTC,
       endUTC: draft.endUTC,
       allDay: draft.allDay,
       completed: draft.kind === "task" ? Boolean(draft.completed) : undefined,
+      ...(location ? { location } : {}),
+      ...(description ? { description } : {}),
     };
+    if (location) rememberPlace(location);
     const pending = draft;
     setDraft(null);
     calendar.upsert({
@@ -904,7 +942,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
           <div key={stageKey} className="calendar-stage-view" data-nav={navDirection}>
             {section === "tasks" ? (
               <TodoList
-                items={calendar.displayItems}
+                items={itemsForUi}
                 onOpen={(item) => {
                   if (item.pendingApproval) {
                     setNotice("Approve or undo this Agent change in the chat.");
@@ -934,6 +972,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
               <CalendarDayView
                 focus={focus}
                 items={dayItems}
+                editorDraft={draft}
                 onOpen={onOpenItem}
                 onCreateTimed={(hour, _minute, endHour) => setDraft(defaultTimedDraft(focus, hour, 0, endHour))}
                 onCreateAllDay={() => setDraft(defaultAllDayDraft(focus))}
@@ -945,6 +984,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
                 focus={focus}
                 weekStartsOn={weekStartsOn}
                 itemsForDay={itemsForDay}
+                editorDraft={draft}
                 onOpen={onOpenItem}
                 onCreateTimed={(date, hour, endHour) => setDraft(defaultTimedDraft(date, hour, 0, endHour))}
                 onCreateAllDay={(date) => setDraft(defaultAllDayDraft(date))}
@@ -1024,23 +1064,52 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
           open={peek.open}
           onClose={closePeek}
           onEdit={
-            shownPeek.item.google?.editable
+            shownPeek.item.kind === "event"
               ? () => {
-                  const next = draftFromGoogle(shownPeek.item);
+                  const existing = calendar.items.find((row) => row.id === shownPeek.item.id);
                   setGooglePeek(null);
-                  if (next) setDraft(next);
+                  if (existing) setDraft(draftFromMeta(existing.id, existing.title, existing.calendar));
                 }
-              : undefined
+              : shownPeek.item.google?.editable
+                ? () => {
+                    const next = draftFromGoogle(shownPeek.item);
+                    setGooglePeek(null);
+                    if (next) setDraft(next);
+                  }
+                : undefined
           }
           onDelete={
-            shownPeek.item.google?.deletable
+            shownPeek.item.kind === "event"
               ? () => {
-                  const target = googleTargetOf(shownPeek.item);
                   setGooglePeek(null);
-                  if (target) setGoogleDelete({ ...target, title: shownPeek.item.title });
+                  setItemDelete({
+                    id: shownPeek.item.id,
+                    title: shownPeek.item.title,
+                    kind: "event",
+                  });
                 }
-              : undefined
+              : shownPeek.item.google?.deletable
+                ? () => {
+                    const target = googleTargetOf(shownPeek.item);
+                    setGooglePeek(null);
+                    if (target) setGoogleDelete({ ...target, title: shownPeek.item.title });
+                  }
+                : undefined
           }
+        />
+      ) : null}
+
+      {itemDeletePrompt.value ? (
+        <ConfirmDialog
+          title={`Delete “${itemDeletePrompt.value.title}”?`}
+          message={
+            itemDeletePrompt.value.kind === "task"
+              ? "This deletes the task from your WatAgent calendar."
+              : "This deletes the event from your WatAgent calendar."
+          }
+          open={itemDeletePrompt.open}
+          onCancel={() => setItemDelete(null)}
+          onConfirm={confirmItemDelete}
         />
       ) : null}
 
@@ -1071,10 +1140,12 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
                     })
                 : undefined
               : shownDraft.id
-                ? () => {
-                    calendar.remove(shownDraft.id as string);
-                    setDraft(null);
-                  }
+                ? () =>
+                    setItemDelete({
+                      id: shownDraft.id as string,
+                      title: shownDraft.title || (shownDraft.kind === "task" ? "Task" : "Event"),
+                      kind: shownDraft.kind,
+                    })
                 : undefined
           }
         />

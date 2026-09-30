@@ -22,7 +22,7 @@ export type SmartTag = {
   exemptCalendarIds: string[];
 };
 
-/** What a smart tag can see about an event. Local items only have a title. */
+/** What a smart tag can see about an event. */
 export type SmartTagTarget = {
   calendarId: string;
   title: string;

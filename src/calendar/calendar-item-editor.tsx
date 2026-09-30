@@ -6,6 +6,7 @@ import { hourGridMs, startOfLocalDay } from "@/calendar/date-utils";
 import { SegmentedControl, type SegmentOption } from "@/shared/segmented-control";
 import { Switch } from "@/shared/switch";
 import { useDialog } from "@/shared/use-dialog";
+import { LocationField } from "@/calendar/location-field";
 
 export type GoogleDraftTarget = {
   calendarId: string;
@@ -22,6 +23,8 @@ export type CalendarDraft = {
   endUTC: number;
   allDay: boolean;
   completed?: boolean;
+  location?: string;
+  description?: string;
   google?: GoogleDraftTarget;
 };
 
@@ -59,6 +62,7 @@ const KIND_OPTIONS: SegmentOption<CalendarItemKind>[] = [
 export function CalendarItemEditor({ draft, open = true, onChange, onSave, onCancel, onDelete }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const allDayId = useId();
+  const locationFieldId = useId();
   useDialog(ref, { open, onEscape: onCancel });
 
   return (
@@ -81,89 +85,117 @@ export function CalendarItemEditor({ draft, open = true, onChange, onSave, onCan
             Changes save to {draft.google.calendarName || "your Google calendar"} in Google Calendar.
           </p>
         ) : null}
-        <input
-          className="calendar-editor-title"
-          value={draft.title}
-          maxLength={200}
-          aria-label="Title"
-          onChange={(event) => onChange({ ...draft, title: event.target.value })}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" && !event.metaKey && !event.ctrlKey && !event.nativeEvent.isComposing) {
-              event.preventDefault();
-              onSave();
-            }
-          }}
-          placeholder={draft.kind === "task" ? "New task" : "New event"}
-          autoFocus
-        />
-        <div className="calendar-editor-row">
-          {draft.google ? null : (
-            <SegmentedControl
-              label="Item type"
-              value={draft.kind}
-              options={KIND_OPTIONS}
-              onChange={(kind) =>
-                onChange(
-                  kind === "task"
-                    ? { ...draft, kind, completed: Boolean(draft.completed) }
-                    : { ...draft, kind, completed: undefined },
-                )
+        <div className="calendar-editor-body">
+          <input
+            className="calendar-editor-title"
+            value={draft.title}
+            maxLength={200}
+            aria-label="Title"
+            onChange={(event) => onChange({ ...draft, title: event.target.value })}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.metaKey && !event.ctrlKey && !event.nativeEvent.isComposing) {
+                event.preventDefault();
+                onSave();
               }
-            />
-          )}
-          <div className="calendar-editor-toggle">
-            <label htmlFor={allDayId}>All-day</label>
-            <Switch id={allDayId} checked={draft.allDay} onChange={(allDay) => onChange({ ...draft, allDay })} />
+            }}
+            placeholder={draft.kind === "task" ? "New task" : "New event"}
+            autoFocus
+          />
+          <div className="calendar-editor-toolbar">
+            {draft.google ? null : (
+              <SegmentedControl
+                label="Item type"
+                value={draft.kind}
+                options={KIND_OPTIONS}
+                onChange={(kind) =>
+                  onChange(
+                    kind === "task"
+                      ? { ...draft, kind, completed: Boolean(draft.completed) }
+                      : { ...draft, kind, completed: undefined },
+                  )
+                }
+              />
+            )}
+            <div className="calendar-editor-toggle">
+              <label htmlFor={allDayId}>All-day</label>
+              <Switch id={allDayId} checked={draft.allDay} onChange={(allDay) => onChange({ ...draft, allDay })} />
+            </div>
           </div>
+          <section className="calendar-editor-section" aria-label="Schedule">
+            <div className="calendar-editor-group">
+              {draft.allDay ? (
+                <label className="calendar-editor-cell">
+                  <span className="calendar-editor-cell-label">Date</span>
+                  <input
+                    type="date"
+                    className="calendar-editor-input calendar-editor-input-inset"
+                    value={toDateInputValue(draft.startUTC)}
+                    onChange={(event) => {
+                      const [y, m, d] = event.target.value.split("-").map(Number);
+                      const start = new Date(y, m - 1, d).getTime();
+                      if (!Number.isFinite(start)) return;
+                      const days = Math.max(1, Math.round((draft.endUTC - draft.startUTC) / DAY_MS));
+                      onChange({ ...draft, startUTC: start, endUTC: new Date(y, m - 1, d + days).getTime() });
+                    }}
+                  />
+                </label>
+              ) : (
+                <>
+                  <label className="calendar-editor-cell">
+                    <span className="calendar-editor-cell-label">Starts</span>
+                    <input
+                      type="datetime-local"
+                      className="calendar-editor-input calendar-editor-input-inset"
+                      value={toLocalInputValue(draft.startUTC)}
+                      onChange={(event) => {
+                        const startUTC = new Date(event.target.value).getTime();
+                        if (!Number.isFinite(startUTC)) return;
+                        const duration = Math.max(15 * 60 * 1000, draft.endUTC - draft.startUTC);
+                        onChange({ ...draft, startUTC, endUTC: startUTC + duration });
+                      }}
+                    />
+                  </label>
+                  <label className="calendar-editor-cell">
+                    <span className="calendar-editor-cell-label">Ends</span>
+                    <input
+                      type="datetime-local"
+                      className="calendar-editor-input calendar-editor-input-inset"
+                      value={toLocalInputValue(draft.endUTC)}
+                      onChange={(event) => {
+                        const endUTC = new Date(event.target.value).getTime();
+                        if (!Number.isFinite(endUTC)) return;
+                        onChange({ ...draft, endUTC });
+                      }}
+                    />
+                  </label>
+                </>
+              )}
+            </div>
+          </section>
+          {draft.kind === "event" && !draft.google ? (
+            <section className="calendar-editor-section" aria-label="Details">
+              <div className="calendar-editor-group">
+                <LocationField
+                  labelId={locationFieldId}
+                  value={draft.location ?? ""}
+                  onChange={(location) => onChange({ ...draft, location })}
+                />
+                <label className="calendar-editor-cell is-multiline">
+                  <span className="calendar-editor-cell-label">Notes</span>
+                  <textarea
+                    className="calendar-editor-input calendar-editor-input-inset calendar-editor-area"
+                    value={draft.description ?? ""}
+                    maxLength={4000}
+                    rows={3}
+                    placeholder="Add a short description"
+                    onChange={(event) => onChange({ ...draft, description: event.target.value })}
+                  />
+                </label>
+              </div>
+            </section>
+          ) : null}
         </div>
-        {draft.allDay ? (
-          <label className="calendar-editor-field">
-            Date
-            <input
-              type="date"
-              className="calendar-editor-input"
-              value={toDateInputValue(draft.startUTC)}
-              onChange={(event) => {
-                const [y, m, d] = event.target.value.split("-").map(Number);
-                const start = new Date(y, m - 1, d).getTime();
-                if (!Number.isFinite(start)) return;
-                const days = Math.max(1, Math.round((draft.endUTC - draft.startUTC) / DAY_MS));
-                onChange({ ...draft, startUTC: start, endUTC: new Date(y, m - 1, d + days).getTime() });
-              }}
-            />
-          </label>
-        ) : (
-          <div className="calendar-editor-row">
-            <label className="calendar-editor-field">
-              Start
-              <input
-                type="datetime-local"
-                className="calendar-editor-input"
-                value={toLocalInputValue(draft.startUTC)}
-                onChange={(event) => {
-                  const startUTC = new Date(event.target.value).getTime();
-                  if (!Number.isFinite(startUTC)) return;
-                  const duration = Math.max(15 * 60 * 1000, draft.endUTC - draft.startUTC);
-                  onChange({ ...draft, startUTC, endUTC: startUTC + duration });
-                }}
-              />
-            </label>
-            <label className="calendar-editor-field">
-              End
-              <input
-                type="datetime-local"
-                className="calendar-editor-input"
-                value={toLocalInputValue(draft.endUTC)}
-                onChange={(event) => {
-                  const endUTC = new Date(event.target.value).getTime();
-                  if (!Number.isFinite(endUTC)) return;
-                  onChange({ ...draft, endUTC });
-                }}
-              />
-            </label>
-          </div>
-        )}
-        <div className="calendar-editor-actions">
+        <footer className="calendar-editor-actions">
           {onDelete ? (
             <button type="button" className="ghost-btn calendar-editor-danger" onClick={onDelete}>
               Delete
@@ -179,7 +211,7 @@ export function CalendarItemEditor({ draft, open = true, onChange, onSave, onCan
               Save
             </button>
           </div>
-        </div>
+        </footer>
       </div>
     </div>
   );
@@ -244,5 +276,7 @@ export function draftFromMeta(id: string, title: string, calendar: CalendarItemM
     endUTC: calendar.endUTC,
     allDay: calendar.allDay,
     completed: calendar.completed,
+    location: calendar.location,
+    description: calendar.description,
   };
 }

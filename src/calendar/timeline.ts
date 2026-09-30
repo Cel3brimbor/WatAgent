@@ -55,6 +55,9 @@ export function aggregateTimeline(input: {
       allDay: meta.allDay,
       completed: meta.completed,
       pendingApproval: event.pendingApproval,
+      editorDraft: event.editorDraft,
+      location: meta.location,
+      description: meta.description,
     });
   }
 

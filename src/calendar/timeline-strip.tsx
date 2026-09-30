@@ -19,7 +19,7 @@ function timeRange(item: TimelineItem): string {
 }
 
 function itemLocation(item: TimelineItem): string | null {
-  const loc = item.google?.location?.trim();
+  const loc = (item.google?.location ?? item.location)?.trim();
   return loc ? loc : null;
 }
 
@@ -96,13 +96,13 @@ export function TimelineStrip({ item, compact, layout = "inline", onOpen, onComp
   return (
     <button
       type="button"
-      className={`calendar-strip is-${item.kind}${item.completed ? " is-done" : ""}${item.pendingApproval ? " is-pending" : ""}${compact ? " is-compact" : ""}${layoutClass}`}
+        className={`calendar-strip is-${item.kind}${item.completed ? " is-done" : ""}${item.pendingApproval ? " is-pending" : ""}${item.editorDraft ? " is-editor-draft" : ""}${compact ? " is-compact" : ""}${layoutClass}`}
       title={item.smartTag ? `${item.title} · ${item.smartTag.name}` : undefined}
       style={stripColorStyle(item.smartTag?.color)}
-      onClick={(event) => {
-        event.stopPropagation();
-        onOpen(item);
-      }}
+        onClick={(event) => {
+          event.stopPropagation();
+          onOpen(item, event.currentTarget.getBoundingClientRect());
+        }}
     >
       {item.kind === "task" ? (
         <span
