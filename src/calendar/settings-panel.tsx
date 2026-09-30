@@ -10,6 +10,7 @@ import {
   type GoogleCalendarStatus,
 } from "@/calendar/google-calendar-client";
 import { isNativeShell } from "@/shared/platform";
+import { Switch } from "@/shared/switch";
 
 type Props = {
   accountEmail: string | null;
@@ -161,15 +162,16 @@ export function SettingsPanel({
 
       <section className="settings-section" aria-labelledby="settings-agent">
         <h3 id="settings-agent">Agent</h3>
-        <label className="settings-check">
-          <input
-            type="checkbox"
+        <div className="settings-toggle">
+          <label htmlFor="settings-approval">Require approval for Agent calendar edits</label>
+          <Switch
+            id="settings-approval"
             checked={requireAiApproval}
-            onChange={(event) => onRequireAiApprovalChange(event.target.checked)}
+            aria-describedby="settings-approval-hint"
+            onChange={onRequireAiApprovalChange}
           />
-          Require approval for Agent calendar edits
-        </label>
-        <p className="modal-hint">
+        </div>
+        <p id="settings-approval-hint" className="modal-hint">
           When on, the Agent queues adds, updates, and deletes for you to approve or reject. Pending changes stay saved
           until you decide and are not sent to Google Calendar until approved.
         </p>

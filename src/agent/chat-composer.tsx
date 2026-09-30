@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState, type FormEvent, type KeyboardEvent } from "react";
+import { ArrowUpIcon, StopIcon } from "@/shared/icons";
 
 const MAX_CHARS = 20_000;
 
@@ -15,6 +16,7 @@ type Props = {
 export function ChatComposer({ busy, error, onSend, onStop, onError }: Props) {
   const [text, setText] = useState("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const ready = text.trim().length > 0;
 
   function submit(event?: FormEvent) {
     event?.preventDefault();
@@ -58,11 +60,16 @@ export function ChatComposer({ busy, error, onSend, onStop, onError }: Props) {
         />
         {busy ? (
           <button type="button" className="composer-send is-stop" onClick={onStop} aria-label="Stop">
-            ■
+            <StopIcon />
           </button>
         ) : (
-          <button type="submit" className="composer-send" disabled={!text.trim()} aria-label="Send">
-            ↑
+          <button
+            type="submit"
+            className={`composer-send${ready ? " is-ready" : ""}`}
+            disabled={!ready}
+            aria-label="Send"
+          >
+            <ArrowUpIcon />
           </button>
         )}
       </div>

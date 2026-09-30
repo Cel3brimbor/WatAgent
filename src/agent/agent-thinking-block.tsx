@@ -1,7 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import type { ToolEventRecord } from "@/agent/types";
+import { Disclosure } from "@/shared/disclosure";
+import { AlertIcon, CheckIcon, ChevronRightIcon, ToolIcon } from "@/shared/icons";
 
 const TOOL_LABELS: Record<string, string> = {
   list_calendar_items: "Listed calendar items",
@@ -17,14 +19,15 @@ function collapsedSummary(events: ToolEventRecord[]): string {
   return unique.slice(0, 3).join(" · ") || "Used tools";
 }
 
-function stateGlyph(state: ToolEventRecord["state"]): string {
-  if (state === "succeeded") return "✓";
-  if (state === "failed") return "!";
-  return "↗";
+function StateGlyph({ state }: { state: ToolEventRecord["state"] }) {
+  if (state === "succeeded") return <CheckIcon />;
+  if (state === "failed") return <AlertIcon />;
+  return <ToolIcon />;
 }
 
 export function AgentThinkingBlock({ events }: { events?: ToolEventRecord[] }) {
   const [open, setOpen] = useState(false);
+  const timelineId = useId();
   const summary = useMemo(() => (events && events.length > 0 ? collapsedSummary(events) : ""), [events]);
 
   if (!events || events.length === 0) return null;
@@ -35,22 +38,21 @@ export function AgentThinkingBlock({ events }: { events?: ToolEventRecord[] }) {
         type="button"
         className="agent-thinking-toggle"
         aria-expanded={open}
+        aria-controls={timelineId}
         onClick={() => setOpen((value) => !value)}
       >
-        <span className="agent-thinking-chevron" aria-hidden>
-          ›
-        </span>
+        <ChevronRightIcon className="agent-thinking-chevron" />
         <span className="agent-thinking-summary">{summary}</span>
         <span className="agent-thinking-count">
           {events.length} step{events.length === 1 ? "" : "s"}
         </span>
       </button>
-      {open ? (
+      <Disclosure open={open} id={timelineId}>
         <ol className="agent-thinking-timeline">
           {events.map((event) => (
             <li key={event.id} data-state={event.state}>
               <span className="agent-tool-icon" aria-hidden>
-                {stateGlyph(event.state)}
+                <StateGlyph state={event.state} />
               </span>
               <div className="agent-tool-copy">
                 <code className="agent-tool-badge">{event.tool}</code>
@@ -59,7 +61,7 @@ export function AgentThinkingBlock({ events }: { events?: ToolEventRecord[] }) {
             </li>
           ))}
         </ol>
-      ) : null}
+      </Disclosure>
     </div>
   );
 }

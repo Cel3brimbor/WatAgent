@@ -23,6 +23,8 @@ import {
   type ContextMenuState,
 } from "@/shared/context-menu";
 import { ConfirmDialog } from "@/shared/confirm-dialog";
+import { CloseIcon, PlusIcon } from "@/shared/icons";
+import { usePresence } from "@/shared/use-presence";
 
 export type ChatTabSession = {
   id: string;
@@ -58,6 +60,7 @@ export function ChatTabStrip({
   const [historyMenu, setHistoryMenu] = useState<ContextMenuState>(null);
   const [tabMenu, setTabMenu] = useState<(ContextMenuState & { chatId: string }) | null>(null);
   const [pendingDelete, setPendingDelete] = useState<ChatTabSession | null>(null);
+  const deletePresence = usePresence(pendingDelete);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
   const skipRenameCommit = useRef(false);
@@ -168,7 +171,7 @@ export function ChatTabStrip({
               onNewChat();
             }}
           >
-            +
+            <PlusIcon />
           </button>
         </div>
         <button
@@ -196,13 +199,15 @@ export function ChatTabStrip({
       </div>
       <ContextMenu state={historyMenu} onClose={closeMenus} items={historyItems} />
       <ContextMenu state={tabMenu} onClose={closeMenus} items={tabMenuItems} />
-      {pendingDelete ? (
+      {deletePresence.value ? (
         <ConfirmDialog
-          title={`Delete “${pendingDelete.title}”?`}
+          title={`Delete “${deletePresence.value.title}”?`}
           message="This cannot be undone."
+          open={deletePresence.open}
           onCancel={() => setPendingDelete(null)}
           onConfirm={() => {
             const chat = pendingDelete;
+            if (!chat) return;
             setPendingDelete(null);
             onStop();
             onDeleteChat(chat.id);
@@ -239,6 +244,7 @@ function SortableChatTab({
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: chat.id,
     disabled: renaming,
+    transition: { duration: 320, easing: "cubic-bezier(0.25, 1, 0.5, 1)" },
   });
   return (
     <div
@@ -281,7 +287,7 @@ function SortableChatTab({
         }}
         onPointerDown={(event) => event.stopPropagation()}
       >
-        ×
+        <CloseIcon />
       </button>
     </div>
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { AgentThinkingBlock } from "@/agent/agent-thinking-block";
 import { ChatBubbleTools } from "@/agent/bubble-tools";
 import { ChatComposer } from "@/agent/chat-composer";
@@ -8,6 +8,11 @@ import { ChatTabStrip } from "@/agent/chat-tab-strip";
 import { MessageContent } from "@/agent/message-content";
 import type { ChatMessage, ChatSession, LiveActivity } from "@/agent/types";
 import { CHAT_WIDTH_MAX, CHAT_WIDTH_MIN, useChatResize } from "@/agent/use-chat-resize";
+import { useSheetDismiss } from "@/agent/use-sheet-dismiss";
+import { usePresence } from "@/shared/use-presence";
+
+//matches the panel's width/sheet transition in globals.css
+const PANEL_EXIT_MS = 320;
 
 type SendPayload = {
   text: string;
@@ -59,8 +64,13 @@ export function CalendarChatPanel({
   onResizingChange,
   onClose,
 }: Props) {
-  const chatResize = useChatResize();
+  const panelRef = useRef<HTMLElement>(null);
+  const chatResize = useChatResize(panelRef);
+  const presence = usePresence(open ? true : null, PANEL_EXIT_MS);
+  const sheet = useSheetDismiss(panelRef, open, onClose);
   const listRef = useRef<HTMLDivElement>(null);
+  //follow new output only while the reader is already at the bottom
+  const pinnedRef = useRef(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState("");
 
@@ -69,21 +79,37 @@ export function CalendarChatPanel({
   }, [chatResize.resizing, onResizingChange]);
 
   useEffect(() => {
-    const el = listRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [messages, busy, activeChat?.id]);
+    pinnedRef.current = true;
+  }, [activeChat?.id, open]);
 
-  if (!open) return null;
+  useEffect(() => {
+    const el = listRef.current;
+    if (el && pinnedRef.current) el.scrollTop = el.scrollHeight;
+  }, [messages, busy, activeChat?.id, presence.value]);
+
+  if (!presence.value) return null;
+
+  function send(payload: SendPayload) {
+    pinnedRef.current = true;
+    onSend(payload);
+  }
 
   function submitEdit(messageId: string) {
     const next = editDraft.trim();
     if (!next || busy) return;
     setEditingId(null);
-    onSend({ text: next, branch: { kind: "edit", messageId } });
+    send({ text: next, branch: { kind: "edit", messageId } });
   }
 
   return (
-    <aside className="chat-panel" aria-label="Agent" style={{ width: chatResize.width }}>
+    <aside
+      ref={panelRef}
+      className={`chat-panel${chatResize.live ? " is-live" : ""}`}
+      aria-label="Agent"
+      data-state={open ? "open" : "closed"}
+      inert={!open}
+      style={{ "--chat-w": `${chatResize.width}px` } as CSSProperties}
+    >
       <div
         className="chat-resize-handle"
         role="separator"
@@ -100,113 +126,120 @@ export function CalendarChatPanel({
         onKeyDown={chatResize.onKeyDown}
         onDoubleClick={chatResize.reset}
       />
-      <div className="chat-head">
-        <ChatTabStrip
-          chats={chats}
-          activeChatId={activeChat?.id ?? null}
-          onSelect={onSelectChat}
-          onNewChat={onNewChat}
-          onRenameChat={onRenameChat}
-          onDeleteChat={onDeleteChat}
-          onCloseTab={onCloseChat}
-          onReopenChat={onReopenChat}
-          onStop={onStop}
-          onReorderChats={onReorderChats}
-        />
-        <div className="chat-head-row">
-          <p>Ask about this day, or add, edit, delete, and complete events and tasks.</p>
-          <button type="button" className="ghost-btn chat-close" onClick={onClose}>
-            Done
-          </button>
+      <div className="chat-panel-inner">
+        <div className="chat-grabber" aria-hidden="true" {...sheet}>
+          <span />
         </div>
-      </div>
-      <section className="chat-messages" ref={listRef} aria-live="polite">
-        {messages.length === 0 ? (
-          <div className="empty-state">
-            <p>Chat about the focused day. The assistant can change your WatAgent events and tasks.</p>
+        <div className="chat-head">
+          <ChatTabStrip
+            chats={chats}
+            activeChatId={activeChat?.id ?? null}
+            onSelect={onSelectChat}
+            onNewChat={onNewChat}
+            onRenameChat={onRenameChat}
+            onDeleteChat={onDeleteChat}
+            onCloseTab={onCloseChat}
+            onReopenChat={onReopenChat}
+            onStop={onStop}
+            onReorderChats={onReorderChats}
+          />
+          <div className="chat-head-row">
+            <p>Ask about this day, or add, edit, delete, and complete events and tasks.</p>
+            <button type="button" className="ghost-btn chat-close" onClick={onClose}>
+              Done
+            </button>
           </div>
-        ) : (
-          <div className="message-list">
-            {messages.map((m) => {
-              const streaming = streamingAssistantId === m.id;
-              const editing = editingId === m.id;
-              const latest = m.role === "assistant" && messages[messages.length - 1]?.id === m.id;
-              const status = liveActivity?.assistantId === m.id && !m.content ? liveActivity.status : null;
-              return (
-                <div
-                  key={m.id}
-                  className={`bubble-row is-${m.role}${latest ? " is-latest" : ""}${editing ? " is-editing" : ""}`}
-                >
-                  <article
-                    className={`bubble bubble-${m.role}`}
-                    data-empty={m.role === "assistant" && !m.content ? "true" : undefined}
+        </div>
+        <section
+          className="chat-messages"
+          ref={listRef}
+          aria-live="polite"
+          onScroll={(event) => {
+            const el = event.currentTarget;
+            pinnedRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48;
+          }}
+        >
+          {messages.length === 0 ? (
+            <div className="empty-state">
+              <p>Chat about the focused day. The assistant can change your WatAgent events and tasks.</p>
+            </div>
+          ) : (
+            <div className="message-list">
+              {messages.map((m) => {
+                const streaming = streamingAssistantId === m.id;
+                const editing = editingId === m.id;
+                const latest = m.role === "assistant" && messages[messages.length - 1]?.id === m.id;
+                const status = liveActivity?.assistantId === m.id && !m.content ? liveActivity.status : null;
+                return (
+                  <div
+                    key={m.id}
+                    className={`bubble-row is-${m.role}${latest ? " is-latest" : ""}${editing ? " is-editing" : ""}`}
                   >
-                    <span className="bubble-role">{m.role === "user" ? "You" : "WatAgent"}</span>
-                    <div className="bubble-body">
-                      <AgentThinkingBlock events={m.toolEvents} />
-                      {status ? <p className="bubble-status">{status}</p> : null}
-                      {editing ? (
-                        <>
-                          <textarea
-                            className="bubble-edit"
-                            value={editDraft}
-                            maxLength={20_000}
-                            aria-label="Edit message"
-                            autoFocus
-                            onChange={(event) => setEditDraft(event.target.value)}
-                            onKeyDown={(event) => {
-                              if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
-                                event.preventDefault();
-                                submitEdit(m.id);
-                              }
-                              if (event.key === "Escape") setEditingId(null);
-                            }}
-                          />
-                          <div className="bubble-edit-actions">
-                            <button type="button" className="ghost-btn" onClick={() => setEditingId(null)}>
-                              Cancel
-                            </button>
-                            <button
-                              type="button"
-                              className="primary-btn"
-                              disabled={busy || !editDraft.trim()}
-                              onClick={() => submitEdit(m.id)}
-                            >
-                              Update
-                            </button>
-                          </div>
-                        </>
-                      ) : (
-                        <MessageContent content={m.content} pending={streaming && !m.content} />
-                      )}
+                    <article
+                      className={`bubble bubble-${m.role}`}
+                      data-empty={m.role === "assistant" && !m.content ? "true" : undefined}
+                    >
+                      <span className="bubble-role">{m.role === "user" ? "You" : "WatAgent"}</span>
+                      <div className="bubble-body">
+                        <AgentThinkingBlock events={m.toolEvents} />
+                        {status ? <p className="bubble-status">{status}</p> : null}
+                        {editing ? (
+                          <>
+                            <textarea
+                              className="bubble-edit"
+                              value={editDraft}
+                              maxLength={20_000}
+                              aria-label="Edit message"
+                              autoFocus
+                              onChange={(event) => setEditDraft(event.target.value)}
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+                                  event.preventDefault();
+                                  submitEdit(m.id);
+                                }
+                                if (event.key === "Escape") setEditingId(null);
+                              }}
+                            />
+                            <div className="bubble-edit-actions">
+                              <button type="button" className="ghost-btn" onClick={() => setEditingId(null)}>
+                                Cancel
+                              </button>
+                              <button
+                                type="button"
+                                className="primary-btn"
+                                disabled={busy || !editDraft.trim()}
+                                onClick={() => submitEdit(m.id)}
+                              >
+                                Update
+                              </button>
+                            </div>
+                          </>
+                        ) : (
+                          <MessageContent content={m.content} pending={streaming && !m.content && !status} />
+                        )}
+                      </div>
+                    </article>
+                    <div className="bubble-toolbar">
+                      <ChatBubbleTools
+                        role={m.role}
+                        content={m.content}
+                        busy={busy}
+                        streaming={streaming}
+                        onRegenerate={() => send({ text: "", branch: { kind: "regenerate", messageId: m.id } })}
+                        onStartEdit={() => {
+                          setEditingId(m.id);
+                          setEditDraft(m.content);
+                        }}
+                      />
                     </div>
-                  </article>
-                  <div className="bubble-toolbar">
-                    <ChatBubbleTools
-                      role={m.role}
-                      content={m.content}
-                      busy={busy}
-                      streaming={streaming}
-                      onRegenerate={() => onSend({ text: "", branch: { kind: "regenerate", messageId: m.id } })}
-                      onStartEdit={() => {
-                        setEditingId(m.id);
-                        setEditDraft(m.content);
-                      }}
-                    />
                   </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </section>
-      <ChatComposer
-        busy={busy}
-        error={error}
-        onSend={onSend}
-        onStop={onStop}
-        onError={onError}
-      />
+                );
+              })}
+            </div>
+          )}
+        </section>
+        <ChatComposer busy={busy} error={error} onSend={send} onStop={onStop} onError={onError} />
+      </div>
     </aside>
   );
 }

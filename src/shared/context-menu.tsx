@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { createPortal } from "react-dom";
+import { usePresence } from "@/shared/use-presence";
 
 export type ContextMenuItem = {
   id: string;
@@ -25,11 +26,20 @@ export function menuStateFromElement(el: HTMLElement): ContextMenuPosition {
   return { x: rect.left, y: rect.bottom + 4 };
 }
 
+function enabledItems(root: HTMLElement | null): HTMLButtonElement[] {
+  return root ? [...root.querySelectorAll<HTMLButtonElement>(".context-menu-item:not(:disabled)")] : [];
+}
+
 export function ContextMenu({ state, items, onClose }: Props) {
   const ref = useRef<HTMLUListElement>(null);
+  //keep the last items too, so the menu doesn't empty out while it animates away
+  const presence = usePresence(state ? { state, items } : null);
+  const open = Boolean(state);
 
   useEffect(() => {
-    if (!state) return;
+    if (!open) return;
+    const previous = document.activeElement as HTMLElement | null;
+    const menu = ref.current;
     function onKey(event: KeyboardEvent) {
       if (event.key === "Escape") onClose();
     }
@@ -45,25 +55,59 @@ export function ContextMenu({ state, items, onClose }: Props) {
       window.clearTimeout(timer);
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("pointerdown", onPointerDown, true);
+      //hand focus back to the trigger unless the user already moved it somewhere on purpose
+      const active = document.activeElement;
+      const stranded = !active || active === document.body || Boolean(menu?.contains(active));
+      if (stranded && previous && document.contains(previous)) previous.focus({ preventScroll: true });
     };
-  }, [state, onClose]);
+  }, [open, onClose]);
 
   useLayoutEffect(() => {
-    if (!state || !ref.current) return;
-    const rect = ref.current.getBoundingClientRect();
+    const el = ref.current;
+    if (!state || !el) return;
+    const rect = el.getBoundingClientRect();
     const dx = Math.min(0, window.innerWidth - 8 - rect.right);
     const dy = Math.min(0, window.innerHeight - 8 - rect.bottom);
-    if (dx !== 0 || dy !== 0) {
-      ref.current.style.left = `${state.x + dx}px`;
-      ref.current.style.top = `${state.y + dy}px`;
-    }
+    el.style.left = `${state.x + dx}px`;
+    el.style.top = `${state.y + dy}px`;
+    //grow out of the point that opened it, even when flipped to stay on screen
+    el.style.transformOrigin = `${Math.max(0, -dx)}px ${Math.max(0, -dy)}px`;
+    enabledItems(el)[0]?.focus({ preventScroll: true });
   }, [state]);
 
-  if (!state || typeof document === "undefined") return null;
+  function onMenuKeyDown(event: ReactKeyboardEvent<HTMLUListElement>) {
+    const list = enabledItems(ref.current);
+    if (list.length === 0) return;
+    const at = list.indexOf(document.activeElement as HTMLButtonElement);
+    let next = -1;
+    if (event.key === "ArrowDown") next = (at + 1) % list.length;
+    else if (event.key === "ArrowUp") next = (at - 1 + list.length) % list.length;
+    else if (event.key === "Home") next = 0;
+    else if (event.key === "End") next = list.length - 1;
+    else if (event.key === "Tab") {
+      event.preventDefault();
+      onClose();
+      return;
+    }
+    if (next < 0) return;
+    event.preventDefault();
+    list[next].focus();
+  }
+
+  if (!presence.value || typeof document === "undefined") return null;
+  const shown = presence.value;
 
   return createPortal(
-    <ul ref={ref} className="context-menu" role="menu" style={{ left: state.x, top: state.y }}>
-      {items.map((item) => (
+    <ul
+      ref={ref}
+      className="context-menu"
+      role="menu"
+      data-state={presence.open ? "open" : "closed"}
+      inert={!presence.open}
+      style={{ left: shown.state.x, top: shown.state.y }}
+      onKeyDown={onMenuKeyDown}
+    >
+      {shown.items.map((item) => (
         <li key={item.id} role="none">
           <button
             type="button"

@@ -72,7 +72,15 @@ export const MessageContent = memo(function MessageContent({
   pending?: boolean;
 }) {
   const visible = hideToolMarkup(content);
-  if (!visible) return pending ? <span className="md-pending">…</span> : null;
+  if (!visible) {
+    return pending ? (
+      <span className="md-pending" role="status" aria-label="Writing">
+        <i />
+        <i />
+        <i />
+      </span>
+    ) : null;
+  }
   return (
     <ReactMarkdown
       remarkPlugins={REMARK_PLUGINS}

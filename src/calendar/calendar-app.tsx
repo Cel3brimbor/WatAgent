@@ -28,7 +28,6 @@ import { isExcludedGoogleCalendarName } from "@/calendar/calendar-lists";
 import {
   compileSmartTags,
   readSmartTags,
-  writeSmartTags,
   type SmartTag,
   type SmartTagMatcher,
   type SmartTagTarget,
@@ -60,7 +59,22 @@ import { readAgentStream } from "@/agent/stream";
 import type { ChatMessage, LiveActivity, ToolEventRecord } from "@/agent/types";
 import { apiFetch } from "@/shared/api-base";
 import { uid } from "@/shared/ids";
+import { ChevronLeftIcon, ChevronRightIcon, CloseIcon } from "@/shared/icons";
+import { SegmentedControl, type SegmentOption } from "@/shared/segmented-control";
+import { usePresence } from "@/shared/use-presence";
 import type { AuthUser } from "@/auth/types";
+
+const VIEW_OPTIONS: SegmentOption<CalendarView>[] = [
+  { value: "day", label: "Day", hint: "Day (D)" },
+  { value: "week", label: "Week", hint: "Week (W)" },
+  { value: "month", label: "Month", hint: "Month (M)" },
+  { value: "year", label: "Year", hint: "Year (Y)" },
+];
+
+const VIEW_DEPTH: Record<CalendarView, number> = { year: 0, month: 1, week: 2, day: 3 };
+
+//which way the stage should move: sideways through time, or zooming between granularities
+type NavDirection = "next" | "prev" | "in" | "out" | "none";
 
 type Range = { rangeStartUTC: number; rangeEndUTC: number };
 
@@ -158,6 +172,14 @@ function timeZone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 }
 
+//start of the period the stage is showing, so moving within the same week/month isn't a "navigation"
+function periodStart(focus: Date, view: CalendarView, weekStartsOn: 0 | 1): number {
+  if (view === "day") return startOfLocalDay(focus).getTime();
+  if (view === "week") return startOfWeek(focus, weekStartsOn).getTime();
+  if (view === "month") return new Date(focus.getFullYear(), focus.getMonth(), 1).getTime();
+  return new Date(focus.getFullYear(), 0, 1).getTime();
+}
+
 export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: () => void }) {
   const calendar = useCalendar();
   const { syncFromGoogle, createChat, pruneEmptyChats, setAfterWrite } = calendar;
@@ -210,6 +232,29 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
     return [...byId.values()].filter((calendar) => !isExcludedGoogleCalendarName(calendar.name));
   }, [googleCalendars, overlayEvents]);
   const abortRef = useRef<AbortController | null>(null);
+  const peek = usePresence(googlePeek);
+  const shownPeek = peek.value;
+  const deletePrompt = usePresence(googleDelete);
+  const editor = usePresence(draft);
+  const shownDraft = editor.value;
+  const banner = usePresence(notice ?? calendar.loadError);
+  //stable so overlay effects don't re-subscribe every render
+  const closePeek = useCallback(() => setGooglePeek(null), []);
+  const closeEditor = useCallback(() => setDraft(null), []);
+
+  const period = periodStart(focus, view, weekStartsOn);
+  const lastPeriodRef = useRef({ period, view, section });
+  const navDirection = useMemo<NavDirection>(() => {
+    const last = lastPeriodRef.current;
+    if (section !== "calendar" || section !== last.section) return "none";
+    if (view !== last.view) return VIEW_DEPTH[view] > VIEW_DEPTH[last.view] ? "in" : "out";
+    if (period === last.period) return "none";
+    return period > last.period ? "next" : "prev";
+  }, [period, view, section]);
+  useEffect(() => {
+    lastPeriodRef.current = { period, view, section };
+  }, [period, view, section]);
+  const stageKey = section === "calendar" ? `${view}:${period}` : section;
 
   useCalendarPreferencesSync(
     calendar.hydrated,
@@ -407,6 +452,8 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
         return;
       }
       if (event.metaKey || event.ctrlKey || event.altKey) return;
+      //shortcuts shouldn't reshuffle the calendar behind an open dialog
+      if (document.querySelector('[aria-modal="true"]')) return;
       const key = event.key.toLowerCase();
       if (key === "t") setFocus(startOfLocalDay(new Date()));
       if (key === "d") setView("day");
@@ -697,26 +744,35 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
         <div className="calendar-toolbar-left">
           {section === "calendar" ? (
             <>
-              <button type="button" className="ghost-btn" onClick={() => setFocus(startOfLocalDay(new Date()))}>
+              <button
+                type="button"
+                className="ghost-btn"
+                title="Today (T)"
+                onClick={() => setFocus(startOfLocalDay(new Date()))}
+              >
                 Today
               </button>
-              <button
-                type="button"
-                className="ghost-btn"
-                aria-label="Previous"
-                onClick={() => setFocus((current) => shiftFocus(current, view, -1))}
-              >
-                ‹
-              </button>
-              <button
-                type="button"
-                className="ghost-btn"
-                aria-label="Next"
-                onClick={() => setFocus((current) => shiftFocus(current, view, 1))}
-              >
-                ›
-              </button>
-              <h2>{formatFocusLabel(focus, view, weekStartsOn)}</h2>
+              <div className="calendar-step">
+                <button
+                  type="button"
+                  className="icon-btn"
+                  aria-label="Previous"
+                  title="Previous (←)"
+                  onClick={() => setFocus((current) => shiftFocus(current, view, -1))}
+                >
+                  <ChevronLeftIcon />
+                </button>
+                <button
+                  type="button"
+                  className="icon-btn"
+                  aria-label="Next"
+                  title="Next (→)"
+                  onClick={() => setFocus((current) => shiftFocus(current, view, 1))}
+                >
+                  <ChevronRightIcon />
+                </button>
+              </div>
+              <h2 aria-live="polite">{formatFocusLabel(focus, view, weekStartsOn)}</h2>
             </>
           ) : (
             <h2>{section === "tasks" ? "To-do list" : "Settings"}</h2>
@@ -724,17 +780,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
         </div>
         <div className="calendar-toolbar-right">
           {section === "calendar" ? (
-          <select
-            className="calendar-view-select"
-            value={view}
-            onChange={(event) => setView(event.target.value as CalendarView)}
-            aria-label="Calendar view"
-          >
-            <option value="day">Day</option>
-            <option value="week">Week</option>
-            <option value="month">Month</option>
-            <option value="year">Year</option>
-          </select>
+            <SegmentedControl label="Calendar view" value={view} options={VIEW_OPTIONS} onChange={setView} />
           ) : null}
           {section === "tasks" ? (
             <button
@@ -763,99 +809,104 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
         </div>
       </header>
 
-      {notice || calendar.loadError ? (
-        <div className="calendar-notice" role="status">
-          <span>{notice ?? calendar.loadError}</span>
-          <button
-            type="button"
-            className="ghost-btn"
-            aria-label="Dismiss"
-            onClick={() => {
-              setNotice(null);
-              if (calendar.loadError) void calendar.refresh();
-            }}
-          >
-            ×
-          </button>
+      {banner.value ? (
+        <div className="calendar-notice" role="status" data-state={banner.open ? "open" : "closed"}>
+          <div className="calendar-notice-inner">
+            <span>{banner.value}</span>
+            <button
+              type="button"
+              className="icon-btn"
+              aria-label="Dismiss"
+              disabled={!banner.open}
+              onClick={() => {
+                setNotice(null);
+                if (calendar.loadError) void calendar.refresh();
+              }}
+            >
+              <CloseIcon />
+            </button>
+          </div>
         </div>
       ) : null}
 
       <div className="calendar-body">
         <div className="calendar-stage">
-          {section === "tasks" ? (
-            <TodoList
-              items={calendar.displayItems}
-              onOpen={(item) => {
-                if (item.pendingApproval) {
-                  setNotice("Approve or reject this Agent change in the review panel below.");
-                  return;
+          <div key={stageKey} className="calendar-stage-view" data-nav={navDirection}>
+            {section === "tasks" ? (
+              <TodoList
+                items={calendar.displayItems}
+                onOpen={(item) => {
+                  if (item.pendingApproval) {
+                    setNotice("Approve or reject this Agent change in the review panel below.");
+                    return;
+                  }
+                  setDraft(draftFromMeta(item.id, item.title, item.calendar));
+                }}
+                onComplete={calendar.completeTask}
+                onCreate={() => setDraft({ ...defaultAllDayDraft(startOfLocalDay(new Date())), kind: "task" })}
+              />
+            ) : null}
+            {section === "settings" ? (
+              <SettingsPanel
+                accountEmail={user.email}
+                requireAiApproval={calendar.requireAiApproval}
+                onRequireAiApprovalChange={(value) =>
+                  void calendar.setRequireAiApproval(value).catch(() => setNotice("Unable to save Agent settings."))
                 }
-                setDraft(draftFromMeta(item.id, item.title, item.calendar));
-              }}
-              onComplete={calendar.completeTask}
-              onCreate={() => setDraft({ ...defaultAllDayDraft(startOfLocalDay(new Date())), kind: "task" })}
-            />
-          ) : null}
-          {section === "settings" ? (
-            <SettingsPanel
-              accountEmail={user.email}
-              requireAiApproval={calendar.requireAiApproval}
-              onRequireAiApprovalChange={(value) =>
-                void calendar.setRequireAiApproval(value).catch(() => setNotice("Unable to save Agent settings."))
-              }
-              syncedAt={googleSyncedAt}
-              onChanged={() => setGoogleVersion((value) => value + 1)}
-              onSyncNow={() => googlePullRef.current()}
-              onNotice={setNotice}
-              onSignOut={onSignOut}
-            />
-          ) : null}
-          {section === "calendar" && view === "day" ? (
-            <CalendarDayView
-              focus={focus}
-              items={dayItems}
-              onOpen={onOpenItem}
-              onCreateTimed={(hour, _minute, endHour) => setDraft(defaultTimedDraft(focus, hour, 0, endHour))}
-              onCreateAllDay={() => setDraft(defaultAllDayDraft(focus))}
-              onCompleteTask={calendar.completeTask}
-            />
-          ) : null}
-          {section === "calendar" && view === "week" ? (
-            <CalendarWeekView
-              focus={focus}
-              weekStartsOn={weekStartsOn}
-              itemsForDay={itemsForDay}
-              onOpen={onOpenItem}
-              onCreateTimed={(date, hour, endHour) => setDraft(defaultTimedDraft(date, hour, 0, endHour))}
-              onCreateAllDay={(date) => setDraft(defaultAllDayDraft(date))}
-              onSelectDay={(date) => {
-                setFocus(startOfLocalDay(date));
-                setView("day");
-              }}
-              onCompleteTask={calendar.completeTask}
-            />
-          ) : null}
-          {section === "calendar" && view === "month" ? (
-            <CalendarMonthView
-              focus={focus}
-              weekStartsOn={weekStartsOn}
-              itemsForDay={itemsForDay}
-              onOpen={onOpenItem}
-              onCreate={(date) => setDraft(defaultAllDayDraft(date))}
-              onCompleteTask={calendar.completeTask}
-            />
-          ) : null}
-          {section === "calendar" && view === "year" ? (
-            <CalendarYearView
-              focus={focus}
-              weekStartsOn={weekStartsOn}
-              itemsForDay={itemsForDay}
-              onSelectDay={(date) => {
-                setFocus(startOfLocalDay(date));
-                setView("day");
-              }}
-            />
-          ) : null}
+                syncedAt={googleSyncedAt}
+                onChanged={() => setGoogleVersion((value) => value + 1)}
+                onSyncNow={() => googlePullRef.current()}
+                onNotice={setNotice}
+                onSignOut={onSignOut}
+              />
+            ) : null}
+            {section === "calendar" && view === "day" ? (
+              <CalendarDayView
+                focus={focus}
+                items={dayItems}
+                onOpen={onOpenItem}
+                onCreateTimed={(hour, _minute, endHour) => setDraft(defaultTimedDraft(focus, hour, 0, endHour))}
+                onCreateAllDay={() => setDraft(defaultAllDayDraft(focus))}
+                onCompleteTask={calendar.completeTask}
+              />
+            ) : null}
+            {section === "calendar" && view === "week" ? (
+              <CalendarWeekView
+                focus={focus}
+                weekStartsOn={weekStartsOn}
+                itemsForDay={itemsForDay}
+                onOpen={onOpenItem}
+                onCreateTimed={(date, hour, endHour) => setDraft(defaultTimedDraft(date, hour, 0, endHour))}
+                onCreateAllDay={(date) => setDraft(defaultAllDayDraft(date))}
+                onSelectDay={(date) => {
+                  setFocus(startOfLocalDay(date));
+                  setView("day");
+                }}
+                onCompleteTask={calendar.completeTask}
+              />
+            ) : null}
+            {section === "calendar" && view === "month" ? (
+              <CalendarMonthView
+                focus={focus}
+                weekStartsOn={weekStartsOn}
+                itemsForDay={itemsForDay}
+                onOpen={onOpenItem}
+                onCreate={(date) => setDraft(defaultAllDayDraft(date))}
+                onCompleteTask={calendar.completeTask}
+              />
+            ) : null}
+            {section === "calendar" && view === "year" ? (
+              <CalendarYearView
+                focus={focus}
+                weekStartsOn={weekStartsOn}
+                itemsForDay={itemsForDay}
+                onSelectDay={(date) => {
+                  setFocus(startOfLocalDay(date));
+                  setView("day");
+                }}
+              />
+            ) : null}
+          </div>
         </div>
 
         <CalendarChatPanel
@@ -899,62 +950,68 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
         }
       />
 
-      {googlePeek ? (
+      {shownPeek ? (
         <GoogleEventCard
-          item={googlePeek.item}
-          anchor={googlePeek.anchor}
-          onClose={() => setGooglePeek(null)}
+          key={shownPeek.item.id}
+          item={shownPeek.item}
+          anchor={shownPeek.anchor}
+          open={peek.open}
+          onClose={closePeek}
           onEdit={
-            googlePeek.item.google?.editable
+            shownPeek.item.google?.editable
               ? () => {
-                  const next = draftFromGoogle(googlePeek.item);
+                  const next = draftFromGoogle(shownPeek.item);
                   setGooglePeek(null);
                   if (next) setDraft(next);
                 }
               : undefined
           }
           onDelete={
-            googlePeek.item.google?.deletable
+            shownPeek.item.google?.deletable
               ? () => {
-                  const target = googleTargetOf(googlePeek.item);
+                  const target = googleTargetOf(shownPeek.item);
                   setGooglePeek(null);
-                  if (target) setGoogleDelete({ ...target, title: googlePeek.item.title });
+                  if (target) setGoogleDelete({ ...target, title: shownPeek.item.title });
                 }
               : undefined
           }
         />
       ) : null}
 
-      {googleDelete ? (
+      {deletePrompt.value ? (
         <ConfirmDialog
-          title={`Delete “${googleDelete.title}”?`}
-          message={`This deletes it from ${googleDelete.calendarName || "your calendar"} in Google Calendar. If it repeats, only this occurrence is removed.`}
+          title={`Delete “${deletePrompt.value.title}”?`}
+          message={`This deletes it from ${deletePrompt.value.calendarName || "your calendar"} in Google Calendar. If it repeats, only this occurrence is removed.`}
+          open={deletePrompt.open}
           onCancel={() => setGoogleDelete(null)}
           onConfirm={() => void confirmGoogleDelete()}
         />
       ) : null}
 
-      {draft ? (
-        <div className="calendar-editor-overlay">
-          <CalendarItemEditor
-            draft={draft}
-            onChange={setDraft}
-            onSave={saveDraft}
-            onCancel={() => setDraft(null)}
-            onDelete={
-              draft.google
-                ? draft.google.deletable
-                  ? () => setGoogleDelete({ ...(draft.google as GoogleDraftTarget), title: draft.title || "Event" })
-                  : undefined
-                : draft.id
-                  ? () => {
-                      calendar.remove(draft.id as string);
-                      setDraft(null);
-                    }
-                  : undefined
-            }
-          />
-        </div>
+      {shownDraft ? (
+        <CalendarItemEditor
+          draft={shownDraft}
+          open={editor.open}
+          onChange={setDraft}
+          onSave={saveDraft}
+          onCancel={closeEditor}
+          onDelete={
+            shownDraft.google
+              ? shownDraft.google.deletable
+                ? () =>
+                    setGoogleDelete({
+                      ...(shownDraft.google as GoogleDraftTarget),
+                      title: shownDraft.title || "Event",
+                    })
+                : undefined
+              : shownDraft.id
+                ? () => {
+                    calendar.remove(shownDraft.id as string);
+                    setDraft(null);
+                  }
+                : undefined
+          }
+        />
       ) : null}
     </div>
     </div>

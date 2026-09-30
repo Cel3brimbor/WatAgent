@@ -14,6 +14,9 @@ import {
 import type { SmartTag, SmartTagTarget } from "@/calendar/smart-tags";
 import { SmartTagsPanel } from "@/calendar/smart-tags-panel";
 import { CheckIcon, ChevronIcon, DotsIcon, GoogleCalendarIcon } from "@/calendar/sidebar-icons";
+import { ChevronLeftIcon, ChevronRightIcon } from "@/shared/icons";
+import { Disclosure } from "@/shared/disclosure";
+import { usePresence } from "@/shared/use-presence";
 
 type Row = {
   id: string;
@@ -74,6 +77,8 @@ export function CalendarSidePanel({
 }: Props) {
   const [cursor, setCursor] = useState(() => startOfLocalDay(focus));
   const [menu, setMenu] = useState<MenuState | null>(null);
+  const menuPresence = usePresence(menu);
+  const shownMenu = menuPresence.value;
   const [openGroups, setOpenGroups] = useState({ watagent: true, other: true, hidden: true });
   const menuRef = useRef<HTMLDivElement | null>(null);
   const headingId = useId();
@@ -235,10 +240,10 @@ export function CalendarSidePanel({
         <strong>{monthTitle}</strong>
         <div className="side-cal-arrows">
           <button type="button" aria-label="Previous month" onClick={() => setCursor((date) => addMonths(date, -1))}>
-            ‹
+            <ChevronLeftIcon />
           </button>
           <button type="button" aria-label="Next month" onClick={() => setCursor((date) => addMonths(date, 1))}>
-            ›
+            <ChevronRightIcon />
           </button>
         </div>
       </div>
@@ -310,13 +315,14 @@ export function CalendarSidePanel({
           />
         ) : null}
       </div>
-      {menu ? (
+      {shownMenu ? (
         <CalendarOptionsMenu
           menuRef={menuRef}
-          menu={menu}
-          onDisplayOnly={() => displayOnly(menu.id)}
-          onHide={() => hideCalendar(menu.id)}
-          onColor={(color) => paint(menu.id, color)}
+          menu={shownMenu}
+          open={menuPresence.open}
+          onDisplayOnly={() => displayOnly(shownMenu.id)}
+          onHide={() => hideCalendar(shownMenu.id)}
+          onColor={(color) => paint(shownMenu.id, color)}
         />
       ) : null}
     </div>
@@ -358,7 +364,7 @@ function CalendarGroup({
         <span>{title}</span>
         <ChevronIcon open={open} />
       </button>
-      {open ? (
+      <Disclosure open={open}>
         <ul>
           {rows.map((row) => (
             <li key={row.id} className={`side-cal-row${hidden ? " is-hidden-row" : ""}`}>
@@ -401,7 +407,7 @@ function CalendarGroup({
             </li>
           ))}
         </ul>
-      ) : null}
+      </Disclosure>
     </section>
   );
 }
@@ -409,12 +415,14 @@ function CalendarGroup({
 function CalendarOptionsMenu({
   menuRef,
   menu,
+  open,
   onDisplayOnly,
   onHide,
   onColor,
 }: {
   menuRef: RefObject<HTMLDivElement | null>;
   menu: MenuState;
+  open: boolean;
   onDisplayOnly: () => void;
   onHide: () => void;
   onColor: (color: string) => void;
@@ -437,6 +445,8 @@ function CalendarOptionsMenu({
       className="side-cal-menu"
       role="menu"
       aria-label={`${menu.name} options`}
+      data-state={open ? "open" : "closed"}
+      inert={!open}
       style={{ top: box.top, left: box.left }}
     >
       <button type="button" role="menuitem" onClick={onDisplayOnly}>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { CALENDAR_PALETTE } from "@/calendar/preferences";
 import {
   SMART_TAG_FIELDS,
@@ -18,6 +18,9 @@ import {
   type SmartTagTarget,
 } from "@/calendar/smart-tags";
 import { CheckIcon, ChevronIcon, DotsIcon, GoogleCalendarIcon, PlusIcon } from "@/calendar/sidebar-icons";
+import { ArrowDownIcon, ArrowUpIcon, CloseIcon } from "@/shared/icons";
+import { Disclosure } from "@/shared/disclosure";
+import { useFlip } from "@/shared/use-flip";
 
 export type SmartTagCalendarOption = { id: string; name: string; google: boolean };
 
@@ -31,6 +34,8 @@ type Props = {
 export function SmartTagsPanel({ tags, onChange, calendars, samples }: Props) {
   const [open, setOpen] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+  useFlip(listRef, tags.map((tag) => tag.id).join("|"));
 
   function patch(id: string, next: Partial<SmartTag>) {
     onChange(tags.map((tag) => (tag.id === id ? { ...tag, ...next } : tag)));
@@ -76,21 +81,21 @@ export function SmartTagsPanel({ tags, onChange, calendars, samples }: Props) {
           <PlusIcon />
         </button>
       </div>
-      {open ? (
-        tags.length === 0 ? (
+      <Disclosure open={open}>
+        {tags.length === 0 ? (
           <div className="smart-tags-empty">
             <p>Color events automatically by words in their title, location, or description.</p>
             <button type="button" className="smart-tag-link" onClick={add}>
-              + New smart tag
+              New smart tag
             </button>
           </div>
         ) : (
-          <ul>
+          <ul ref={listRef}>
             {tags.map((tag, index) => {
               const editing = editingId === tag.id;
               const label = smartTagLabel(tag);
               return (
-                <li key={tag.id} className={`smart-tag${editing ? " is-editing" : ""}`}>
+                <li key={tag.id} data-flip-id={tag.id} className={`smart-tag${editing ? " is-editing" : ""}`}>
                   <div className={`side-cal-row${tag.enabled ? "" : " is-paused"}`}>
                     <button
                       type="button"
@@ -137,8 +142,8 @@ export function SmartTagsPanel({ tags, onChange, calendars, samples }: Props) {
               );
             })}
           </ul>
-        )
-      ) : null}
+        )}
+      </Disclosure>
     </section>
   );
 }
@@ -279,7 +284,7 @@ function SmartTagEditor({
                     aria-label="Remove rule"
                     onClick={() => onPatch({ rules: tag.rules.filter((item) => item.id !== rule.id) })}
                   >
-                    ×
+                    <CloseIcon />
                   </button>
                 ) : null}
               </div>
@@ -294,7 +299,7 @@ function SmartTagEditor({
           className="smart-tag-link"
           onClick={() => onPatch({ rules: [...tag.rules, newSmartTagRule()] })}
         >
-          + Add rule
+          Add rule
         </button>
       ) : null}
 
@@ -307,7 +312,7 @@ function SmartTagEditor({
         >
           {exemptCount > 0 ? `Skipping ${exemptCount} calendar${exemptCount === 1 ? "" : "s"}` : "Skip calendars…"}
         </button>
-        {skipOpen ? (
+        <Disclosure open={skipOpen}>
           <ul className="smart-tag-skip-list">
             {calendars.map((calendar) => (
               <li key={calendar.id}>
@@ -323,7 +328,7 @@ function SmartTagEditor({
               </li>
             ))}
           </ul>
-        ) : null}
+        </Disclosure>
       </div>
 
       <p className="smart-tag-hint">
@@ -335,10 +340,10 @@ function SmartTagEditor({
 
       <div className="smart-tag-actions">
         <button type="button" className="smart-tag-icon-btn" aria-label="Move up" title="Higher priority" disabled={first} onClick={() => onMove(-1)}>
-          ↑
+          <ArrowUpIcon />
         </button>
         <button type="button" className="smart-tag-icon-btn" aria-label="Move down" title="Lower priority" disabled={last} onClick={() => onMove(1)}>
-          ↓
+          <ArrowDownIcon />
         </button>
         <button type="button" className="smart-tag-delete" onClick={onDelete}>
           Delete

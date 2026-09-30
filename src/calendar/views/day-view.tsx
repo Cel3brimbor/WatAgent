@@ -1,6 +1,5 @@
 "use client";
 
-import { useRef } from "react";
 import type { TimelineItem } from "@/calendar/types";
 import {
   formatHourLabel,
@@ -10,13 +9,15 @@ import { TimelineStrip } from "@/calendar/timeline-strip";
 import {
   HOUR_PX,
   HOURS,
-  hourFromClientY,
   layoutOverlappingBlocks,
   nowLineTop,
   timedItemClass,
   timedItemStyle,
 } from "@/calendar/calendar-grid";
 import { useNowMs } from "@/calendar/calendar-item-editor";
+import { useSlotDrag } from "@/calendar/use-slot-drag";
+import { SlotDraft } from "@/calendar/slot-draft";
+import { PlusIcon } from "@/shared/icons";
 
 type Props = {
   focus: Date;
@@ -43,30 +44,32 @@ export function CalendarDayView({
     dayStart.getTime(),
   );
   const nowTop = nowLineTop(now, dayStart.getTime());
-  const dragStart = useRef<number | null>(null);
+  const slots = useSlotDrag<"day">((_key, startHour, endHour) => onCreateTimed(startHour, 0, endHour));
 
   return (
     <div className="calendar-day">
-      <div className="calendar-all-day">
-        <span className="calendar-all-day-label">All-day</span>
-        <div className="calendar-all-day-items">
-          {allDay.map((item) => (
-            <TimelineStrip
-              key={item.id}
-              item={item}
-              layout="card"
-              onOpen={onOpen}
-              onCompleteTask={onCompleteTask}
-            />
-          ))}
-          <button
-            type="button"
-            className="calendar-all-day-add"
-            onClick={onCreateAllDay}
-            aria-label="Add all-day item"
-          >
-            +
-          </button>
+      <div className="calendar-sticky">
+        <div className="calendar-all-day">
+          <span className="calendar-all-day-label">All-day</span>
+          <div className="calendar-all-day-items">
+            {allDay.map((item) => (
+              <TimelineStrip
+                key={item.id}
+                item={item}
+                layout="card"
+                onOpen={onOpen}
+                onCompleteTask={onCompleteTask}
+              />
+            ))}
+            <button
+              type="button"
+              className="calendar-all-day-add"
+              onClick={onCreateAllDay}
+              aria-label="Add all-day item"
+            >
+              <PlusIcon />
+            </button>
+          </div>
         </div>
       </div>
       <div className="calendar-day-grid">
@@ -77,25 +80,7 @@ export function CalendarDayView({
             </div>
           ))}
         </div>
-        <div
-          className="calendar-day-slots"
-          onPointerDown={(event) => {
-            if (event.button !== 0) return;
-            dragStart.current = hourFromClientY(event.currentTarget, event.clientY);
-            event.currentTarget.setPointerCapture(event.pointerId);
-          }}
-          onPointerUp={(event) => {
-            if (dragStart.current == null) return;
-            const endHour = hourFromClientY(event.currentTarget, event.clientY);
-            const startHour = Math.min(dragStart.current, endHour);
-            const lastHour = Math.max(dragStart.current, endHour);
-            dragStart.current = null;
-            onCreateTimed(startHour, 0, lastHour);
-          }}
-          onPointerCancel={() => {
-            dragStart.current = null;
-          }}
-        >
+        <div className="calendar-day-slots" {...slots.bind("day")}>
           {HOURS.map((hour) => (
             <button
               key={hour}
@@ -121,6 +106,7 @@ export function CalendarDayView({
               />
             </div>
           ))}
+          {slots.selection ? <SlotDraft start={slots.selection.start} end={slots.selection.end} /> : null}
           {nowTop != null ? (
             <div className="calendar-now-line" style={{ top: nowTop }} />
           ) : null}

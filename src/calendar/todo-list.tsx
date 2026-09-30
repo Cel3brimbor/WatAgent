@@ -1,6 +1,9 @@
 "use client";
 
+import { useRef } from "react";
 import type { CalendarItemDoc } from "@/calendar/types";
+import { CheckIcon, PlusIcon } from "@/shared/icons";
+import { useFlip } from "@/shared/use-flip";
 
 type Props = {
   items: CalendarItemDoc[];
@@ -18,6 +21,7 @@ function whenLabel(item: CalendarItemDoc): string {
 }
 
 export function TodoList({ items, onOpen, onComplete, onCreate }: Props) {
+  const listRef = useRef<HTMLUListElement>(null);
   const tasks = items
     .filter((item) => item.calendar.kind === "task")
     .sort((a, b) => {
@@ -27,6 +31,8 @@ export function TodoList({ items, onOpen, onComplete, onCreate }: Props) {
       return a.calendar.startUTC - b.calendar.startUTC;
     });
   const openCount = tasks.filter((item) => !item.calendar.completed).length;
+  //completing a task slides it down to the done group instead of teleporting
+  useFlip(listRef, tasks.map((item) => item.id).join("|"));
 
   return (
     <section className="todo-list" aria-labelledby="todo-heading">
@@ -36,17 +42,18 @@ export function TodoList({ items, onOpen, onComplete, onCreate }: Props) {
           <p>{openCount === 0 ? "Nothing left open" : `${openCount} open`}</p>
         </div>
         <button type="button" className="primary-btn" onClick={onCreate}>
+          <PlusIcon />
           Add task
         </button>
       </div>
       {tasks.length === 0 ? (
         <p className="todo-empty">Tasks you add here or on the calendar show up in this list.</p>
       ) : (
-        <ul>
+        <ul ref={listRef}>
           {tasks.map((item) => {
             const done = Boolean(item.calendar.completed);
             return (
-              <li key={item.id} className={done ? "is-done" : undefined}>
+              <li key={item.id} data-flip-id={item.id} className={done ? "is-done" : undefined}>
                 <button
                   type="button"
                   className={`todo-check${done ? " is-checked" : ""}`}
@@ -55,7 +62,7 @@ export function TodoList({ items, onOpen, onComplete, onCreate }: Props) {
                   aria-label={done ? `Mark ${item.title} open` : `Complete ${item.title}`}
                   onClick={() => onComplete(item.id, !done)}
                 >
-                  {done ? "✓" : ""}
+                  <CheckIcon />
                 </button>
                 <button type="button" className="todo-main" onClick={() => onOpen(item)}>
                   <span>{item.title}</span>

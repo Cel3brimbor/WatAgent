@@ -3,6 +3,7 @@
 import type { CSSProperties } from "react";
 import type { TimelineItem } from "@/calendar/types";
 import { formatTime } from "@/calendar/date-utils";
+import { CheckIcon } from "@/shared/icons";
 
 type Props = {
   item: TimelineItem;
@@ -113,7 +114,7 @@ export function TimelineStrip({ item, compact, layout = "inline", onOpen, onComp
             onCompleteTask?.(item.id, !item.completed);
           }}
         >
-          {item.completed ? "✓" : "○"}
+          <CheckIcon />
         </span>
       ) : null}
       {isCard ? (

@@ -7,6 +7,8 @@ import { formatGoogleWhen } from "@/calendar/date-utils";
 type Props = {
   item: TimelineItem;
   anchor: DOMRect;
+  //false while the exit transition plays
+  open?: boolean;
   onClose: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
@@ -47,7 +49,14 @@ function Icon({ children }: { children: ReactNode }) {
   );
 }
 
-export function GoogleEventCard({ item, anchor, onClose, onEdit, onDelete }: Props) {
+//emerge from the side facing the clicked event, level with it, so the card reads as coming from it
+function originFor(anchor: DOMRect, left: number, top: number, width: number): string {
+  const x = left >= anchor.right ? 0 : left + width <= anchor.left ? width : anchor.left + anchor.width / 2 - left;
+  const y = Math.max(0, anchor.top + Math.min(anchor.height, 48) / 2 - top);
+  return `${Math.round(x)}px ${Math.round(y)}px`;
+}
+
+export function GoogleEventCard({ item, anchor, open = true, onClose, onEdit, onDelete }: Props) {
   const cardRef = useRef<HTMLDivElement | null>(null);
   const [box, setBox] = useState(() => {
     const width = 420;
@@ -56,7 +65,7 @@ export function GoogleEventCard({ item, anchor, onClose, onEdit, onDelete }: Pro
     if (left + width > window.innerWidth - margin) left = anchor.left - width - 8;
     if (left < margin) left = margin;
     const top = Math.min(Math.max(margin, anchor.top), window.innerHeight - margin - 160);
-    return { left, top };
+    return { left, top, origin: originFor(anchor, left, top, width) };
   });
   const details = item.google;
   const when = formatGoogleWhen(item.startUTC, item.endUTC, item.allDay);
@@ -86,24 +95,25 @@ export function GoogleEventCard({ item, anchor, onClose, onEdit, onDelete }: Pro
     if (top + height > window.innerHeight - margin) {
       top = Math.max(margin, window.innerHeight - margin - height);
     }
-    setBox({ left, top });
+    setBox({ left, top, origin: originFor(anchor, left, top, width) });
   }, [anchor, item.id, description, location, guests.length]);
 
   useEffect(() => {
-    function onPointer(event: MouseEvent) {
+    if (!open) return;
+    function onPointer(event: PointerEvent) {
       if (cardRef.current?.contains(event.target as Node)) return;
       onClose();
     }
     function onKey(event: KeyboardEvent) {
       if (event.key === "Escape") onClose();
     }
-    document.addEventListener("mousedown", onPointer);
+    document.addEventListener("pointerdown", onPointer);
     window.addEventListener("keydown", onKey);
     return () => {
-      document.removeEventListener("mousedown", onPointer);
+      document.removeEventListener("pointerdown", onPointer);
       window.removeEventListener("keydown", onKey);
     };
-  }, [onClose]);
+  }, [open, onClose]);
 
   return (
     <div
@@ -111,7 +121,9 @@ export function GoogleEventCard({ item, anchor, onClose, onEdit, onDelete }: Pro
       className="gcal-card"
       role="dialog"
       aria-label={item.title}
-      style={{ left: box.left, top: box.top }}
+      data-state={open ? "open" : "closed"}
+      inert={!open}
+      style={{ left: box.left, top: box.top, transformOrigin: box.origin }}
     >
       <header className="gcal-card-head">
         <h3>{item.title}</h3>
