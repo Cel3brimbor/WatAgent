@@ -1971,17 +1971,17 @@ select {
   opacity: 0.85;
 }
 
-/*rises from the bottom edge; height eases too so the calendar above doesn't jump*/
+/*sits under the transcript and scales with the chat column*/
 .ai-approval-panel {
   flex-shrink: 0;
   display: grid;
-  gap: 0.5rem;
-  max-height: min(40vh, 16rem);
-  padding: 0.65rem 0.75rem calc(0.65rem + var(--safe-bottom));
+  gap: 0.35em;
+  max-height: 32%;
+  padding: 0.45em 0.7em 0.5em;
   border-top: 1px solid var(--line);
-  background: var(--panel-solid);
-  box-shadow: 0 -8px 24px rgba(20, 36, 31, 0.06);
+  background: var(--panel);
   overflow: hidden;
+  font-size: clamp(0.68rem, 2.8cqi, 0.84rem);
   transition:
     max-height var(--dur-spring) var(--ease-spring),
     padding var(--dur-spring) var(--ease-spring),
@@ -2005,34 +2005,38 @@ select {
 
 .ai-approval-head {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 0.75rem;
+  gap: 0.4em;
   min-width: 0;
 }
 
-.ai-approval-head h3 {
-  margin: 0;
-  font-size: 0.92rem;
-}
-
 .ai-approval-head p {
-  margin: 0.15rem 0 0;
+  margin: 0;
   color: var(--ink-soft);
-  font-size: 0.78rem;
-  line-height: 1.35;
+  font-size: 0.92em;
+  font-weight: 650;
+  line-height: 1.2;
 }
 
 .ai-approval-bulk {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.35rem;
+  justify-content: flex-end;
+  gap: 0.3em;
   flex-shrink: 0;
+}
+
+.ai-approval-panel .ghost-btn,
+.ai-approval-panel .primary-btn {
+  min-height: 1.7em;
+  padding: 0.12em 0.55em;
+  font-size: 0.92em;
 }
 
 .ai-approval-list {
   display: grid;
-  gap: 0.4rem;
+  gap: 0.28em;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -2040,47 +2044,152 @@ select {
   min-height: 0;
 }
 
-.ai-approval-list li {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.5rem;
-  padding: 0.45rem 0.55rem;
-  border: 1px solid var(--line);
-  border-radius: 10px;
+.ai-approval-item {
+  display: grid;
+  min-width: 0;
+  padding: 0.22em 0.4em;
+  border: 1px dashed var(--line);
+  border-left-width: 3px;
+  border-left-style: solid;
+  border-radius: 6px;
   background: var(--paper);
+}
+
+.ai-approval-main {
+  display: flex;
+  align-items: center;
+  gap: 0.35em;
   min-width: 0;
 }
 
-.ai-approval-copy {
+.ai-approval-diff-toggle {
   display: grid;
-  gap: 0.1rem;
+  place-items: center;
+  flex: 0 0 1.05em;
+  width: 1.05em;
+  height: 1.05em;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #c4920a;
+}
+
+.ai-approval-diff-toggle .glyph {
+  width: 0.85em;
+  height: 0.85em;
+  transition: transform var(--dur-spring) var(--ease-spring);
+}
+
+.ai-approval-diff-toggle[aria-expanded="true"] .glyph {
+  transform: rotate(90deg);
+}
+
+.ai-approval-diff-toggle:hover {
+  background: color-mix(in srgb, #c4920a 16%, transparent);
+}
+
+.ai-approval-diff {
+  display: grid;
+  gap: 0.2em;
+  margin: 0.28em 0 0.12em 1.4em;
+  padding: 0;
+  list-style: none;
+  font-size: 0.88em;
+}
+
+.ai-approval-diff li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.28em;
   min-width: 0;
+}
+
+.ai-approval-diff-label {
+  flex: 0 0 auto;
+  color: var(--ink-soft);
+  font-weight: 650;
+}
+
+.ai-approval-diff-label::after {
+  content: ":";
+}
+
+.ai-approval-diff-from {
+  color: var(--ink-soft);
+  text-decoration: line-through;
   overflow-wrap: anywhere;
 }
 
-.ai-approval-action {
-  color: var(--accent-deep);
-  font-size: 0.72rem;
+.ai-approval-diff-arrow {
+  color: #c4920a;
   font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
 }
 
-.ai-approval-action.is-delete {
+.ai-approval-diff-to {
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.ai-approval-item.is-event {
+  border-left-color: var(--event-color);
+  background: color-mix(in srgb, var(--event-color) 22%, var(--paper));
+}
+
+.ai-approval-item.is-task {
+  border-left-color: var(--task-color);
+  background: color-mix(in srgb, var(--task-color) 22%, var(--paper));
+}
+
+.ai-approval-sign {
+  display: grid;
+  place-items: center;
+  flex: 0 0 1.15em;
+  width: 1.15em;
+  height: 1.15em;
+  font-size: 1.15em;
+  font-weight: 750;
+  line-height: 1;
+}
+
+.ai-approval-sign .glyph {
+  width: 0.95em;
+  height: 0.95em;
+}
+
+.ai-approval-sign.is-add {
+  color: #188038;
+}
+
+.ai-approval-sign.is-delete {
   color: var(--danger);
 }
 
+.ai-approval-sign.is-edit {
+  color: #c4920a;
+}
+
+.ai-approval-title {
+  flex: 1 1 4em;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 650;
+}
+
 .ai-approval-when {
+  flex-shrink: 0;
   color: var(--ink-soft);
-  font-size: 0.76rem;
+  font-size: 0.88em;
 }
 
 .ai-approval-row-actions {
   display: flex;
   flex-shrink: 0;
-  flex-wrap: wrap;
-  gap: 0.25rem;
+  gap: 0.25em;
+  margin-left: auto;
 }
 
 .calendar-strip-title {
@@ -2788,6 +2897,8 @@ select {
   flex: 1;
   width: var(--chat-w);
   min-height: 0;
+  container-type: inline-size;
+  container-name: chat;
 }
 
 .chat-grabber {
@@ -3062,6 +3173,11 @@ select {
   border-bottom-right-radius: 4px;
 }
 
+.bubble-user ::selection {
+  background: color-mix(in srgb, var(--on-accent) 42%, transparent);
+  color: var(--on-accent);
+}
+
 .bubble-assistant {
   width: 100%;
   border: 1px solid var(--line);
@@ -3265,6 +3381,25 @@ select {
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
   font-size: 0.72rem;
   overflow-wrap: anywhere;
+}
+
+.agent-call-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem;
+  margin: 0;
+  min-width: 0;
+}
+
+.agent-call-verb {
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.agent-thinking-timeline li[data-state="failed"] .agent-call-verb {
+  color: var(--danger);
 }
 
 .agent-activity-live {

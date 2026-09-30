@@ -96,6 +96,15 @@ export function AlertIcon(props: IconProps) {
   );
 }
 
+export function RedoIcon(props: IconProps) {
+  return (
+    <Glyph {...props} strokeWidth={1.75}>
+      <path d="M12.5 6.25H6.2a2.7 2.7 0 0 0 0 5.4H9" />
+      <path d="M10.2 3.9 12.7 6.25 10.2 8.6" />
+    </Glyph>
+  );
+}
+
 export function ToolIcon(props: IconProps) {
   return (
     <Glyph {...props}>

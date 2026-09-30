@@ -9,6 +9,8 @@ import { MessageContent } from "@/agent/message-content";
 import type { ChatMessage, ChatSession } from "@/agent/types";
 import { CHAT_WIDTH_MAX, CHAT_WIDTH_MIN, useChatResize } from "@/agent/use-chat-resize";
 import { useSheetDismiss } from "@/agent/use-sheet-dismiss";
+import { AiApprovalPanel } from "@/calendar/ai-approval-panel";
+import type { PendingAiChange } from "@/calendar/approval-client";
 import { usePresence } from "@/shared/use-presence";
 
 //matches the panel's width/sheet transition in globals.css
@@ -39,6 +41,12 @@ type Props = {
   onReorderChats: (orderedIds: string[]) => void;
   onResizingChange: (resizing: boolean) => void;
   onClose: () => void;
+  pendingChanges: PendingAiChange[];
+  approvalBusy: boolean;
+  onApprove: (id: string) => void;
+  onReject: (id: string) => void;
+  onApproveAll: () => void;
+  onRejectAll: () => void;
 };
 
 export function CalendarChatPanel({
@@ -61,6 +69,12 @@ export function CalendarChatPanel({
   onReorderChats,
   onResizingChange,
   onClose,
+  pendingChanges,
+  approvalBusy,
+  onApprove,
+  onReject,
+  onApproveAll,
+  onRejectAll,
 }: Props) {
   const panelRef = useRef<HTMLElement>(null);
   const chatResize = useChatResize(panelRef);
@@ -83,7 +97,7 @@ export function CalendarChatPanel({
   useEffect(() => {
     const el = listRef.current;
     if (el && pinnedRef.current) el.scrollTop = el.scrollHeight;
-  }, [messages, busy, activeChat?.id, presence.value]);
+  }, [messages, busy, activeChat?.id, presence.value, pendingChanges.length]);
 
   if (!presence.value) return null;
 
@@ -178,10 +192,7 @@ export function CalendarChatPanel({
                     >
                       <span className="bubble-role">{m.role === "user" ? "You" : "WatAgent"}</span>
                       <div className="bubble-body">
-                        <AgentThinkingBlock
-                          events={m.toolEvents}
-                          answerStarted={m.role === "assistant" && Boolean(m.content)}
-                        />
+                        <AgentThinkingBlock events={m.toolEvents} />
                         {editing ? (
                           <>
                             <textarea
@@ -237,6 +248,14 @@ export function CalendarChatPanel({
             </div>
           )}
         </section>
+        <AiApprovalPanel
+          items={pendingChanges}
+          busy={approvalBusy}
+          onApprove={onApprove}
+          onReject={onReject}
+          onApproveAll={onApproveAll}
+          onRejectAll={onRejectAll}
+        />
         <ChatComposer busy={busy} error={error} onSend={send} onStop={onStop} onError={onError} />
       </div>
     </aside>

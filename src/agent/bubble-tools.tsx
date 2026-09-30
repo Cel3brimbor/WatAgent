@@ -98,6 +98,7 @@ export function ChatBubbleTools({
   }
   return (
     <div className="bubble-tools">
+      <CopyButton content={content} disabled={!hasContent || busy} />
       <button
         type="button"
         className="bubble-tool"

@@ -51,7 +51,6 @@ import {
   type GoogleDraftTarget,
 } from "@/calendar/calendar-item-editor";
 import { GoogleEventCard } from "@/calendar/google-event-card";
-import { AiApprovalPanel } from "@/calendar/ai-approval-panel";
 import { SettingsPanel } from "@/calendar/settings-panel";
 import { useCalendarPreferencesSync } from "@/calendar/use-calendar-preferences-sync";
 import { SideNav, type AppSection } from "@/calendar/side-nav";
@@ -494,6 +493,13 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
     if (!chatOpen) pruneEmptyChats();
   }, [chatOpen, pruneEmptyChats]);
 
+  const pendingCount = calendar.pendingChanges.length;
+  const pendingSeen = useRef(0);
+  useEffect(() => {
+    if (pendingCount > pendingSeen.current) setChatOpen(true);
+    pendingSeen.current = pendingCount;
+  }, [pendingCount]);
+
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
       const target = event.target as HTMLElement | null;
@@ -538,7 +544,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
     }
     if (item.kind === "gcal_busy") return;
     if (item.pendingApproval) {
-      setNotice("Approve or reject this Agent change in the review panel below.");
+      setNotice("Approve or undo this Agent change in the chat.");
       return;
     }
     const existing = calendar.items.find((row) => row.id === item.id);
@@ -901,7 +907,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
                 items={calendar.displayItems}
                 onOpen={(item) => {
                   if (item.pendingApproval) {
-                    setNotice("Approve or reject this Agent change in the review panel below.");
+                    setNotice("Approve or undo this Agent change in the chat.");
                     return;
                   }
                   setDraft(draftFromMeta(item.id, item.title, item.calendar));
@@ -993,25 +999,22 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
           onReorderChats={calendar.reorderChats}
           onResizingChange={setChatResizing}
           onClose={() => setChatOpen(false)}
+          pendingChanges={calendar.pendingChanges}
+          approvalBusy={calendar.approvalBusy}
+          onApprove={(id) =>
+            void calendar.approvePendingChanges({ ids: [id] }).catch(() => setNotice("Unable to approve the change."))
+          }
+          onReject={(id) =>
+            void calendar.rejectPendingChanges({ ids: [id] }).catch(() => setNotice("Unable to undo the change."))
+          }
+          onApproveAll={() =>
+            void calendar.approvePendingChanges({ all: true }).catch(() => setNotice("Unable to approve changes."))
+          }
+          onRejectAll={() =>
+            void calendar.rejectPendingChanges({ all: true }).catch(() => setNotice("Unable to undo changes."))
+          }
         />
       </div>
-
-      <AiApprovalPanel
-        items={calendar.pendingChanges}
-        busy={calendar.approvalBusy}
-        onApprove={(id) =>
-          void calendar.approvePendingChanges({ ids: [id] }).catch(() => setNotice("Unable to approve the change."))
-        }
-        onReject={(id) =>
-          void calendar.rejectPendingChanges({ ids: [id] }).catch(() => setNotice("Unable to reject the change."))
-        }
-        onApproveAll={() =>
-          void calendar.approvePendingChanges({ all: true }).catch(() => setNotice("Unable to approve changes."))
-        }
-        onRejectAll={() =>
-          void calendar.rejectPendingChanges({ all: true }).catch(() => setNotice("Unable to reject changes."))
-        }
-      />
 
       {shownPeek ? (
         <GoogleEventCard

@@ -35,14 +35,7 @@ function StateGlyph({ state }: { state: ToolEventRecord["state"] }) {
   return <ToolIcon />;
 }
 
-export function AgentThinkingBlock({
-  events,
-  answerStarted,
-}: {
-  events?: ToolEventRecord[];
-  /**assistant reply text has begun — collapse details by default*/
-  answerStarted?: boolean;
-}) {
+export function AgentThinkingBlock({ events }: { events?: ToolEventRecord[] }) {
   const steps = events ?? [];
   const toolBusy = steps.some((event) => event.state === "calling");
   const [open, setOpen] = useState(true);
@@ -51,10 +44,6 @@ export function AgentThinkingBlock({
   useEffect(() => {
     if (toolBusy) setOpen(true);
   }, [toolBusy]);
-
-  useEffect(() => {
-    if (answerStarted && !toolBusy) setOpen(false);
-  }, [answerStarted, toolBusy]);
 
   if (steps.length === 0) return null;
 
@@ -81,14 +70,12 @@ export function AgentThinkingBlock({
               <span className="agent-tool-icon" aria-hidden>
                 <StateGlyph state={event.state} />
               </span>
-              <div className="agent-tool-copy">
-                <p className={event.state === "calling" ? "agent-activity-live" : "agent-activity-result"}>
-                  {event.state === "calling" ? progressLabel(event) : settledLabel(event)}
-                </p>
-                {event.state !== "calling" && event.callLabel ? (
-                  <p className="agent-activity-detail">{event.callLabel}</p>
-                ) : null}
-              </div>
+              <p className="agent-call-line">
+                <span className={event.state === "calling" ? "agent-call-verb agent-activity-live" : "agent-call-verb"}>
+                  {event.state === "calling" ? "calling" : event.state === "failed" ? "failed" : "called"}
+                </span>
+                <span className="agent-activity-detail">{event.callLabel || event.tool}</span>
+              </p>
             </li>
           ))}
         </ol>
