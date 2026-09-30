@@ -216,19 +216,22 @@ function tagOf(raw: unknown): SmartTag | null {
 
 export const SMART_TAG_LIMITS = { tags: MAX_TAGS, rules: MAX_RULES, value: MAX_VALUE, name: MAX_NAME };
 
+export function parseSmartTagsFromUnknown(raw: unknown): SmartTag[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .flatMap((entry) => {
+      const tag = tagOf(entry);
+      return tag ? [tag] : [];
+    })
+    .slice(0, MAX_TAGS);
+}
+
 export function readSmartTags(): SmartTag[] {
   if (typeof window === "undefined") return [];
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .flatMap((entry) => {
-        const tag = tagOf(entry);
-        return tag ? [tag] : [];
-      })
-      .slice(0, MAX_TAGS);
+    return parseSmartTagsFromUnknown(JSON.parse(raw) as unknown);
   } catch {
     return [];
   }

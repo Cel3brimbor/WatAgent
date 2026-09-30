@@ -20,10 +20,6 @@ import {
   readCalendarView,
   readColorOverrides,
   readSourceFilter,
-  writeCalendarColors,
-  writeCalendarView,
-  writeColorOverrides,
-  writeSourceFilter,
   isSidebarHidden,
   type CalendarColors,
   type CalendarSourceFilter,
@@ -56,6 +52,7 @@ import {
 import { GoogleEventCard } from "@/calendar/google-event-card";
 import { AiApprovalPanel } from "@/calendar/ai-approval-panel";
 import { SettingsPanel } from "@/calendar/settings-panel";
+import { useCalendarPreferencesSync } from "@/calendar/use-calendar-preferences-sync";
 import { SideNav, type AppSection } from "@/calendar/side-nav";
 import { TodoList } from "@/calendar/todo-list";
 import { CalendarChatPanel } from "@/agent/calendar-chat-panel";
@@ -166,7 +163,14 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
   const { syncFromGoogle, createChat, pruneEmptyChats, setAfterWrite } = calendar;
   const [view, setView] = useState<CalendarView>(() => readCalendarView());
   const [section, setSection] = useState<AppSection>("calendar");
-  const [navCollapsed, setNavCollapsed] = useState(false);
+  const [navCollapsed, setNavCollapsed] = useState(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return window.localStorage.getItem("watagent.nav.collapsed") === "1";
+    } catch {
+      return false;
+    }
+  });
   const [focus, setFocus] = useState(() => startOfLocalDay(new Date()));
   const [busyBlocks, setBusyBlocks] = useState<BusyBlock[]>([]);
   const [overlayEvents, setOverlayEvents] = useState<OverlayEvent[]>([]);
@@ -207,17 +211,18 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
   }, [googleCalendars, overlayEvents]);
   const abortRef = useRef<AbortController | null>(null);
 
-  useEffect(() => {
-    writeCalendarColors(colors);
-  }, [colors]);
-
-  useEffect(() => {
-    writeColorOverrides(colorOverrides);
-  }, [colorOverrides]);
-
-  useEffect(() => {
-    writeSmartTags(smartTags);
-  }, [smartTags]);
+  useCalendarPreferencesSync(
+    calendar.hydrated,
+    { view, sources, colors, colorOverrides, smartTags, navCollapsed },
+    {
+      setView,
+      setSources,
+      setColors,
+      setColorOverrides,
+      setSmartTags,
+      setNavCollapsed,
+    },
+  );
 
   const colorVars = useMemo(
     () =>
@@ -254,32 +259,8 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
     [calendar.displayItems, overlayEvents],
   );
 
-  useEffect(() => {
-    writeCalendarView(view);
-  }, [view]);
-
-  useEffect(() => {
-    writeSourceFilter(sources);
-  }, [sources]);
-
-  useEffect(() => {
-    try {
-      setNavCollapsed(window.localStorage.getItem("watagent.nav.collapsed") === "1");
-    } catch {
-      return;
-    }
-  }, []);
-
   function toggleNav() {
-    setNavCollapsed((current) => {
-      const next = !current;
-      try {
-        window.localStorage.setItem("watagent.nav.collapsed", next ? "1" : "0");
-      } catch {
-        return next;
-      }
-      return next;
-    });
+    setNavCollapsed((current) => !current);
   }
 
   useEffect(() => {
