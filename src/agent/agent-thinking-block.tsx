@@ -1,7 +1,9 @@
 "use client";
 
+import { useEffect, useId, useState } from "react";
 import type { ToolEventRecord } from "@/agent/types";
-import { AlertIcon, CheckIcon, ToolIcon } from "@/shared/icons";
+import { AlertIcon, CheckIcon, ChevronRightIcon, ToolIcon } from "@/shared/icons";
+import { Disclosure } from "@/shared/disclosure";
 
 const PROGRESS: Record<string, string> = {
   list_calendar_items: "Checking your calendar…",
@@ -19,7 +21,15 @@ function settledLabel(event: ToolEventRecord): string {
   return event.resultSummary || event.tool;
 }
 
-function StateGlyph({ state }: { state: ToolEventRecord["state"] | "drafting" }) {
+function toolSummary(steps: ToolEventRecord[]): string {
+  const live = steps.find((event) => event.state === "calling");
+  if (live) return progressLabel(live);
+  const failed = steps.find((event) => event.state === "failed");
+  if (failed) return settledLabel(failed);
+  return settledLabel(steps[steps.length - 1]);
+}
+
+function StateGlyph({ state }: { state: ToolEventRecord["state"] }) {
   if (state === "succeeded") return <CheckIcon />;
   if (state === "failed") return <AlertIcon />;
   return <ToolIcon />;
@@ -27,39 +37,62 @@ function StateGlyph({ state }: { state: ToolEventRecord["state"] | "drafting" })
 
 export function AgentThinkingBlock({
   events,
-  drafting,
+  answerStarted,
 }: {
   events?: ToolEventRecord[];
-  drafting?: boolean;
+  /**assistant reply text has begun — collapse details by default*/
+  answerStarted?: boolean;
 }) {
   const steps = events ?? [];
-  if (steps.length === 0 && !drafting) return null;
+  const toolBusy = steps.some((event) => event.state === "calling");
+  const [open, setOpen] = useState(true);
+  const panelId = useId();
+
+  useEffect(() => {
+    if (toolBusy) setOpen(true);
+  }, [toolBusy]);
+
+  useEffect(() => {
+    if (answerStarted && !toolBusy) setOpen(false);
+  }, [answerStarted, toolBusy]);
+
+  if (steps.length === 0) return null;
+
+  const summary = toolSummary(steps);
+  const stepCount = steps.length;
 
   return (
-    <ol className="agent-activity">
-      {steps.map((event) => (
-        <li key={event.id} data-state={event.state}>
-          <span className="agent-tool-icon" aria-hidden>
-            <StateGlyph state={event.state} />
-          </span>
-          <div className="agent-tool-copy">
-            <p className={event.state === "calling" ? "agent-activity-live" : "agent-activity-result"}>
-              {event.state === "calling" ? progressLabel(event) : settledLabel(event)}
-            </p>
-            {event.state !== "calling" && event.callLabel ? (
-              <p className="agent-activity-detail">{event.callLabel}</p>
-            ) : null}
-          </div>
-        </li>
-      ))}
-      {drafting ? (
-        <li data-state="drafting">
-          <span className="agent-tool-icon" aria-hidden>
-            <StateGlyph state="drafting" />
-          </span>
-          <p className="agent-activity-draft">Thinking / Drafting your response…</p>
-        </li>
-      ) : null}
-    </ol>
+    <div className="agent-thinking-block">
+      <button
+        type="button"
+        className="agent-thinking-toggle"
+        aria-expanded={open}
+        aria-controls={panelId}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <ChevronRightIcon className="agent-thinking-chevron" />
+        <span className="agent-thinking-summary">{summary}</span>
+        {stepCount > 1 ? <span className="agent-thinking-count">{stepCount} steps</span> : null}
+      </button>
+      <Disclosure open={open} id={panelId}>
+        <ol className="agent-thinking-timeline">
+          {steps.map((event) => (
+            <li key={event.id} data-state={event.state}>
+              <span className="agent-tool-icon" aria-hidden>
+                <StateGlyph state={event.state} />
+              </span>
+              <div className="agent-tool-copy">
+                <p className={event.state === "calling" ? "agent-activity-live" : "agent-activity-result"}>
+                  {event.state === "calling" ? progressLabel(event) : settledLabel(event)}
+                </p>
+                {event.state !== "calling" && event.callLabel ? (
+                  <p className="agent-activity-detail">{event.callLabel}</p>
+                ) : null}
+              </div>
+            </li>
+          ))}
+        </ol>
+      </Disclosure>
+    </div>
   );
 }

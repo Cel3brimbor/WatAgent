@@ -3249,6 +3249,12 @@ select {
   font-weight: 550;
 }
 
+.agent-thinking-draft {
+  margin: 0.15rem 0 0;
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
 .agent-activity-result {
   color: var(--ink);
   font-weight: 550;

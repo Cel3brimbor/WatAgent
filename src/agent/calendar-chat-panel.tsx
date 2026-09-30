@@ -167,8 +167,6 @@ export function CalendarChatPanel({
                 const streaming = streamingAssistantId === m.id;
                 const editing = editingId === m.id;
                 const latest = m.role === "assistant" && messages[messages.length - 1]?.id === m.id;
-                const toolBusy = m.toolEvents?.some((event) => event.state === "calling") === true;
-                const drafting = streaming && !m.content && !toolBusy;
                 return (
                   <div
                     key={m.id}
@@ -180,7 +178,10 @@ export function CalendarChatPanel({
                     >
                       <span className="bubble-role">{m.role === "user" ? "You" : "WatAgent"}</span>
                       <div className="bubble-body">
-                        <AgentThinkingBlock events={m.toolEvents} drafting={drafting} />
+                        <AgentThinkingBlock
+                          events={m.toolEvents}
+                          answerStarted={m.role === "assistant" && Boolean(m.content)}
+                        />
                         {editing ? (
                           <>
                             <textarea
