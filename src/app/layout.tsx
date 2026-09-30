@@ -6,6 +6,13 @@ export const metadata: Metadata = {
   title: "WatAgent",
   description: "Calendar with an AI planning assistant.",
   referrer: "strict-origin-when-cross-origin",
+  icons: {
+    icon: "/favicon.png",
+    apple: [
+      { url: "/apple-touch-icon.png" },
+      { url: "/apple-touch-icon-precomposed.png" },
+    ],
+  },
 };
 
 export const viewport: Viewport = {

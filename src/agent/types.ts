@@ -4,6 +4,7 @@ export type ToolEventRecord = {
   id: string;
   tool: string;
   state: ToolEventState;
+  callLabel?: string;
   resultSummary?: string;
 };
 

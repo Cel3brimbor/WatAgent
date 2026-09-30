@@ -58,7 +58,7 @@ import { SideNav, type AppSection } from "@/calendar/side-nav";
 import { TodoList } from "@/calendar/todo-list";
 import { CalendarChatPanel } from "@/agent/calendar-chat-panel";
 import { readAgentStream } from "@/agent/stream";
-import type { ChatMessage, LiveActivity, ToolEventRecord } from "@/agent/types";
+import type { ChatMessage, ToolEventRecord } from "@/agent/types";
 import { apiFetch } from "@/shared/api-base";
 import { uid } from "@/shared/ids";
 import { ChevronLeftIcon, ChevronRightIcon, CloseIcon } from "@/shared/icons";
@@ -250,7 +250,6 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [streamingAssistantId, setStreamingAssistantId] = useState<string | null>(null);
-  const [liveActivity, setLiveActivity] = useState<LiveActivity | null>(null);
   const [googlePeek, setGooglePeek] = useState<{ item: TimelineItem; anchor: DOMRect } | null>(null);
   const [googleDelete, setGoogleDelete] = useState<(GoogleDraftTarget & { title: string }) | null>(null);
   const [sources, setSources] = useState<CalendarSourceFilter>(() => readSourceFilter());
@@ -658,7 +657,6 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
       { id: assistantId, role: "assistant", content: "", createdAt: Date.now() },
     ]);
     setStreamingAssistantId(assistantId);
-    setLiveActivity({ assistantId, status: "Preparing" });
     setBusy(true);
     setError(null);
     abortRef.current?.abort();
@@ -668,6 +666,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
 
     let assistantText = "";
     const toolEvents: ToolEventRecord[] = [];
+    let announcedTool = "";
     const writeAssistant = () => {
       calendar.setChatMessages(
         currentMessages().map((message) =>
@@ -718,26 +717,34 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
         (event) => {
           if (event.type === "content") {
             assistantText += event.content;
-            setLiveActivity((current) =>
-              current?.assistantId === assistantId ? { ...current, status: "Writing a response" } : current,
-            );
             schedule();
             return;
           }
           if (event.type === "status") {
-            setLiveActivity((current) =>
-              current?.assistantId === assistantId ? { ...current, status: event.label } : current,
-            );
+            announcedTool = event.label;
             return;
           }
           if (event.state === "calling") {
-            toolEvents.push({ id: uid("tool"), tool: event.name, state: "calling" });
+            const callLabel = event.callLabel || announcedTool;
+            announcedTool = "";
+            const duplicate =
+              event.name === "list_calendar_items" &&
+              toolEvents.some((entry) => entry.tool === event.name && entry.callLabel === callLabel);
+            if (!duplicate) {
+              toolEvents.push({
+                id: uid("tool"),
+                tool: event.name,
+                state: "calling",
+                callLabel: callLabel || undefined,
+              });
+            }
           } else {
             const pending = [...toolEvents]
               .reverse()
               .find((entry) => entry.tool === event.name && entry.state === "calling");
             if (pending) {
               pending.state = event.state;
+              pending.callLabel = event.callLabel || pending.callLabel;
               pending.resultSummary = event.resultSummary;
             }
             if (event.state === "succeeded" && event.calendarChange) {
@@ -756,7 +763,6 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
     } finally {
       setBusy(false);
       setStreamingAssistantId(null);
-      setLiveActivity(null);
       calendar.persistActiveChat();
     }
   }
@@ -975,7 +981,6 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
           busy={busy}
           error={error}
           streamingAssistantId={streamingAssistantId}
-          liveActivity={liveActivity}
           onSend={(payload) => void handleSend(payload)}
           onStop={() => abortRef.current?.abort()}
           onError={setError}

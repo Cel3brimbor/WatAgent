@@ -3205,6 +3205,84 @@ select {
   font-size: 0.7rem;
 }
 
+.agent-activity {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.agent-activity li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.45rem;
+  min-width: 0;
+  max-width: 100%;
+  font-size: 0.8rem;
+  line-height: 1.35;
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity 220ms var(--ease-out),
+    transform 220ms var(--ease-out);
+}
+
+@starting-style {
+  .agent-activity li {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+.agent-activity-result,
+.agent-activity-live,
+.agent-activity-draft,
+.agent-activity-detail {
+  margin: 0;
+}
+
+.agent-activity-draft {
+  color: var(--ink-soft);
+  font-weight: 550;
+}
+
+.agent-activity-result {
+  color: var(--ink);
+  font-weight: 550;
+}
+
+.agent-activity-detail {
+  color: var(--ink-soft);
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 0.72rem;
+  overflow-wrap: anywhere;
+}
+
+.agent-activity-live {
+  justify-self: start;
+  background: linear-gradient(
+      90deg,
+      var(--ink-soft) 0%,
+      var(--ink-soft) 40%,
+      color-mix(in srgb, var(--ink-soft) 25%, transparent) 50%,
+      var(--ink-soft) 60%,
+      var(--ink-soft) 100%
+    )
+    0 0 / 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font-weight: 550;
+  animation: status-sheen 1.8s linear infinite;
+}
+
+.agent-activity li[data-state="failed"] .agent-activity-result {
+  color: var(--danger);
+}
+
 .agent-thinking-block {
   display: grid;
   gap: 0.35rem;
@@ -3931,17 +4009,23 @@ select {
 @media (prefers-reduced-motion: reduce) {
   /*ambient loops go still; state stays legible without them*/
   .bubble-status,
+  .agent-activity-live,
   .md-pending i {
     animation: none;
   }
 
-  .bubble-status {
+  .bubble-status,
+  .agent-activity-live {
     background: none;
     color: var(--ink-soft);
   }
 
   .md-pending i {
     opacity: 0.6;
+  }
+
+  .agent-activity li {
+    transition: none;
   }
 
   /*the chat panel cross-fades in place instead of sliding or growing*/

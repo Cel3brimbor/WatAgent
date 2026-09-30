@@ -1,67 +1,65 @@
 "use client";
 
-import { useId, useMemo, useState } from "react";
 import type { ToolEventRecord } from "@/agent/types";
-import { Disclosure } from "@/shared/disclosure";
-import { AlertIcon, CheckIcon, ChevronRightIcon, ToolIcon } from "@/shared/icons";
+import { AlertIcon, CheckIcon, ToolIcon } from "@/shared/icons";
 
-const TOOL_LABELS: Record<string, string> = {
-  list_calendar_items: "Listed calendar items",
-  add_calendar_item: "Added a calendar item",
-  update_calendar_item: "Updated a calendar item",
-  delete_calendar_item: "Deleted a calendar item",
-  complete_calendar_task: "Completed a task",
+const PROGRESS: Record<string, string> = {
+  list_calendar_items: "Checking your calendar…",
+  add_calendar_item: "Adding to your calendar…",
+  update_calendar_item: "Updating your calendar…",
+  delete_calendar_item: "Removing from your calendar…",
+  complete_calendar_task: "Updating that task…",
 };
 
-function collapsedSummary(events: ToolEventRecord[]): string {
-  const parts = events.map((event) => event.resultSummary || TOOL_LABELS[event.tool] || event.tool);
-  const unique = [...new Set(parts)];
-  return unique.slice(0, 3).join(" · ") || "Used tools";
+function progressLabel(event: ToolEventRecord): string {
+  return PROGRESS[event.tool] || "Working…";
 }
 
-function StateGlyph({ state }: { state: ToolEventRecord["state"] }) {
+function settledLabel(event: ToolEventRecord): string {
+  return event.resultSummary || event.tool;
+}
+
+function StateGlyph({ state }: { state: ToolEventRecord["state"] | "drafting" }) {
   if (state === "succeeded") return <CheckIcon />;
   if (state === "failed") return <AlertIcon />;
   return <ToolIcon />;
 }
 
-export function AgentThinkingBlock({ events }: { events?: ToolEventRecord[] }) {
-  const [open, setOpen] = useState(false);
-  const timelineId = useId();
-  const summary = useMemo(() => (events && events.length > 0 ? collapsedSummary(events) : ""), [events]);
-
-  if (!events || events.length === 0) return null;
+export function AgentThinkingBlock({
+  events,
+  drafting,
+}: {
+  events?: ToolEventRecord[];
+  drafting?: boolean;
+}) {
+  const steps = events ?? [];
+  if (steps.length === 0 && !drafting) return null;
 
   return (
-    <div className="agent-thinking-block">
-      <button
-        type="button"
-        className="agent-thinking-toggle"
-        aria-expanded={open}
-        aria-controls={timelineId}
-        onClick={() => setOpen((value) => !value)}
-      >
-        <ChevronRightIcon className="agent-thinking-chevron" />
-        <span className="agent-thinking-summary">{summary}</span>
-        <span className="agent-thinking-count">
-          {events.length} step{events.length === 1 ? "" : "s"}
-        </span>
-      </button>
-      <Disclosure open={open} id={timelineId}>
-        <ol className="agent-thinking-timeline">
-          {events.map((event) => (
-            <li key={event.id} data-state={event.state}>
-              <span className="agent-tool-icon" aria-hidden>
-                <StateGlyph state={event.state} />
-              </span>
-              <div className="agent-tool-copy">
-                <code className="agent-tool-badge">{event.tool}</code>
-                {event.resultSummary ? <p className="agent-tool-result">{event.resultSummary}</p> : null}
-              </div>
-            </li>
-          ))}
-        </ol>
-      </Disclosure>
-    </div>
+    <ol className="agent-activity">
+      {steps.map((event) => (
+        <li key={event.id} data-state={event.state}>
+          <span className="agent-tool-icon" aria-hidden>
+            <StateGlyph state={event.state} />
+          </span>
+          <div className="agent-tool-copy">
+            <p className={event.state === "calling" ? "agent-activity-live" : "agent-activity-result"}>
+              {event.state === "calling" ? progressLabel(event) : settledLabel(event)}
+            </p>
+            {event.state !== "calling" && event.callLabel ? (
+              <p className="agent-activity-detail">{event.callLabel}</p>
+            ) : null}
+          </div>
+        </li>
+      ))}
+      {drafting ? (
+        <li data-state="drafting">
+          <span className="agent-tool-icon" aria-hidden>
+            <StateGlyph state="drafting" />
+          </span>
+          <p className="agent-activity-draft">Thinking / Drafting your response…</p>
+        </li>
+      ) : null}
+    </ol>
   );
 }

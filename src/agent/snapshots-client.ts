@@ -15,6 +15,7 @@ function toolEventOf(raw: unknown): ToolEventRecord | null {
     id: rec.id,
     tool: rec.tool,
     state: rec.state,
+    callLabel: typeof rec.callLabel === "string" ? rec.callLabel.slice(0, 240) : undefined,
     resultSummary: typeof rec.resultSummary === "string" ? rec.resultSummary.slice(0, 500) : undefined,
   };
 }
@@ -72,6 +73,7 @@ export async function saveChatSession(chat: ChatSession): Promise<void> {
         id: event.id,
         tool: event.tool.slice(0, 64),
         state: event.state,
+        callLabel: event.callLabel?.slice(0, 240),
         resultSummary: event.resultSummary?.slice(0, 500),
       }));
       return {

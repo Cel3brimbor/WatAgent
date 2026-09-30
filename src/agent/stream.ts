@@ -18,6 +18,7 @@ export type AgentStreamEvent =
       name: string;
       state: ToolEventState;
       resultSummary?: string;
+      callLabel?: string;
       calendarChange?: CalendarChange;
     };
 
@@ -57,6 +58,7 @@ function eventOf(raw: unknown): AgentStreamEvent | null {
       name: rec.name.slice(0, 64),
       state: rec.state as ToolEventState,
       resultSummary: typeof rec.resultSummary === "string" ? rec.resultSummary.slice(0, 300) : undefined,
+      callLabel: typeof rec.callLabel === "string" ? rec.callLabel.slice(0, 240) : undefined,
       calendarChange: calendarChangeOf(rec.calendarChange),
     };
   }

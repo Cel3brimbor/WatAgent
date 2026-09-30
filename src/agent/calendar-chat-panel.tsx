@@ -6,7 +6,7 @@ import { ChatBubbleTools } from "@/agent/bubble-tools";
 import { ChatComposer } from "@/agent/chat-composer";
 import { ChatTabStrip } from "@/agent/chat-tab-strip";
 import { MessageContent } from "@/agent/message-content";
-import type { ChatMessage, ChatSession, LiveActivity } from "@/agent/types";
+import type { ChatMessage, ChatSession } from "@/agent/types";
 import { CHAT_WIDTH_MAX, CHAT_WIDTH_MIN, useChatResize } from "@/agent/use-chat-resize";
 import { useSheetDismiss } from "@/agent/use-sheet-dismiss";
 import { usePresence } from "@/shared/use-presence";
@@ -27,7 +27,6 @@ type Props = {
   busy: boolean;
   error: string | null;
   streamingAssistantId: string | null;
-  liveActivity: LiveActivity | null;
   onSend: (payload: SendPayload) => void;
   onStop: () => void;
   onError: (message: string | null) => void;
@@ -50,7 +49,6 @@ export function CalendarChatPanel({
   busy,
   error,
   streamingAssistantId,
-  liveActivity,
   onSend,
   onStop,
   onError,
@@ -169,7 +167,8 @@ export function CalendarChatPanel({
                 const streaming = streamingAssistantId === m.id;
                 const editing = editingId === m.id;
                 const latest = m.role === "assistant" && messages[messages.length - 1]?.id === m.id;
-                const status = liveActivity?.assistantId === m.id && !m.content ? liveActivity.status : null;
+                const toolBusy = m.toolEvents?.some((event) => event.state === "calling") === true;
+                const drafting = streaming && !m.content && !toolBusy;
                 return (
                   <div
                     key={m.id}
@@ -181,8 +180,7 @@ export function CalendarChatPanel({
                     >
                       <span className="bubble-role">{m.role === "user" ? "You" : "WatAgent"}</span>
                       <div className="bubble-body">
-                        <AgentThinkingBlock events={m.toolEvents} />
-                        {status ? <p className="bubble-status">{status}</p> : null}
+                        <AgentThinkingBlock events={m.toolEvents} drafting={drafting} />
                         {editing ? (
                           <>
                             <textarea
@@ -215,7 +213,7 @@ export function CalendarChatPanel({
                             </div>
                           </>
                         ) : (
-                          <MessageContent content={m.content} pending={streaming && !m.content && !status} />
+                          <MessageContent content={m.content} />
                         )}
                       </div>
                     </article>
