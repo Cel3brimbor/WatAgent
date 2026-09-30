@@ -29,6 +29,14 @@ import {
   type CalendarSourceFilter,
 } from "@/calendar/preferences";
 import { isExcludedGoogleCalendarName } from "@/calendar/calendar-lists";
+import {
+  compileSmartTags,
+  readSmartTags,
+  writeSmartTags,
+  type SmartTag,
+  type SmartTagMatcher,
+  type SmartTagTarget,
+} from "@/calendar/smart-tags";
 import { CalendarSidePanel } from "@/calendar/calendar-side-panel";
 import { deleteGoogleEvent, updateGoogleEvent, type GoogleCalendarRef } from "@/calendar/google-calendar-client";
 import { ConfirmDialog } from "@/shared/confirm-dialog";
@@ -127,6 +135,28 @@ function googleRange(focus: Date, view: CalendarView, weekStartsOn: 0 | 1): Rang
   return { rangeStartUTC: start.getTime(), rangeEndUTC: end.getTime() };
 }
 
+function smartTagTargetOf(item: TimelineItem): SmartTagTarget | null {
+  if (item.kind === "gcal_busy") return null;
+  if (item.kind === "gcal_event") {
+    if (!item.google?.calendarId) return null;
+    return {
+      calendarId: item.google.calendarId,
+      title: item.title,
+      location: item.google.location,
+      description: item.google.description,
+    };
+  }
+  return { calendarId: item.kind === "task" ? "tasks" : "events", title: item.title };
+}
+
+function applySmartTags(items: TimelineItem[], matcher: SmartTagMatcher): TimelineItem[] {
+  return items.map((item) => {
+    const target = smartTagTargetOf(item);
+    const hit = target ? matcher(target) : null;
+    return hit ? { ...item, smartTag: hit } : item;
+  });
+}
+
 function timeZone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 }
@@ -156,6 +186,8 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
   const [sources, setSources] = useState<CalendarSourceFilter>(() => readSourceFilter());
   const [colors, setColors] = useState<CalendarColors>(() => readCalendarColors());
   const [colorOverrides, setColorOverrides] = useState<Record<string, string>>(() => readColorOverrides());
+  const [smartTags, setSmartTags] = useState<SmartTag[]>(() => readSmartTags());
+  const smartTagMatcher = useMemo(() => compileSmartTags(smartTags), [smartTags]);
   const [googleCalendars, setGoogleCalendars] = useState<GoogleCalendarRef[]>([]);
   const sidebarCalendars = useMemo(() => {
     if (googleCalendars.length > 0) return googleCalendars;
@@ -183,6 +215,10 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
     writeColorOverrides(colorOverrides);
   }, [colorOverrides]);
 
+  useEffect(() => {
+    writeSmartTags(smartTags);
+  }, [smartTags]);
+
   const colorVars = useMemo(
     () =>
       ({
@@ -200,6 +236,22 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
         calendarColor: colorOverrides[event.calendarId] || event.calendarColor || colors.google,
       })),
     [overlayEvents, colorOverrides, colors.google],
+  );
+
+  const smartTagSamples = useMemo<SmartTagTarget[]>(
+    () => [
+      ...calendar.displayItems.map((item) => ({
+        calendarId: item.calendar.kind === "task" ? "tasks" : "events",
+        title: item.title,
+      })),
+      ...overlayEvents.map((event) => ({
+        calendarId: event.calendarId,
+        title: event.title,
+        location: event.location,
+        description: event.description,
+      })),
+    ],
+    [calendar.displayItems, overlayEvents],
   );
 
   useEffect(() => {
@@ -260,7 +312,10 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
     [calendar.displayItems, busyBlocks, shownOverlayEvents],
   );
 
-  const itemsForDay = useCallback((date: Date) => timelineFor(date, sources), [timelineFor, sources]);
+  const itemsForDay = useCallback(
+    (date: Date) => applySmartTags(timelineFor(date, sources), smartTagMatcher),
+    [timelineFor, sources, smartTagMatcher],
+  );
 
   const dayItems = useMemo(() => itemsForDay(focus), [itemsForDay, focus]);
 
@@ -651,6 +706,9 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
           googleCalendars={sidebarCalendars}
           colorOverrides={colorOverrides}
           onColorOverrides={setColorOverrides}
+          smartTags={smartTags}
+          onSmartTags={setSmartTags}
+          smartTagSamples={smartTagSamples}
         />
       </SideNav>
       <div className="calendar-shell">

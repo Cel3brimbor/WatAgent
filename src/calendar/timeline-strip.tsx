@@ -1,5 +1,6 @@
 "use client";
 
+import type { CSSProperties } from "react";
 import type { TimelineItem } from "@/calendar/types";
 import { formatTime } from "@/calendar/date-utils";
 
@@ -19,6 +20,16 @@ function timeRange(item: TimelineItem): string {
 function itemLocation(item: TimelineItem): string | null {
   const loc = item.google?.location?.trim();
   return loc ? loc : null;
+}
+
+const HEX = /^#[0-9a-fA-F]{6}$/;
+
+function stripColorStyle(color: string | undefined): CSSProperties | undefined {
+  if (!color || !HEX.test(color)) return undefined;
+  return {
+    borderLeftColor: color,
+    background: `color-mix(in srgb, ${color} 22%, transparent)`,
+  };
 }
 
 function StripCardBody({
@@ -55,21 +66,13 @@ export function TimelineStrip({ item, compact, layout = "inline", onOpen, onComp
 
   if (item.kind === "gcal_event") {
     const timeLabel = item.allDay ? null : timeRange(item);
-    const rawColor = item.google?.calendarColor ?? "";
-    const color = /^#[0-9a-fA-F]{6}$/.test(rawColor) ? rawColor : undefined;
     return (
       <button
         type="button"
         className={`calendar-strip is-gcal-event${compact ? " is-compact" : ""}${layoutClass}`}
         aria-label={item.title}
-        style={
-          color
-            ? {
-                borderLeftColor: color,
-                background: `color-mix(in srgb, ${color} 22%, transparent)`,
-              }
-            : undefined
-        }
+        title={item.smartTag ? `${item.title} · ${item.smartTag.name}` : undefined}
+        style={stripColorStyle(item.smartTag?.color ?? item.google?.calendarColor)}
         onClick={(event) => {
           event.stopPropagation();
           onOpen(item, event.currentTarget.getBoundingClientRect());
@@ -93,6 +96,8 @@ export function TimelineStrip({ item, compact, layout = "inline", onOpen, onComp
     <button
       type="button"
       className={`calendar-strip is-${item.kind}${item.completed ? " is-done" : ""}${item.pendingApproval ? " is-pending" : ""}${compact ? " is-compact" : ""}${layoutClass}`}
+      title={item.smartTag ? `${item.title} · ${item.smartTag.name}` : undefined}
+      style={stripColorStyle(item.smartTag?.color)}
       onClick={(event) => {
         event.stopPropagation();
         onOpen(item);

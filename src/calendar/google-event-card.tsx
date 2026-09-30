@@ -287,6 +287,14 @@ export function GoogleEventCard({ item, anchor, onClose, onEdit, onDelete }: Pro
           <span className="gcal-card-cal" style={{ background: color }} aria-hidden="true" />
           <span>{calendarName}</span>
         </li>
+        {item.smartTag ? (
+          <li>
+            <span className="gcal-card-cal is-tag" style={{ background: item.smartTag.color }} aria-hidden="true" />
+            <span>
+              {item.smartTag.name} <span className="gcal-card-muted">· Smart tag, only in WatAgent</span>
+            </span>
+          </li>
+        ) : null}
         {reminder ? (
           <li>
             <Icon>

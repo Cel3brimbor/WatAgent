@@ -5,40 +5,22 @@ import type { CalendarView } from "@/calendar/types";
 import { addDays, addMonths, isToday, monthCells, startOfLocalDay, startOfWeek } from "@/calendar/date-utils";
 import type { GoogleCalendarRef } from "@/calendar/google-calendar-client";
 import { isExcludedGoogleCalendarName } from "@/calendar/calendar-lists";
-import { isSidebarHidden, type CalendarColors, type CalendarSourceFilter } from "@/calendar/preferences";
-
-const PALETTE = [
-  "#ac725e",
-  "#d06b64",
-  "#f83a22",
-  "#fa573c",
-  "#ff7537",
-  "#ffad46",
-  "#42d692",
-  "#16a765",
-  "#7bd148",
-  "#b3dc6c",
-  "#fbe983",
-  "#fad165",
-  "#92e1c0",
-  "#9fe1e7",
-  "#9fc6e7",
-  "#4986e7",
-  "#9a9cff",
-  "#b99aff",
-  "#c2c2c2",
-  "#cabdbf",
-  "#cca6ac",
-  "#f691b2",
-  "#cd74e6",
-  "#a47ae2",
-];
+import {
+  CALENDAR_PALETTE,
+  isSidebarHidden,
+  type CalendarColors,
+  type CalendarSourceFilter,
+} from "@/calendar/preferences";
+import type { SmartTag, SmartTagTarget } from "@/calendar/smart-tags";
+import { SmartTagsPanel } from "@/calendar/smart-tags-panel";
+import { CheckIcon, ChevronIcon, DotsIcon, GoogleCalendarIcon } from "@/calendar/sidebar-icons";
 
 type Row = {
   id: string;
   name: string;
   color: string;
   checked: boolean;
+  google?: boolean;
 };
 
 type MenuState = {
@@ -61,6 +43,9 @@ type Props = {
   googleCalendars: GoogleCalendarRef[];
   colorOverrides: Record<string, string>;
   onColorOverrides: (next: Record<string, string>) => void;
+  smartTags: SmartTag[];
+  onSmartTags: (next: SmartTag[]) => void;
+  smartTagSamples: SmartTagTarget[];
 };
 
 function sameDay(a: Date, b: Date): boolean {
@@ -83,10 +68,13 @@ export function CalendarSidePanel({
   googleCalendars,
   colorOverrides,
   onColorOverrides,
+  smartTags,
+  onSmartTags,
+  smartTagSamples,
 }: Props) {
   const [cursor, setCursor] = useState(() => startOfLocalDay(focus));
   const [menu, setMenu] = useState<MenuState | null>(null);
-  const [openGroups, setOpenGroups] = useState({ mine: true, other: true, hidden: true });
+  const [openGroups, setOpenGroups] = useState({ watagent: true, other: true, hidden: true });
   const menuRef = useRef<HTMLDivElement | null>(null);
   const headingId = useId();
 
@@ -123,20 +111,21 @@ export function CalendarSidePanel({
     { id: "events", name: "WatAgent", color: colors.event, checked: sources.events },
     { id: "tasks", name: "Tasks", color: colors.task, checked: sources.tasks },
   ];
-  const googleRows = googleCalendars
+  const googleRows: Row[] = googleCalendars
     .filter((calendar) => !isExcludedGoogleCalendarName(calendar.name))
     .map((calendar) => ({
       id: calendar.id,
       name: calendar.name,
       color: colorOverrides[calendar.id] || calendar.color || colors.google,
       checked: googleChecked(sources, calendar.id),
-      group: calendar.group,
+      google: true,
     }));
   const allRows: Row[] = [...localRows, ...googleRows];
   const visible = (row: Row) => !isSidebarHidden(sources, row.id);
-  const mineRows = [...localRows, ...googleRows.filter((row) => row.group === "mine")].filter(visible);
-  const otherRows = googleRows.filter((row) => row.group !== "mine").filter(visible);
+  const watagentRows = localRows.filter(visible);
+  const otherRows = googleRows.filter(visible);
   const hiddenRows = allRows.filter((row) => isSidebarHidden(sources, row.id));
+  const smartTagCalendars = allRows.map((row) => ({ id: row.id, name: row.name, google: Boolean(row.google) }));
 
   function toggle(id: string, checked: boolean) {
     if (id === "events") {
@@ -284,11 +273,11 @@ export function CalendarSidePanel({
       </div>
       <div className="side-cal-groups">
         <CalendarGroup
-          title="My calendars"
+          title="WatAgent Calendars"
           headingId={headingId}
-          open={openGroups.mine}
-          onToggle={() => setOpenGroups((current) => ({ ...current, mine: !current.mine }))}
-          rows={mineRows}
+          open={openGroups.watagent}
+          onToggle={() => setOpenGroups((current) => ({ ...current, watagent: !current.watagent }))}
+          rows={watagentRows}
           menuId={menu?.id}
           onToggleRow={toggle}
           onOpenMenu={openRowMenu}
@@ -304,6 +293,12 @@ export function CalendarSidePanel({
             onOpenMenu={openRowMenu}
           />
         ) : null}
+        <SmartTagsPanel
+          tags={smartTags}
+          onChange={onSmartTags}
+          calendars={smartTagCalendars}
+          samples={smartTagSamples}
+        />
         {hiddenRows.length > 0 ? (
           <CalendarGroup
             title="Hidden calendars"
@@ -381,6 +376,7 @@ function CalendarGroup({
                   {row.checked ? <CheckIcon /> : null}
                 </button>
               )}
+              {row.google ? <GoogleCalendarIcon /> : null}
               <span className="side-cal-name">{row.name}</span>
               {hidden ? (
                 <button type="button" className="side-cal-unhide" onClick={() => onUnhide?.(row.id)}>
@@ -450,7 +446,7 @@ function CalendarOptionsMenu({
         Hide calendar
       </button>
       <div className="side-cal-swatches" role="group" aria-label="Color">
-        {PALETTE.map((color) => (
+        {CALENDAR_PALETTE.map((color) => (
           <button
             key={color}
             type="button"
@@ -463,31 +459,5 @@ function CalendarOptionsMenu({
         ))}
       </div>
     </div>
-  );
-}
-
-function ChevronIcon({ open }: { open: boolean }) {
-  return (
-    <svg viewBox="0 0 16 16" aria-hidden="true" className={open ? "is-open" : ""}>
-      <path d="M4.5 6.25 8 9.75l3.5-3.5" />
-    </svg>
-  );
-}
-
-function CheckIcon() {
-  return (
-    <svg viewBox="0 0 16 16" aria-hidden="true">
-      <path d="M3.2 8.3 6.4 11.4 12.8 4.6" />
-    </svg>
-  );
-}
-
-function DotsIcon() {
-  return (
-    <svg viewBox="0 0 16 16" aria-hidden="true">
-      <circle cx="8" cy="3.2" r="1.15" />
-      <circle cx="8" cy="8" r="1.15" />
-      <circle cx="8" cy="12.8" r="1.15" />
-    </svg>
   );
 }

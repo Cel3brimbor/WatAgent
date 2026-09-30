@@ -47,6 +47,8 @@ export type TimelineItem = {
   completed?: boolean;
   pendingApproval?: boolean;
   google?: GoogleEventDetails;
+  /** Display-only overlay; never sent to Google or the API. */
+  smartTag?: { id: string; name: string; color: string };
 };
 
 export type CalendarView = "day" | "week" | "month" | "year";

@@ -563,6 +563,320 @@ select {
   box-shadow: 0 0 0 2px var(--paper), 0 0 0 3.5px var(--ink);
 }
 
+.gcal-icon {
+  width: 0.95rem;
+  height: 0.95rem;
+  flex-shrink: 0;
+}
+
+.side-nav svg.gcal-icon {
+  width: 0.95rem;
+  height: 0.95rem;
+  stroke: none;
+}
+
+.smart-tags-head {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+}
+
+.smart-tags-head .side-cal-heading {
+  flex: 1;
+  min-width: 0;
+}
+
+.smart-tags-add {
+  display: grid;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  margin-bottom: 0.2rem;
+  flex-shrink: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-soft);
+}
+
+.smart-tags-add:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--accent-deep);
+}
+
+.side-nav .smart-tags-add svg {
+  width: 0.9rem;
+  height: 0.9rem;
+  stroke-width: 1.8;
+}
+
+.smart-tags-empty {
+  padding: 0.1rem 0.2rem 0.2rem;
+}
+
+.smart-tags-empty p {
+  margin: 0 0 0.35rem;
+  color: var(--ink-soft);
+  font-size: 0.76rem;
+  line-height: 1.4;
+}
+
+.smart-tag-name {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+
+.side-cal-row.is-paused .smart-tag-name {
+  color: var(--ink-soft);
+}
+
+.smart-tag.is-editing > .side-cal-row {
+  background: var(--hover);
+}
+
+.smart-tag.is-editing .side-cal-more {
+  opacity: 1;
+}
+
+.smart-tag-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin: 0.2rem 0 0.45rem;
+  padding: 0.55rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel-solid);
+}
+
+.smart-tag-editor select,
+.smart-tag-input {
+  width: 100%;
+  min-width: 0;
+  min-height: 1.85rem;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background-color: var(--panel-solid);
+  color: var(--ink);
+  font-size: 0.78rem;
+}
+
+.smart-tag-input {
+  padding: 0.3rem 0.5rem;
+}
+
+.smart-tag-editor select {
+  padding: 0.3rem 1.5rem 0.3rem 0.45rem;
+  background-position: right 0.35rem center;
+  background-size: 0.85rem 0.85rem;
+}
+
+.smart-tag-input:focus,
+.smart-tag-editor select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--glow);
+}
+
+.smart-tag-input.is-invalid {
+  border-color: var(--danger);
+}
+
+.smart-tag-swatches {
+  margin-top: 0;
+  padding: 0.1rem 0;
+  border-top: 0;
+}
+
+.smart-tag-custom-color {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--ink-soft);
+  font-size: 0.74rem;
+  cursor: pointer;
+}
+
+.smart-tag-custom-color input {
+  width: 1.4rem;
+  height: 1.4rem;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.smart-tag-section-label {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding-top: 0.35rem;
+  border-top: 1px solid var(--line);
+  color: var(--ink-soft);
+  font-size: 0.74rem;
+  font-weight: 650;
+}
+
+.smart-tag-section-label select {
+  width: auto;
+}
+
+.side-cal-list .smart-tag-rules {
+  gap: 0.45rem;
+}
+
+.smart-tag-rule {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.smart-tag-rule + .smart-tag-rule {
+  padding-top: 0.45rem;
+  border-top: 1px dashed var(--line);
+}
+
+.smart-tag-rule-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+  gap: 0.25rem;
+}
+
+.smart-tag-rule-row.is-value {
+  display: flex;
+}
+
+.smart-tag-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 0.72rem;
+}
+
+.smart-tag-link {
+  align-self: flex-start;
+  padding: 0.1rem 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font-size: 0.76rem;
+  font-weight: 650;
+}
+
+.smart-tag-link:hover {
+  color: var(--accent-deep);
+  text-decoration: underline;
+}
+
+.smart-tag-skip {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.side-cal-list .smart-tag-skip-list {
+  gap: 0;
+  max-height: 11rem;
+  overflow: auto;
+}
+
+.smart-tag-skip-list label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 1.6rem;
+  padding: 0.05rem 0.2rem;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.smart-tag-skip-list label:hover {
+  background: var(--hover);
+}
+
+.smart-tag-skip-list input {
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.smart-tag-skip-list span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.smart-tag-hint {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
+
+.smart-tag-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding-top: 0.4rem;
+  border-top: 1px solid var(--line);
+}
+
+.smart-tag-icon-btn {
+  display: grid;
+  place-items: center;
+  width: 1.7rem;
+  height: 1.7rem;
+  flex-shrink: 0;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+  line-height: 1;
+}
+
+.smart-tag-icon-btn:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+.smart-tag-delete,
+.smart-tag-done {
+  min-height: 1.7rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.76rem;
+  font-weight: 650;
+}
+
+.smart-tag-delete {
+  margin-left: auto;
+  border: 0;
+  background: transparent;
+  color: var(--danger);
+}
+
+.smart-tag-delete:hover {
+  background: rgba(163, 59, 45, 0.08);
+}
+
+.smart-tag-done {
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.smart-tag-done:hover {
+  background: var(--accent-deep);
+  border-color: var(--accent-deep);
+}
+
 .app-frame.is-nav-collapsed .side-nav-extra {
   display: none;
 }
@@ -1786,6 +2100,15 @@ select {
   height: 1.05rem;
   margin: 0.15rem 0 0 0.1rem;
   border-radius: 3px;
+}
+
+.gcal-card-cal.is-tag {
+  border-radius: 999px;
+}
+
+.gcal-card-muted {
+  color: #5f6368;
+  font-size: 0.8rem;
 }
 
 .chat-panel {
