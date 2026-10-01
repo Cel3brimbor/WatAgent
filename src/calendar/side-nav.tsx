@@ -20,15 +20,20 @@ const BARS: Array<{ id: AppSection; label: string }> = [
 export function SideNav({ section, collapsed, onSection, onToggle, children }: Props) {
   return (
     <nav className="side-nav" aria-label="Sections">
-      <button
-        type="button"
-        className="side-nav-toggle"
-        aria-expanded={!collapsed}
-        aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-        onClick={onToggle}
-      >
-        <MenuIcon />
-      </button>
+      <div className="side-nav-head">
+        <button
+          type="button"
+          className="side-nav-toggle"
+          aria-expanded={!collapsed}
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          onClick={onToggle}
+        >
+          <MenuIcon />
+        </button>
+        <span className="side-nav-brand" aria-hidden="true">
+          WatAgent
+        </span>
+      </div>
       <div className="side-nav-group">
         {BARS.map((bar) => (
           <button

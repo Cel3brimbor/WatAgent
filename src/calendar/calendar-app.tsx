@@ -851,15 +851,14 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
       <header className="calendar-toolbar">
         <div className="calendar-toolbar-left">
           {section === "calendar" ? (
+            <h2 aria-live="polite">{formatFocusLabel(focus, view, weekStartsOn)}</h2>
+          ) : (
+            <h2>{section === "tasks" ? "To-do list" : "Settings"}</h2>
+          )}
+        </div>
+        <div className="calendar-toolbar-right">
+          {section === "calendar" ? (
             <>
-              <button
-                type="button"
-                className="ghost-btn"
-                title="Today (T)"
-                onClick={() => setFocus(startOfLocalDay(new Date()))}
-              >
-                Today
-              </button>
               <div className="calendar-step">
                 <button
                   type="button"
@@ -872,6 +871,14 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
                 </button>
                 <button
                   type="button"
+                  className="calendar-today-btn"
+                  title="Today (T)"
+                  onClick={() => setFocus(startOfLocalDay(new Date()))}
+                >
+                  Today
+                </button>
+                <button
+                  type="button"
                   className="icon-btn"
                   aria-label="Next"
                   title="Next (→)"
@@ -880,24 +887,8 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
                   <ChevronRightIcon />
                 </button>
               </div>
-              <h2 aria-live="polite">{formatFocusLabel(focus, view, weekStartsOn)}</h2>
+              <SegmentedControl label="Calendar view" value={view} options={VIEW_OPTIONS} onChange={setView} />
             </>
-          ) : (
-            <h2>{section === "tasks" ? "To-do list" : "Settings"}</h2>
-          )}
-        </div>
-        <div className="calendar-toolbar-right">
-          {section === "calendar" ? (
-            <SegmentedControl label="Calendar view" value={view} options={VIEW_OPTIONS} onChange={setView} />
-          ) : null}
-          {section === "tasks" ? (
-            <button
-              type="button"
-              className="primary-btn"
-              onClick={() => setDraft({ ...defaultAllDayDraft(startOfLocalDay(new Date())), kind: "task" })}
-            >
-              Add task
-            </button>
           ) : null}
           <button
             type="button"
