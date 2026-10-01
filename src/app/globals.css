@@ -1,14 +1,14 @@
 :root {
   --ink: #14241f;
   --ink-soft: #3d5249;
-  --paper: #f4f7f5;
+  --paper: #f5f8f6;
   --panel: rgba(255, 255, 255, 0.82);
   --panel-solid: #ffffff;
   --line: rgba(20, 36, 31, 0.12);
   --accent: #1f6f5b;
   --accent-deep: #0f3d32;
   --on-accent: #f4f7f5;
-  --danger: #a33b2d;
+  --danger: #c0392b;
   --glow: rgba(31, 111, 91, 0.18);
   --hover: rgba(31, 111, 91, 0.06);
   --press: rgba(31, 111, 91, 0.12);
@@ -40,9 +40,9 @@
   --pop: 0.96;
   --nudge: 14px;
   --sheet-travel: 100%;
-  --event-color: #8ab4ff;
-  --task-color: #81c995;
-  --gcal-color: #039be5;
+  --event-color: #3f9d85;
+  --task-color: #e0a43a;
+  --gcal-color: #5b7fd6;
   --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none'%3E%3Cpath d='M4.25 6.25 8 9.75l3.75-3.5' stroke='%233d5249' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -1638,7 +1638,7 @@ select {
   left: 0;
   right: 0;
   height: 2px;
-  background: #c23b2e;
+  background: var(--danger);
   z-index: 2;
   pointer-events: none;
 }
@@ -1651,7 +1651,7 @@ select {
   width: 10px;
   height: 10px;
   border-radius: 999px;
-  background: #c23b2e;
+  background: var(--danger);
 }
 
 .calendar-week-head {
@@ -2082,7 +2082,7 @@ select {
   border: 0;
   border-radius: 4px;
   background: transparent;
-  color: #c4920a;
+  color: #b7791f;
 }
 
 .ai-approval-diff-toggle .glyph {
@@ -2096,7 +2096,7 @@ select {
 }
 
 .ai-approval-diff-toggle:hover {
-  background: color-mix(in srgb, #c4920a 16%, transparent);
+  background: color-mix(in srgb, #b7791f 16%, transparent);
 }
 
 .ai-approval-diff {
@@ -2133,7 +2133,7 @@ select {
 }
 
 .ai-approval-diff-arrow {
-  color: #c4920a;
+  color: #b7791f;
   font-weight: 700;
 }
 
@@ -2177,7 +2177,7 @@ select {
 }
 
 .ai-approval-sign.is-edit {
-  color: #c4920a;
+  color: #b7791f;
 }
 
 .ai-approval-title {
@@ -3037,7 +3037,7 @@ select {
 }
 
 .gcal-card-rows a {
-  color: #1a73e8;
+  color: var(--accent);
   text-decoration: none;
 }
 
