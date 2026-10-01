@@ -29,7 +29,11 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        {/* eslint-disable-next-line @next/next/no-sync-scripts -- must run before first paint to avoid a theme flash */}
+        <script src="/tea-theme.js" />
+      </head>
       <body>{children}</body>
     </html>
   );

@@ -112,3 +112,29 @@ export function ToolIcon(props: IconProps) {
     </Glyph>
   );
 }
+
+export function SunIcon(props: IconProps) {
+  return (
+    <Glyph {...props} strokeWidth={1.5}>
+      <circle cx="8" cy="8" r="2.75" />
+      <path d="M8 1.75v1.5M8 12.75v1.5M1.75 8h1.5M12.75 8h1.5M3.6 3.6l1.05 1.05M11.35 11.35l1.05 1.05M3.6 12.4l1.05-1.05M11.35 4.65l1.05-1.05" />
+    </Glyph>
+  );
+}
+
+export function MoonIcon(props: IconProps) {
+  return (
+    <Glyph {...props} strokeWidth={1.5}>
+      <path d="M13.25 9.6A5.5 5.5 0 0 1 6.4 2.75a5.5 5.5 0 1 0 6.85 6.85Z" />
+    </Glyph>
+  );
+}
+
+export function SystemIcon(props: IconProps) {
+  return (
+    <Glyph {...props} strokeWidth={1.5}>
+      <rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5" />
+      <path d="M5.75 14h4.5M8 11.25V14" />
+    </Glyph>
+  );
+}

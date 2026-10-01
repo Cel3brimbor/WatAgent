@@ -63,43 +63,321 @@
 }
 
 /*same paper-and-ink idea at night: warm charcoal, lifted terracotta, dark ink on accent fills*/
-@media (prefers-color-scheme: dark) {
-  :root {
-    --ink: #ece6dc;
-    --ink-soft: #a39a8c;
-    --paper: #161412;
-    --panel: rgba(31, 28, 24, 0.86);
-    --panel-solid: #1f1c18;
-    --line: rgba(236, 230, 220, 0.12);
-    --line-soft: rgba(236, 230, 220, 0.055);
-    --line-strong: rgba(236, 230, 220, 0.24);
-    --nav-bg: #1b1815;
-    --surface-sunken: rgba(0, 0, 0, 0.14);
-    --accent: #e07a5a;
-    --accent-deep: #f2a88c;
-    --accent-soft: rgba(224, 122, 90, 0.08);
-    --on-accent: #1a0f0a;
-    --danger: #ef6b5f;
-    --danger-soft: rgba(239, 107, 95, 0.14);
-    --success: #8fbf86;
-    --warning: #e0ad55;
-    --busy-color: #857c70;
-    --glow: rgba(224, 122, 90, 0.2);
-    --hover: rgba(236, 230, 220, 0.06);
-    --press: rgba(236, 230, 220, 0.11);
-    --shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
-    --shadow-popover:
-      0 0 0 1px rgba(236, 230, 220, 0.1),
-      0 12px 32px rgba(0, 0, 0, 0.45);
-    --shadow-dialog:
-      0 0 0 1px rgba(236, 230, 220, 0.1),
-      0 24px 64px rgba(0, 0, 0, 0.55);
-    --material-bar: rgba(22, 20, 18, 0.85);
-    --material-popover: rgba(36, 32, 28, 0.92);
-    --scrim: rgba(0, 0, 0, 0.55);
-    --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none'%3E%3Cpath d='M4.25 6.25 8 9.75l3.75-3.5' stroke='%23a39a8c' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-    color-scheme: dark;
-  }
+:root[data-scheme="dark"] {
+  --ink: #ece6dc;
+  --ink-soft: #a39a8c;
+  --paper: #161412;
+  --panel: rgba(31, 28, 24, 0.86);
+  --panel-solid: #1f1c18;
+  --line: rgba(236, 230, 220, 0.12);
+  --line-soft: rgba(236, 230, 220, 0.055);
+  --line-strong: rgba(236, 230, 220, 0.24);
+  --nav-bg: #1b1815;
+  --surface-sunken: rgba(0, 0, 0, 0.14);
+  --accent: #e07a5a;
+  --accent-deep: #f2a88c;
+  --accent-soft: rgba(224, 122, 90, 0.08);
+  --on-accent: #1a0f0a;
+  --danger: #ef6b5f;
+  --danger-soft: rgba(239, 107, 95, 0.14);
+  --success: #8fbf86;
+  --warning: #e0ad55;
+  --busy-color: #857c70;
+  --glow: rgba(224, 122, 90, 0.2);
+  --hover: rgba(236, 230, 220, 0.06);
+  --press: rgba(236, 230, 220, 0.11);
+  --shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+  --shadow-popover:
+    0 0 0 1px rgba(236, 230, 220, 0.1),
+    0 12px 32px rgba(0, 0, 0, 0.45);
+  --shadow-dialog:
+    0 0 0 1px rgba(236, 230, 220, 0.1),
+    0 24px 64px rgba(0, 0, 0, 0.55);
+  --material-bar: rgba(22, 20, 18, 0.85);
+  --material-popover: rgba(36, 32, 28, 0.92);
+  --scrim: rgba(0, 0, 0, 0.55);
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none'%3E%3Cpath d='M4.25 6.25 8 9.75l3.75-3.5' stroke='%23a39a8c' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  color-scheme: dark;
+}
+
+/*tea themes: each swaps paper, ink and accent; surfaces and glows derive from those so light and dark stay in step.
+  Earl Grey is the base palette above. Ids are mirrored in src/shared/tea-theme.ts and public/tea-theme.js*/
+:root[data-tea] {
+  --panel: color-mix(in srgb, var(--panel-solid) 86%, transparent);
+  --accent-soft: color-mix(in srgb, var(--accent) 6%, transparent);
+  --glow: color-mix(in srgb, var(--accent) 16%, transparent);
+  --material-bar: color-mix(in srgb, var(--paper) 85%, transparent);
+  --material-popover: color-mix(in srgb, var(--panel-solid) 90%, transparent);
+}
+
+:root[data-tea="lady-grey"] {
+  --paper: #f5f6f8;
+  --panel-solid: #fcfcfd;
+  --nav-bg: #eaecf1;
+  --ink: #1b1c21;
+  --ink-soft: #60636e;
+  --accent: #5a6fa8;
+  --accent-deep: #3c4e7f;
+  --on-accent: #f7f9fe;
+}
+
+:root[data-tea="assam"] {
+  --paper: #f7f1ea;
+  --panel-solid: #fdf9f4;
+  --nav-bg: #ede3d7;
+  --ink: #221913;
+  --ink-soft: #6f5e50;
+  --accent: #9a4a1f;
+  --accent-deep: #6b3012;
+  --on-accent: #fff8f2;
+}
+
+:root[data-tea="ceylon"] {
+  --paper: #fbf6ec;
+  --panel-solid: #fffcf5;
+  --nav-bg: #f3ebd9;
+  --ink: #221c12;
+  --ink-soft: #6e6450;
+  --accent: #b0600f;
+  --accent-deep: #7a4108;
+  --on-accent: #fffaf0;
+}
+
+:root[data-tea="matcha"] {
+  --paper: #f5f6ec;
+  --panel-solid: #fbfcf5;
+  --nav-bg: #ecefdf;
+  --ink: #1c2016;
+  --ink-soft: #5f6852;
+  --accent: #6f8f3a;
+  --accent-deep: #4c6524;
+  --on-accent: #fbfdf4;
+}
+
+:root[data-tea="sunrouge"] {
+  --paper: #f7f4f8;
+  --panel-solid: #fdfbfd;
+  --nav-bg: #eee8f1;
+  --ink: #1e1a22;
+  --ink-soft: #675e6e;
+  --accent: #7b4a9c;
+  --accent-deep: #55306f;
+  --on-accent: #fbf7fd;
+}
+
+:root[data-tea="hojicha"] {
+  --paper: #f6f1ea;
+  --panel-solid: #fcf8f3;
+  --nav-bg: #ece4d8;
+  --ink: #211a14;
+  --ink-soft: #6e6052;
+  --accent: #8a5a33;
+  --accent-deep: #5f3b1e;
+  --on-accent: #fdf8f2;
+}
+
+:root[data-tea="sakura"] {
+  --paper: #fbf5f5;
+  --panel-solid: #fffbfb;
+  --nav-bg: #f4e9ea;
+  --ink: #221a1b;
+  --ink-soft: #6f6062;
+  --accent: #c25b78;
+  --accent-deep: #8f3a52;
+  --on-accent: #fff8fa;
+}
+
+:root[data-tea="yuzu"] {
+  --paper: #fbf8ee;
+  --panel-solid: #fffdf5;
+  --nav-bg: #f3eedb;
+  --ink: #201d12;
+  --ink-soft: #6b6550;
+  --accent: #a17208;
+  --accent-deep: #6e4f04;
+  --on-accent: #fffbef;
+}
+
+:root[data-tea="omija"] {
+  --paper: #faf5f3;
+  --panel-solid: #fffbf9;
+  --nav-bg: #f2e7e3;
+  --ink: #221918;
+  --ink-soft: #6f5d5a;
+  --accent: #b0303f;
+  --accent-deep: #7d1f2a;
+  --on-accent: #fff7f7;
+}
+
+:root[data-tea="longjing"] {
+  --paper: #f2f6f3;
+  --panel-solid: #f9fcfa;
+  --nav-bg: #e6eee9;
+  --ink: #17201b;
+  --ink-soft: #59695f;
+  --accent: #3d8a6e;
+  --accent-deep: #285f4b;
+  --on-accent: #f5fcf8;
+}
+
+:root[data-tea="jasmine"] {
+  --paper: #f7f8f5;
+  --panel-solid: #fdfefc;
+  --nav-bg: #edf0ec;
+  --ink: #1b1e1d;
+  --ink-soft: #616866;
+  --accent: #4e7f88;
+  --accent-deep: #345860;
+  --on-accent: #f6fbfc;
+}
+
+:root[data-tea="puerh"] {
+  --paper: #f4efeb;
+  --panel-solid: #fbf7f4;
+  --nav-bg: #e9e0d9;
+  --ink: #1f1715;
+  --ink-soft: #6a5a54;
+  --accent: #7a3b2e;
+  --accent-deep: #54251c;
+  --on-accent: #fdf6f3;
+}
+
+:root[data-scheme="dark"][data-tea] {
+  --accent-soft: color-mix(in srgb, var(--accent) 8%, transparent);
+  --glow: color-mix(in srgb, var(--accent) 20%, transparent);
+  --material-popover: color-mix(in srgb, var(--panel-solid) 92%, transparent);
+}
+
+:root[data-scheme="dark"][data-tea="lady-grey"] {
+  --paper: #131418;
+  --panel-solid: #1b1d22;
+  --nav-bg: #16171b;
+  --ink: #e6e8ee;
+  --ink-soft: #9da1ad;
+  --accent: #93a6dc;
+  --accent-deep: #bfcbee;
+  --on-accent: #0b1020;
+}
+
+:root[data-scheme="dark"][data-tea="assam"] {
+  --paper: #17110d;
+  --panel-solid: #211a15;
+  --nav-bg: #1b1511;
+  --ink: #eee2d6;
+  --ink-soft: #aa998a;
+  --accent: #d68456;
+  --accent-deep: #ecb592;
+  --on-accent: #1c0d04;
+}
+
+:root[data-scheme="dark"][data-tea="ceylon"] {
+  --paper: #17140e;
+  --panel-solid: #211d15;
+  --nav-bg: #1b1810;
+  --ink: #f0e7d4;
+  --ink-soft: #ada188;
+  --accent: #eb9a45;
+  --accent-deep: #f5c48c;
+  --on-accent: #1d1003;
+}
+
+:root[data-scheme="dark"][data-tea="matcha"] {
+  --paper: #13160f;
+  --panel-solid: #1b1f16;
+  --nav-bg: #171a12;
+  --ink: #e7ecdc;
+  --ink-soft: #9da690;
+  --accent: #a3c26a;
+  --accent-deep: #c6dc9a;
+  --on-accent: #11160a;
+}
+
+:root[data-scheme="dark"][data-tea="sunrouge"] {
+  --paper: #151218;
+  --panel-solid: #1e1a22;
+  --nav-bg: #19161c;
+  --ink: #ebe4ef;
+  --ink-soft: #a69bad;
+  --accent: #b78ad6;
+  --accent-deep: #d6b8ea;
+  --on-accent: #170d1d;
+}
+
+:root[data-scheme="dark"][data-tea="hojicha"] {
+  --paper: #17130f;
+  --panel-solid: #211b16;
+  --nav-bg: #1b1612;
+  --ink: #ede3d6;
+  --ink-soft: #a8998a;
+  --accent: #c9915e;
+  --accent-deep: #e3b88f;
+  --on-accent: #1a1008;
+}
+
+:root[data-scheme="dark"][data-tea="sakura"] {
+  --paper: #181314;
+  --panel-solid: #221b1d;
+  --nav-bg: #1c1617;
+  --ink: #f0e4e6;
+  --ink-soft: #ad9a9e;
+  --accent: #e58da6;
+  --accent-deep: #f3bccb;
+  --on-accent: #1f0b11;
+}
+
+:root[data-scheme="dark"][data-tea="yuzu"] {
+  --paper: #17150e;
+  --panel-solid: #201d14;
+  --nav-bg: #1a1810;
+  --ink: #efe9d6;
+  --ink-soft: #aaa289;
+  --accent: #e5bd4f;
+  --accent-deep: #f2d991;
+  --on-accent: #1a1404;
+}
+
+:root[data-scheme="dark"][data-tea="omija"] {
+  --paper: #181212;
+  --panel-solid: #221a1a;
+  --nav-bg: #1c1515;
+  --ink: #f0e2e0;
+  --ink-soft: #ad9895;
+  --accent: #e5707a;
+  --accent-deep: #f3a9af;
+  --on-accent: #1f0a0c;
+}
+
+:root[data-scheme="dark"][data-tea="longjing"] {
+  --paper: #101613;
+  --panel-solid: #18201c;
+  --nav-bg: #131a16;
+  --ink: #dfece5;
+  --ink-soft: #93a79c;
+  --accent: #74c2a3;
+  --accent-deep: #a9dcc7;
+  --on-accent: #08160f;
+}
+
+:root[data-scheme="dark"][data-tea="jasmine"] {
+  --paper: #121515;
+  --panel-solid: #1a1e1e;
+  --nav-bg: #151818;
+  --ink: #e4eaea;
+  --ink-soft: #9ca6a6;
+  --accent: #85b9c2;
+  --accent-deep: #b6d9df;
+  --on-accent: #0a1517;
+}
+
+:root[data-scheme="dark"][data-tea="puerh"] {
+  --paper: #140f0d;
+  --panel-solid: #1e1714;
+  --nav-bg: #181210;
+  --ink: #ebdfd9;
+  --ink-soft: #a69690;
+  --accent: #c47a66;
+  --accent-deep: #e0ad9e;
+  --on-accent: #1b0b07;
 }
 
 @supports (transition-timing-function: linear(0, 1)) {
@@ -123,7 +401,10 @@
 
 /*materials become solid surfaces rather than glass*/
 @media (prefers-reduced-transparency: reduce) {
-  :root {
+  :root,
+  :root[data-tea],
+  :root[data-scheme="dark"],
+  :root[data-scheme="dark"][data-tea] {
     --panel: var(--panel-solid);
     --material-bar: var(--paper);
     --material-popover: var(--panel-solid);
@@ -133,7 +414,10 @@
 }
 
 @media (prefers-contrast: more) {
-  :root {
+  :root,
+  :root[data-tea],
+  :root[data-scheme="dark"],
+  :root[data-scheme="dark"][data-tea] {
     --ink-soft: #3d3831;
     --line: rgba(29, 27, 24, 0.4);
     --line-soft: rgba(29, 27, 24, 0.2);
@@ -147,15 +431,14 @@
     --scrim: rgba(29, 27, 24, 0.5);
   }
 
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --ink-soft: #d0c8bb;
-      --line: rgba(236, 230, 220, 0.4);
-      --line-soft: rgba(236, 230, 220, 0.2);
-      --hover: rgba(236, 230, 220, 0.12);
-      --press: rgba(236, 230, 220, 0.2);
-      --scrim: rgba(0, 0, 0, 0.65);
-    }
+  :root[data-scheme="dark"],
+  :root[data-scheme="dark"][data-tea] {
+    --ink-soft: #d0c8bb;
+    --line: rgba(236, 230, 220, 0.4);
+    --line-soft: rgba(236, 230, 220, 0.2);
+    --hover: rgba(236, 230, 220, 0.12);
+    --press: rgba(236, 230, 220, 0.2);
+    --scrim: rgba(0, 0, 0, 0.65);
   }
 
   .segmented,
@@ -2907,6 +3190,228 @@ select {
   font-weight: 550;
 }
 
+/*appearance mode picker: miniature windows painted in the current tea's light paper or a fixed night charcoal*/
+.scheme-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.6rem;
+}
+
+.scheme-option {
+  position: relative;
+  display: grid;
+  gap: 0.45rem;
+  justify-items: center;
+  cursor: pointer;
+}
+
+.scheme-option input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.scheme-preview {
+  --win-paper: var(--swatch-paper, #faf7f2);
+  --win-rail: color-mix(in srgb, var(--win-paper) 92%, #000);
+  --win-ink: rgba(29, 27, 24, 0.18);
+  --win-accent: var(--swatch-accent, #c2593b);
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  border-radius: 10px;
+  background: var(--win-paper);
+  box-shadow: 0 0 0 1px var(--line);
+  transition:
+    box-shadow var(--dur-fast) var(--ease-out),
+    transform var(--dur-press) var(--ease-out);
+}
+
+.scheme-preview.is-dark,
+.scheme-half.is-dark {
+  --win-paper: #1c1a17;
+  --win-rail: #161412;
+  --win-ink: rgba(236, 230, 220, 0.2);
+  --win-accent: color-mix(in srgb, var(--swatch-accent, #c2593b) 70%, #fff);
+}
+
+.scheme-half {
+  position: absolute;
+  inset: 0;
+  background: var(--win-paper);
+}
+
+.scheme-half.is-dark {
+  clip-path: polygon(62% 0, 100% 0, 100% 100%, 38% 100%);
+}
+
+.scheme-window {
+  position: absolute;
+  inset: 0;
+  display: flex;
+}
+
+.scheme-rail {
+  width: 22%;
+  background: var(--win-rail);
+  box-shadow: 1px 0 0 var(--win-ink);
+}
+
+.scheme-body {
+  display: grid;
+  flex: 1;
+  align-content: start;
+  gap: 5px;
+  padding: 12% 10%;
+}
+
+.scheme-line {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--win-ink);
+}
+
+.scheme-line.is-head {
+  width: 60%;
+  height: 6px;
+}
+
+.scheme-line.is-short {
+  width: 45%;
+}
+
+.scheme-pill {
+  width: 38%;
+  height: 8px;
+  margin-top: 3px;
+  border-radius: 4px;
+  background: var(--win-accent);
+}
+
+.scheme-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--ink-soft);
+  font-size: 0.82rem;
+  font-weight: 550;
+  transition: color var(--dur-fast) var(--ease-out);
+}
+
+.scheme-option:hover .scheme-preview {
+  box-shadow: 0 0 0 1px var(--line-strong);
+}
+
+.scheme-option:active .scheme-preview {
+  transform: scale(0.98);
+}
+
+.scheme-option:has(input:checked) .scheme-preview {
+  box-shadow:
+    0 0 0 2px var(--panel-solid),
+    0 0 0 4px var(--accent);
+}
+
+.scheme-option:has(input:checked) .scheme-label {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.scheme-option:has(input:focus-visible) .scheme-preview {
+  outline: 2px solid var(--accent);
+  outline-offset: 5px;
+}
+
+/*tea theme picker: a cup-like swatch of each blend's paper with its accent steeped in*/
+.tea-group {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0.35rem 0 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.tea-group legend {
+  margin-bottom: 0.35rem;
+  padding: 0;
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.tea-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  gap: 0.4rem;
+}
+
+.tea-option {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.6rem;
+  border-radius: 10px;
+  box-shadow: 0 0 0 1px var(--line);
+  cursor: pointer;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+
+.tea-option:hover {
+  background: var(--hover);
+}
+
+.tea-option input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.tea-option:has(input:checked) {
+  background: var(--accent-soft);
+  box-shadow: 0 0 0 1.5px var(--accent);
+}
+
+.tea-option:has(input:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.tea-swatch {
+  flex-shrink: 0;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 50%, var(--swatch-accent) 0 42%, var(--swatch-paper) 44%);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
+}
+
+.tea-text {
+  display: grid;
+  min-width: 0;
+  line-height: 1.25;
+}
+
+.tea-name {
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.tea-note {
+  overflow: hidden;
+  color: var(--ink-soft);
+  font-size: 0.75rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .settings-status {
   margin: 0.2rem 0 0;
   font-size: 0.9rem;
@@ -4671,10 +5176,8 @@ h3 {
   --strip-tint: 16%;
 }
 
-@media (prefers-color-scheme: dark) {
-  .calendar-strip:is(.is-event, .is-gcal-event, .is-task) {
-    --strip-tint: 26%;
-  }
+:root[data-scheme="dark"] .calendar-strip:is(.is-event, .is-gcal-event, .is-task) {
+  --strip-tint: 26%;
 }
 
 .settings-section,
