@@ -66,3 +66,18 @@ export async function deleteCalendarItem(id: string): Promise<void> {
     body: JSON.stringify({ id, timeZone: timeZone() }),
   });
 }
+
+export async function importCalendarLink(input: {
+  url: string; rangeStartUTC: number; rangeEndUTC: number;
+  source?: "auto" | "learn" | "portal" | "other";
+}): Promise<{ imported: number; added: number; updated: number; unchanged: number; source: "learn" | "portal" | "other" }> {
+  return apiJson("/api/calendar/import", {
+    method: "POST",
+    cache: "no-store",
+    body: JSON.stringify({ ...input, timeZone: timeZone() }),
+  });
+}
+
+export async function removeImportedCalendar(source: "learn" | "portal"): Promise<{ calendarPriorityOrder: ("learn" | "portal")[] }> {
+  return apiJson("/api/calendar/import", { method: "DELETE", body: JSON.stringify({ source }) });
+}

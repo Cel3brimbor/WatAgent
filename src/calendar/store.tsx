@@ -224,7 +224,8 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
       putItem({
         id,
         title,
-        calendar: { ...input.calendar, googleEventId: existing?.calendar.googleEventId },
+        calendar: { ...input.calendar, googleEventId: existing?.calendar.googleEventId,
+          icsImportId: existing?.calendar.icsImportId, importSource: existing?.calendar.importSource },
         createdAt: existing?.createdAt ?? now,
         updatedAt: now,
       });

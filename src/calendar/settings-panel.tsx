@@ -9,15 +9,26 @@ import {
   startWebGoogleConnect,
   type GoogleCalendarStatus,
 } from "@/calendar/google-calendar-client";
+import type { CalendarNames, CalendarPriorityOrder, CalendarPrioritySource } from "@/calendar/types";
+import { CalendarPriorityPanel } from "@/calendar/calendar-priority-panel";
+import { CalendarImportPanel } from "@/calendar/calendar-import-panel";
 import { isNativeShell } from "@/shared/platform";
 import { Switch } from "@/shared/switch";
 import { MoonIcon, SunIcon, SystemIcon } from "@/shared/icons";
 import { TEA_THEMES, useColorScheme, useTeaTheme, type ColorSchemePreference } from "@/shared/tea-theme";
 
 type Props = {
+  calendarNames: CalendarNames;
+  onRenameCalendar: (source: CalendarPrioritySource, name: string) => void;
+  calendarPriorityOrder: CalendarPriorityOrder;
+  onCalendarPriorityOrderChange: (order: CalendarPriorityOrder) => void;
+  showDuplicateEvents: boolean;
+  onShowDuplicateEventsChange: (show: boolean) => void;
   accountEmail: string | null;
   syncedAt: number | null;
   onChanged: () => void;
+  onImported: (source: "learn" | "portal" | "other") => Promise<void>;
+  onRemoveCalendar: (source: CalendarPrioritySource) => Promise<void>;
   onSyncNow: () => Promise<number | null>;
   onNotice: (message: string) => void;
   requireAiApproval: boolean;
@@ -57,9 +68,17 @@ function formatSynced(ms: number | null): string {
 }
 
 export function SettingsPanel({
+  calendarNames,
+  onRenameCalendar,
+  calendarPriorityOrder,
+  onCalendarPriorityOrderChange,
+  showDuplicateEvents,
+  onShowDuplicateEventsChange,
   accountEmail,
   syncedAt,
   onChanged,
+  onImported,
+  onRemoveCalendar,
   onSyncNow,
   onNotice,
   requireAiApproval,
@@ -185,6 +204,12 @@ export function SettingsPanel({
           </div>
         )}
       </section>
+
+      <CalendarImportPanel onImported={onImported} />
+
+      <CalendarPriorityPanel names={calendarNames} onRename={onRenameCalendar} order={calendarPriorityOrder} onReorder={onCalendarPriorityOrderChange}
+        showDuplicates={showDuplicateEvents} onShowDuplicatesChange={onShowDuplicateEventsChange}
+        onRemove={onRemoveCalendar} />
 
       <section className="settings-section" aria-labelledby="settings-agent">
         <h3 id="settings-agent">Agent</h3>

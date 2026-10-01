@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useId, useLayoutEffect, useRef, useState, type RefObject } from "react";
-import type { CalendarView } from "@/calendar/types";
+import { ConfirmDialog } from "@/shared/confirm-dialog";
+import { RenameCalendarDialog } from "@/calendar/calendar-priority-panel";
+import type { ExternalCalendarRef } from "@/calendar/external-calendars";
+import type { CalendarPrioritySource, CalendarView } from "@/calendar/types";
 import { addDays, addMonths, isToday, monthCells, startOfLocalDay, startOfWeek } from "@/calendar/date-utils";
 import type { GoogleCalendarRef } from "@/calendar/google-calendar-client";
 import { isExcludedGoogleCalendarName } from "@/calendar/calendar-lists";
@@ -44,6 +47,9 @@ type Props = {
   onSources: (next: CalendarSourceFilter) => void;
   colors: CalendarColors;
   onColors: (next: CalendarColors) => void;
+  externalCalendars: ExternalCalendarRef[];
+  onRenameExternal: (source: CalendarPrioritySource, name: string) => void;
+  onRemoveExternal: (source: CalendarPrioritySource) => Promise<void>;
   googleCalendars: GoogleCalendarRef[];
   colorOverrides: Record<string, string>;
   onColorOverrides: (next: Record<string, string>) => void;
@@ -71,6 +77,9 @@ export function CalendarSidePanel({
   onSources,
   colors,
   onColors,
+  externalCalendars,
+  onRenameExternal,
+  onRemoveExternal,
   googleCalendars,
   colorOverrides,
   onColorOverrides,
@@ -80,6 +89,11 @@ export function CalendarSidePanel({
   sidePanelSections,
   onSidePanelSections,
 }: Props) {
+  const [externalOpen, setExternalOpen] = useState(true);
+  const [renaming, setRenaming] = useState<ExternalCalendarRef | null>(null);
+  const [removing, setRemoving] = useState<ExternalCalendarRef | null>(null);
+  const [removeBusy, setRemoveBusy] = useState(false);
+  const [removeError, setRemoveError] = useState<string | null>(null);
   const [cursor, setCursor] = useState(() => startOfLocalDay(focus));
   const [menu, setMenu] = useState<MenuState | null>(null);
   const menuPresence = usePresence(menu);
@@ -129,7 +143,12 @@ export function CalendarSidePanel({
       checked: googleChecked(sources, calendar.id),
       google: true,
     }));
-  const allRows: Row[] = [...localRows, ...googleRows];
+  const externalRows: Row[] = externalCalendars.map((calendar) => ({
+    id: calendar.id, name: calendar.name, color: colorOverrides[calendar.id] || colors.event,
+    checked: !sources.mutedGoogleIds.includes(calendar.id),
+  }));
+  const allRows: Row[] = [...localRows, ...externalRows, ...googleRows];
+  const externalById = (id: string) => externalCalendars.find((calendar) => calendar.id === id);
   const visible = (row: Row) => !isSidebarHidden(sources, row.id);
   const watagentRows = localRows.filter(visible);
   const otherRows = googleRows.filter(visible);
@@ -137,6 +156,10 @@ export function CalendarSidePanel({
   const smartTagCalendars = allRows.map((row) => ({ id: row.id, name: row.name, google: Boolean(row.google) }));
 
   function toggle(id: string, checked: boolean) {
+    if (externalById(id)) {
+      onSources({ ...sources, mutedGoogleIds: checked ? sources.mutedGoogleIds.filter((item) => item !== id) : [...new Set([...sources.mutedGoogleIds, id])] });
+      return;
+    }
     if (id === "events") {
       onSources({ ...sources, events: checked });
       return;
@@ -148,7 +171,7 @@ export function CalendarSidePanel({
     const ids = googleCalendars.map((calendar) => calendar.id);
     if (checked) {
       if (!sources.google) {
-        onSources({ ...sources, google: true, mutedGoogleIds: ids.filter((item) => item !== id) });
+        onSources({ ...sources, google: true, mutedGoogleIds: [...sources.mutedGoogleIds.filter((item) => externalById(item)), ...ids.filter((item) => item !== id)] });
         return;
       }
       onSources({
@@ -179,6 +202,10 @@ export function CalendarSidePanel({
 
   function unhideCalendar(id: string) {
     const hiddenIds = sources.hiddenIds.filter((item) => item !== id);
+    if (externalById(id)) {
+      onSources({ ...sources, hiddenIds, mutedGoogleIds: sources.mutedGoogleIds.filter((item) => item !== id) });
+      return;
+    }
     if (id === "events") {
       onSources({ ...sources, events: true, hiddenIds });
       return;
@@ -196,7 +223,12 @@ export function CalendarSidePanel({
   }
 
   function displayOnly(id: string) {
-    const ids = googleCalendars.map((calendar) => calendar.id);
+    const ids = [...googleCalendars.map((calendar) => calendar.id), ...externalCalendars.map((calendar) => calendar.id)];
+    if (externalById(id)) {
+      onSources({ events: false, tasks: false, google: false, mutedGoogleIds: ids.filter((item) => item !== id), hiddenIds: sources.hiddenIds.filter((item) => item !== id) });
+      setMenu(null);
+      return;
+    }
     if (id === "events") {
       onSources({ events: true, tasks: false, google: false, mutedGoogleIds: ids, hiddenIds: [] });
     } else if (id === "tasks") {
@@ -293,6 +325,11 @@ export function CalendarSidePanel({
           onToggleRow={toggle}
           onOpenMenu={openRowMenu}
         />
+        {externalRows.filter(visible).length > 0 ? <CalendarGroup title="External calendars" open={externalOpen}
+          onToggle={() => setExternalOpen((open) => !open)} rows={externalRows.filter(visible)}
+          menuId={menu?.id} onToggleRow={toggle} onOpenMenu={openRowMenu} /> : null}
+        {removeError ? <p role="alert" className="calendar-import-error">{removeError}</p> : null}
+        {removeBusy ? <p role="status" className="modal-hint">Removing calendar…</p> : null}
         {otherRows.length > 0 ? (
           <CalendarGroup
             title="Other calendars"
@@ -331,8 +368,26 @@ export function CalendarSidePanel({
           onDisplayOnly={() => displayOnly(shownMenu.id)}
           onHide={() => hideCalendar(shownMenu.id)}
           onColor={(color) => paint(shownMenu.id, color)}
+          onRename={externalById(shownMenu.id)?.source !== "other" && externalById(shownMenu.id) ? () => {
+            setRenaming(externalById(shownMenu.id)!); setMenu(null);
+          } : undefined}
+          onRemove={!removeBusy && externalById(shownMenu.id)?.source !== "other" && externalById(shownMenu.id) ? () => {
+            setRemoving(externalById(shownMenu.id)!); setMenu(null);
+          } : undefined}
         />
       ) : null}
+      {renaming ? <RenameCalendarDialog name={renaming.name} onCancel={() => setRenaming(null)} onSave={(name) => {
+        if (renaming.source !== "other") onRenameExternal(renaming.source, name);
+        setRenaming(null);
+      }} /> : null}
+      {removing ? <ConfirmDialog title={`Remove ${removing.name}?`}
+        message="Archive this calendar’s imported events and remove it from the list? Import its link again to restore it."
+        confirmLabel="Remove calendar" onCancel={() => setRemoving(null)} onConfirm={() => {
+          const source = removing.source; setRemoving(null);
+          if (source === "other") return;
+          setRemoveBusy(true); setRemoveError(null);
+          void onRemoveExternal(source).catch(() => setRemoveError("Unable to remove this calendar. Please try again.")).finally(() => setRemoveBusy(false));
+        }} /> : null}
     </div>
   );
 }
@@ -427,6 +482,8 @@ function CalendarOptionsMenu({
   onDisplayOnly,
   onHide,
   onColor,
+  onRename,
+  onRemove,
 }: {
   menuRef: RefObject<HTMLDivElement | null>;
   menu: MenuState;
@@ -434,6 +491,8 @@ function CalendarOptionsMenu({
   onDisplayOnly: () => void;
   onHide: () => void;
   onColor: (color: string) => void;
+  onRename?: () => void;
+  onRemove?: () => void;
 }) {
   const [box, setBox] = useState({ top: menu.top, left: menu.left });
 
@@ -463,6 +522,8 @@ function CalendarOptionsMenu({
       <button type="button" role="menuitem" onClick={onHide}>
         Hide calendar
       </button>
+      {onRename ? <button type="button" role="menuitem" onClick={onRename}>Rename calendar</button> : null}
+      {onRemove ? <button type="button" role="menuitem" onClick={onRemove}>Remove calendar</button> : null}
       <div className="side-cal-swatches" role="group" aria-label="Color">
         {CALENDAR_PALETTE.map((color) => (
           <button

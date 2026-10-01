@@ -1,9 +1,13 @@
+import { calendarNamesOf, calendarPriorityOrderOf, showDuplicateEventsOf } from "@/calendar/calendar-priority";
 import {
   ALL_SOURCES,
   DEFAULT_COLORS,
   HEX_COLOR,
   readCalendarColors,
   readCalendarView,
+  readCalendarNames,
+  readCalendarPriorityOrder,
+  readShowDuplicateEvents,
   readColorOverrides,
   readSidePanelSections,
   readSourceFilter,
@@ -13,11 +17,14 @@ import {
   type SidePanelSectionsOpen,
 } from "@/calendar/preferences";
 import { parseSmartTagsFromUnknown, readSmartTags, type SmartTag } from "@/calendar/smart-tags";
-import type { CalendarView } from "@/calendar/types";
+import type { CalendarNames, CalendarPriorityOrder, CalendarView } from "@/calendar/types";
 
 export type UserCalendarPreferencesV1 = {
   version: 1;
   view: CalendarView;
+  calendarNames: CalendarNames;
+  calendarPriorityOrder: CalendarPriorityOrder;
+  showDuplicateEvents: boolean;
   sources: CalendarSourceFilter;
   colors: CalendarColors;
   colorOverrides: Record<string, string>;
@@ -91,6 +98,9 @@ export function readLocalCalendarPreferences(): UserCalendarPreferencesV1 {
   return {
     version: 1,
     view: readCalendarView(),
+    calendarNames: readCalendarNames(),
+    calendarPriorityOrder: readCalendarPriorityOrder(),
+    showDuplicateEvents: readShowDuplicateEvents(),
     sources: readSourceFilter(),
     colors: readCalendarColors(),
     colorOverrides: readColorOverrides(),
@@ -115,6 +125,9 @@ export function parseUserCalendarPreferencesDoc(
   return {
     version: 1,
     view,
+    calendarNames: calendarNamesOf(rec.calendarNames),
+    calendarPriorityOrder: calendarPriorityOrderOf(rec.calendarPriorityOrder, rec.duplicatePriority),
+    showDuplicateEvents: showDuplicateEventsOf(rec.showDuplicateEvents, rec.duplicatePriority),
     sources,
     colors,
     colorOverrides: rec.colorOverrides !== undefined ? overridesOf(rec.colorOverrides) : fallbacks.colorOverrides,
@@ -128,6 +141,8 @@ export function parseUserCalendarPreferencesDoc(
 }
 
 export function preferencesDocHasContent(doc: UserCalendarPreferencesV1): boolean {
+  if (doc.calendarPriorityOrder[0] !== "learn" || doc.showDuplicateEvents) return true;
+  if (Object.keys(doc.calendarNames).length > 0) return true;
   if (doc.smartTags.length > 0) return true;
   if (doc.navCollapsed) return true;
   if (JSON.stringify(doc.sidePanelSections) !== JSON.stringify(DEFAULT_SIDE_PANEL_SECTIONS)) return true;
