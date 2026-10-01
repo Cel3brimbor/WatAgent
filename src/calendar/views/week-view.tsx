@@ -121,7 +121,11 @@ export function CalendarWeekView({
               ? slots.selection
               : timedDraftSlotForDay(editorDraft ?? null, date);
           return (
-            <div key={date.toISOString()} className="calendar-week-col" {...slots.bind(dayIndex)}>
+            <div
+              key={date.toISOString()}
+              className={`calendar-week-col${isToday(date) ? " is-today" : ""}${date.getDay() % 6 === 0 ? " is-weekend" : ""}`}
+              {...slots.bind(dayIndex)}
+            >
               {HOURS.map((hour) => (
                 <button
                   key={hour}

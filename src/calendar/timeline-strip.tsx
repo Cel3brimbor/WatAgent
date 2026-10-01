@@ -27,10 +27,7 @@ const HEX = /^#[0-9a-fA-F]{6}$/;
 
 function stripColorStyle(color: string | undefined): CSSProperties | undefined {
   if (!color || !HEX.test(color)) return undefined;
-  return {
-    borderLeftColor: color,
-    background: `color-mix(in srgb, ${color} 22%, transparent)`,
-  };
+  return { "--strip-color": color } as CSSProperties;
 }
 
 function StripCardBody({

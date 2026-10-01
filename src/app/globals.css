@@ -5,10 +5,19 @@
   --panel: rgba(255, 255, 255, 0.82);
   --panel-solid: #ffffff;
   --line: rgba(20, 36, 31, 0.12);
+  --line-soft: rgba(20, 36, 31, 0.065);
+  --line-strong: rgba(20, 36, 31, 0.22);
+  --nav-bg: rgba(255, 255, 255, 0.55);
+  --surface-sunken: rgba(20, 36, 31, 0.025);
   --accent: #1f6f5b;
   --accent-deep: #0f3d32;
+  --accent-soft: rgba(31, 111, 91, 0.07);
   --on-accent: #f4f7f5;
   --danger: #c0392b;
+  --danger-soft: rgba(192, 57, 43, 0.1);
+  --success: #1e7a46;
+  --warning: var(--warning);
+  --busy-color: #8a958f;
   --glow: rgba(31, 111, 91, 0.18);
   --hover: rgba(31, 111, 91, 0.06);
   --press: rgba(31, 111, 91, 0.12);
@@ -51,6 +60,49 @@
   color-scheme: light;
 }
 
+/*same green family at night: tinted near-black surfaces, lifted accent, dark ink on accent fills*/
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink: #e2ebe6;
+    --ink-soft: #9db0a7;
+    --paper: #0e1513;
+    --panel: rgba(24, 33, 30, 0.82);
+    --panel-solid: #18211e;
+    --line: rgba(226, 235, 230, 0.12);
+    --line-soft: rgba(226, 235, 230, 0.055);
+    --line-strong: rgba(226, 235, 230, 0.24);
+    --nav-bg: rgba(20, 28, 25, 0.6);
+    --surface-sunken: rgba(0, 0, 0, 0.16);
+    --accent: #4fb596;
+    --accent-deep: #8fd8bf;
+    --accent-soft: rgba(79, 181, 150, 0.09);
+    --on-accent: #07140f;
+    --danger: #e86a5c;
+    --danger-soft: rgba(232, 106, 92, 0.14);
+    --success: #5cc48a;
+    --warning: #e3a944;
+    --busy-color: #7d8b85;
+    --glow: rgba(79, 181, 150, 0.22);
+    --hover: rgba(79, 181, 150, 0.08);
+    --press: rgba(79, 181, 150, 0.16);
+    --shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+    --shadow-popover:
+      0 0 0 0.5px rgba(226, 235, 230, 0.1),
+      0 2px 6px rgba(0, 0, 0, 0.3),
+      0 12px 32px rgba(0, 0, 0, 0.45);
+    --shadow-dialog:
+      0 0 0 0.5px rgba(226, 235, 230, 0.1),
+      0 8px 20px rgba(0, 0, 0, 0.35),
+      0 32px 72px rgba(0, 0, 0, 0.55);
+    --shadow-raised: 0 0 0 0.5px rgba(226, 235, 230, 0.08), 0 1px 3px rgba(0, 0, 0, 0.4);
+    --material-bar: rgba(14, 21, 19, 0.78);
+    --material-popover: rgba(28, 38, 34, 0.86);
+    --scrim: rgba(0, 0, 0, 0.5);
+    --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none'%3E%3Cpath d='M4.25 6.25 8 9.75l3.75-3.5' stroke='%239db0a7' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    color-scheme: dark;
+  }
+}
+
 @supports (transition-timing-function: linear(0, 1)) {
   :root {
     --ease-spring: linear(
@@ -73,9 +125,10 @@
 /*materials become solid surfaces rather than glass*/
 @media (prefers-reduced-transparency: reduce) {
   :root {
-    --panel: #ffffff;
-    --material-bar: #f4f7f5;
-    --material-popover: #ffffff;
+    --panel: var(--panel-solid);
+    --material-bar: var(--paper);
+    --material-popover: var(--panel-solid);
+    --nav-bg: var(--paper);
     --material-filter: none;
   }
 }
@@ -84,13 +137,26 @@
   :root {
     --ink-soft: #24332d;
     --line: rgba(20, 36, 31, 0.4);
-    --panel: #ffffff;
-    --material-bar: #f4f7f5;
-    --material-popover: #ffffff;
+    --line-soft: rgba(20, 36, 31, 0.2);
+    --panel: var(--panel-solid);
+    --material-bar: var(--paper);
+    --material-popover: var(--panel-solid);
+    --nav-bg: var(--paper);
     --material-filter: none;
     --hover: rgba(31, 111, 91, 0.12);
     --press: rgba(31, 111, 91, 0.2);
     --scrim: rgba(15, 28, 24, 0.5);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ink-soft: #c3d1ca;
+      --line: rgba(226, 235, 230, 0.4);
+      --line-soft: rgba(226, 235, 230, 0.2);
+      --hover: rgba(79, 181, 150, 0.16);
+      --press: rgba(79, 181, 150, 0.26);
+      --scrim: rgba(0, 0, 0, 0.65);
+    }
   }
 
   .segmented,
@@ -318,7 +384,7 @@ select {
 
 .ghost-btn:hover:not(:disabled) {
   background: var(--panel-solid);
-  border-color: rgba(20, 36, 31, 0.22);
+  border-color: var(--line-strong);
 }
 
 .ghost-btn.is-active {
@@ -346,7 +412,7 @@ select {
 
 .danger-btn:hover:not(:disabled) {
   background: var(--danger);
-  color: #fff;
+  color: var(--on-accent);
 }
 
 .empty-state {
@@ -371,8 +437,8 @@ select {
   min-height: 100dvh;
   padding: calc(1.5rem + var(--safe-top)) 1.5rem calc(1.5rem + var(--safe-bottom));
   background:
-    radial-gradient(900px 500px at 10% -10%, rgba(31, 111, 91, 0.14), transparent 55%),
-    radial-gradient(700px 400px at 100% 0%, rgba(201, 133, 26, 0.1), transparent 45%),
+    radial-gradient(900px 500px at 10% -10%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 55%),
+    radial-gradient(700px 400px at 100% 0%, color-mix(in srgb, var(--warning) 10%, transparent), transparent 45%),
     var(--paper);
 }
 
@@ -417,7 +483,7 @@ select {
   margin: 0;
   padding: 0.55rem 0.75rem;
   border-radius: 10px;
-  background: rgba(163, 59, 45, 0.1);
+  background: var(--danger-soft);
   color: var(--danger);
   font-size: 0.88rem;
 }
@@ -447,7 +513,7 @@ select {
   flex-shrink: 0;
   padding: 0.7rem 0.55rem;
   border-right: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.55);
+  background: var(--nav-bg);
 }
 
 .side-nav-toggle,
@@ -580,7 +646,7 @@ select {
 
 .side-cal-day.is-today {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   font-weight: 700;
 }
 
@@ -1122,7 +1188,7 @@ select {
 }
 
 .smart-tag-delete:hover {
-  background: rgba(163, 59, 45, 0.08);
+  background: var(--danger-soft);
 }
 
 .smart-tag-done {
@@ -1493,6 +1559,18 @@ select {
   opacity: 0.6;
 }
 
+/*with a pointer the add button waits for its column; touch keeps it visible*/
+@media (hover: hover) {
+  .calendar-all-day-add {
+    opacity: 0;
+  }
+
+  .calendar-all-day-items:hover .calendar-all-day-add:not(:hover),
+  .calendar-week-all-day-col:hover .calendar-all-day-add:not(:hover) {
+    opacity: 0.6;
+  }
+}
+
 .calendar-all-day-add .glyph {
   width: 0.85rem;
   height: 0.85rem;
@@ -1543,7 +1621,12 @@ select {
 }
 
 .calendar-slot-draft-title {
+  color: color-mix(in srgb, var(--event-color) 35%, var(--ink));
   font-weight: 650;
+}
+
+.calendar-slot-draft.is-task .calendar-slot-draft-title {
+  color: color-mix(in srgb, var(--task-color) 35%, var(--ink));
 }
 
 .calendar-slot-draft-time {
@@ -1590,13 +1673,21 @@ select {
   display: block;
   width: 100%;
   border: 0;
-  border-top: 1px solid var(--line);
+  border-top: 1px solid var(--line-soft);
   background: transparent;
   pointer-events: none;
 }
 
 .calendar-hour-slot:hover {
   background: var(--hover);
+}
+
+.calendar-week-col.is-weekend {
+  background: var(--surface-sunken);
+}
+
+.calendar-week-col.is-today {
+  background: var(--accent-soft);
 }
 
 .calendar-timed-item {
@@ -1704,7 +1795,7 @@ select {
   height: 1.7rem;
   border-radius: 999px;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
 }
 
 .calendar-month {
@@ -1733,13 +1824,16 @@ select {
 .calendar-month-grid {
   flex: 1;
   grid-auto-rows: minmax(8.5rem, 1fr);
+  border-top: 1px solid var(--line);
+  border-left: 1px solid var(--line);
 }
 
 .calendar-month-cell {
   position: relative;
   min-height: 8.5rem;
   padding: 0.35rem;
-  border: 1px solid var(--line);
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
   overflow: hidden;
   cursor: pointer;
 }
@@ -1753,20 +1847,30 @@ select {
   z-index: 8;
 }
 
-.calendar-month-cell.is-outside {
+/*dim the contents, not the cell, so grid lines stay even*/
+.calendar-month-cell.is-outside > :is(.calendar-month-day, .calendar-month-pills, .calendar-more) {
   opacity: 0.45;
 }
 
 .calendar-month-cell.is-today {
-  background: rgba(31, 111, 91, 0.08);
+  background: var(--accent-soft);
 }
 
 .calendar-month-day {
-  display: inline-block;
-  padding: 0.1rem 0.2rem;
-  border: 0;
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.6rem;
+  height: 1.6rem;
+  padding: 0 0.3rem;
+  border-radius: 999px;
   background: transparent;
+  font-size: 0.85rem;
   font-weight: 700;
+}
+
+.calendar-month-cell.is-today .calendar-month-day {
+  background: var(--accent);
+  color: var(--on-accent);
 }
 
 .calendar-month-pills {
@@ -1918,13 +2022,14 @@ select {
 }
 
 .calendar-strip {
+  --strip-color: var(--ink-soft);
   display: flex;
   align-items: center;
   gap: 0.35rem;
   width: 100%;
   padding: 0.2rem 0.4rem;
   border: 1px solid var(--line);
-  border-left: 3px solid var(--ink-soft);
+  border-left: 3px solid var(--strip-color);
   border-radius: 6px;
   background: var(--panel);
   color: var(--ink);
@@ -1938,24 +2043,34 @@ select {
   font-size: 0.7rem;
 }
 
+/*kind colour (or a smart-tag/calendar colour set inline as --strip-color) drives bar, tint and title*/
 .calendar-strip.is-event {
-  border-left-color: var(--event-color);
-  background: color-mix(in srgb, var(--event-color) 22%, transparent);
+  --strip-color: var(--event-color);
 }
 
 .calendar-strip.is-gcal-event {
-  border-left-color: var(--gcal-color);
-  background: color-mix(in srgb, var(--gcal-color) 22%, transparent);
+  --strip-color: var(--gcal-color);
 }
 
 .calendar-strip.is-task {
-  border-left-color: var(--task-color);
-  background: color-mix(in srgb, var(--task-color) 22%, transparent);
+  --strip-color: var(--task-color);
+}
+
+.calendar-strip:is(.is-event, .is-gcal-event, .is-task) {
+  border-color: transparent;
+  border-left-color: var(--strip-color);
+  background: color-mix(in srgb, var(--strip-color) 22%, transparent);
+}
+
+.calendar-strip:is(.is-event, .is-gcal-event, .is-task) .calendar-strip-title {
+  color: color-mix(in srgb, var(--strip-color) 35%, var(--ink));
 }
 
 .calendar-strip.is-gcal-busy {
-  border-left-color: #9aa0a6;
-  background: rgba(154, 160, 166, 0.16);
+  --strip-color: var(--busy-color);
+  border-color: transparent;
+  border-left-color: var(--strip-color);
+  background: color-mix(in srgb, var(--strip-color) 16%, transparent);
   cursor: default;
 }
 
@@ -1964,8 +2079,11 @@ select {
   opacity: 0.7;
 }
 
-.calendar-strip.is-pending {
+.calendar-strip.is-pending,
+.calendar-strip.is-editor-draft {
   border-style: dashed;
+  border-color: color-mix(in srgb, var(--strip-color) 55%, transparent);
+  border-left-color: var(--strip-color);
   opacity: 0.92;
 }
 
@@ -1974,11 +2092,6 @@ select {
   font-size: 0.68rem;
   font-weight: 650;
   opacity: 0.85;
-}
-
-.calendar-strip.is-editor-draft {
-  border-style: dashed;
-  opacity: 0.92;
 }
 
 /*sits under the transcript and scales with the chat column*/
@@ -2082,7 +2195,7 @@ select {
   border: 0;
   border-radius: 4px;
   background: transparent;
-  color: #b7791f;
+  color: var(--warning);
 }
 
 .ai-approval-diff-toggle .glyph {
@@ -2096,7 +2209,7 @@ select {
 }
 
 .ai-approval-diff-toggle:hover {
-  background: color-mix(in srgb, #b7791f 16%, transparent);
+  background: color-mix(in srgb, var(--warning) 16%, transparent);
 }
 
 .ai-approval-diff {
@@ -2133,7 +2246,7 @@ select {
 }
 
 .ai-approval-diff-arrow {
-  color: #b7791f;
+  color: var(--warning);
   font-weight: 700;
 }
 
@@ -2169,7 +2282,7 @@ select {
 }
 
 .ai-approval-sign.is-add {
-  color: #188038;
+  color: var(--success);
 }
 
 .ai-approval-sign.is-delete {
@@ -2177,7 +2290,7 @@ select {
 }
 
 .ai-approval-sign.is-edit {
-  color: #b7791f;
+  color: var(--warning);
 }
 
 .ai-approval-title {
@@ -2214,6 +2327,19 @@ select {
   color: var(--ink-soft);
   font-size: 0.68rem;
   white-space: nowrap;
+}
+
+/*single-line strips: the time gives way before the title does*/
+.calendar-strip:not(.is-card) > .calendar-strip-title {
+  flex: 0 1 auto;
+}
+
+.calendar-strip:not(.is-card) > .calendar-strip-time {
+  flex: 0 1000 auto;
+  min-width: 0;
+  margin-left: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .calendar-strip.is-card {
@@ -2671,6 +2797,7 @@ select {
 
 .settings-page {
   display: grid;
+  align-content: start;
   gap: 0.85rem;
   width: min(32rem, 100%);
   margin: 0 auto;
@@ -2787,6 +2914,7 @@ select {
 
 .settings-actions {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
   flex-wrap: wrap;
   gap: 0.4rem;
@@ -2930,16 +3058,16 @@ select {
 .ghost-btn.is-syncing:disabled {
   opacity: 1;
   min-width: 6.5rem;
-  background: #e4ebe7;
+  background: var(--surface-sunken);
   color: var(--ink-soft);
-  border-color: #d5dfda;
+  border-color: var(--line-strong);
   cursor: default;
 }
 
 .sync-spinner {
   width: 0.9rem;
   height: 0.9rem;
-  border: 2px solid rgba(61, 82, 73, 0.25);
+  border: 2px solid var(--line-strong);
   border-top-color: var(--ink-soft);
   border-radius: 50%;
   animation: sync-spin 0.7s linear infinite;
@@ -2959,8 +3087,8 @@ select {
   overflow: auto;
   padding: 0.85rem 0.85rem 0.7rem;
   border-radius: 14px;
-  background: #fff;
-  color: #3c4043;
+  background: var(--panel-solid);
+  color: var(--ink);
   box-shadow: var(--shadow-dialog);
   transition:
     opacity var(--dur-fast) var(--ease-out),
@@ -2990,7 +3118,7 @@ select {
 .gcal-card-head h3 {
   flex: 1;
   margin: 0;
-  color: #202124;
+  color: var(--ink);
   font-size: 1.35rem;
   font-weight: 500;
   line-height: 1.25;
@@ -3010,12 +3138,12 @@ select {
   border: 0;
   border-radius: 999px;
   background: transparent;
-  color: #5f6368;
+  color: var(--ink-soft);
   text-decoration: none;
 }
 
 .gcal-card-icon-btn:hover {
-  background: rgba(60, 64, 67, 0.08);
+  background: var(--hover);
 }
 
 .gcal-card-rows {
@@ -3031,7 +3159,7 @@ select {
   grid-template-columns: 2.15rem minmax(0, 1fr);
   align-items: start;
   gap: 0.15rem;
-  color: #3c4043;
+  color: var(--ink);
   font-size: 0.9rem;
   line-height: 1.4;
 }
@@ -3054,7 +3182,7 @@ select {
   width: 1.25rem;
   height: 1.25rem;
   margin-top: 0.05rem;
-  color: #5f6368;
+  color: var(--ink-soft);
 }
 
 .gcal-card-cal {
@@ -3069,7 +3197,7 @@ select {
 }
 
 .gcal-card-muted {
-  color: #5f6368;
+  color: var(--ink-soft);
   font-size: 0.8rem;
 }
 
@@ -3325,7 +3453,7 @@ select {
   overscroll-behavior: contain;
   padding: 0.75rem;
   scrollbar-width: thin;
-  scrollbar-color: rgba(20, 36, 31, 0.18) transparent;
+  scrollbar-color: var(--line-strong) transparent;
 }
 
 /*only the newest exchange rises in; history doesn't replay when switching chats*/
@@ -3662,7 +3790,7 @@ select {
 
 .agent-thinking-toggle:hover {
   background: var(--panel-solid);
-  border-color: rgba(20, 36, 31, 0.22);
+  border-color: var(--line-strong);
 }
 
 .agent-thinking-toggle {
@@ -3892,7 +4020,7 @@ select {
   margin: 0;
   padding: 0.4rem 0.6rem;
   border-radius: 8px;
-  background: rgba(163, 59, 45, 0.1);
+  background: var(--danger-soft);
   color: var(--danger);
   font-size: 0.8rem;
 }
