@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import {
   completeIosGoogleConnect,
   disconnectGoogleCalendar,
@@ -11,6 +11,8 @@ import {
 } from "@/calendar/google-calendar-client";
 import { isNativeShell } from "@/shared/platform";
 import { Switch } from "@/shared/switch";
+import { MoonIcon, SunIcon, SystemIcon } from "@/shared/icons";
+import { TEA_THEMES, useColorScheme, useTeaTheme, type ColorSchemePreference } from "@/shared/tea-theme";
 
 type Props = {
   accountEmail: string | null;
@@ -22,6 +24,27 @@ type Props = {
   onRequireAiApprovalChange: (value: boolean) => void;
   onSignOut: () => void;
 };
+
+const SCHEMES: { value: ColorSchemePreference; label: string; Icon: typeof SunIcon }[] = [
+  { value: "light", label: "Light", Icon: SunIcon },
+  { value: "dark", label: "Dark", Icon: MoonIcon },
+  { value: "system", label: "System", Icon: SystemIcon },
+];
+
+//a miniature app window: nav rail, a few lines of text, one accent pill
+function SchemeWindow() {
+  return (
+    <span className="scheme-window">
+      <span className="scheme-rail" />
+      <span className="scheme-body">
+        <span className="scheme-line is-head" />
+        <span className="scheme-line" />
+        <span className="scheme-line is-short" />
+        <span className="scheme-pill" />
+      </span>
+    </span>
+  );
+}
 
 function formatSynced(ms: number | null): string {
   if (!ms) return "Not synced yet";
@@ -46,6 +69,9 @@ export function SettingsPanel({
   const [status, setStatus] = useState<GoogleCalendarStatus | null>(null);
   const [working, setWorking] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [teaTheme, setTeaTheme] = useTeaTheme();
+  const [colorScheme, setColorScheme] = useColorScheme();
+  const tea = TEA_THEMES.flatMap((group) => group.themes).find((theme) => theme.id === teaTheme);
 
   const loadStatus = useCallback(async () => {
     try {
@@ -175,6 +201,75 @@ export function SettingsPanel({
           When on, the Agent queues adds, updates, and deletes for you to approve or reject. Pending changes stay saved
           until you decide and are not sent to Google Calendar until approved.
         </p>
+      </section>
+
+      <section className="settings-section" aria-labelledby="settings-theme">
+        <h3 id="settings-theme">Appearance</h3>
+        <fieldset className="tea-group">
+          <legend>Mode</legend>
+          <div
+            className="scheme-options"
+            style={{ "--swatch-paper": tea?.paper, "--swatch-accent": tea?.accent } as CSSProperties}
+          >
+            {SCHEMES.map(({ value, label, Icon }) => (
+              <label key={value} className="scheme-option">
+                <input
+                  type="radio"
+                  name="color-scheme"
+                  value={value}
+                  checked={colorScheme === value}
+                  onChange={() => setColorScheme(value)}
+                />
+                <span className={`scheme-preview is-${value}`} aria-hidden="true">
+                  {value === "system" ? (
+                    <>
+                      <span className="scheme-half is-light">
+                        <SchemeWindow />
+                      </span>
+                      <span className="scheme-half is-dark">
+                        <SchemeWindow />
+                      </span>
+                    </>
+                  ) : (
+                    <SchemeWindow />
+                  )}
+                </span>
+                <span className="scheme-label">
+                  <Icon />
+                  {label}
+                </span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+        <p className="modal-hint">System follows your device and switches automatically.</p>
+        {TEA_THEMES.map((group) => (
+          <fieldset key={group.origin} className="tea-group">
+            <legend>{group.origin}</legend>
+            <div className="tea-options">
+              {group.themes.map((theme) => (
+                <label key={theme.id} className="tea-option">
+                  <input
+                    type="radio"
+                    name="tea-theme"
+                    value={theme.id}
+                    checked={teaTheme === theme.id}
+                    onChange={() => setTeaTheme(theme.id)}
+                  />
+                  <span
+                    className="tea-swatch"
+                    aria-hidden="true"
+                    style={{ "--swatch-paper": theme.paper, "--swatch-accent": theme.accent } as CSSProperties}
+                  />
+                  <span className="tea-text">
+                    <span className="tea-name">{theme.name}</span>
+                    <span className="tea-note">{theme.note}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        ))}
       </section>
 
       <div className="settings-actions">
