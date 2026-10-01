@@ -9,7 +9,7 @@ import {
   startWebGoogleConnect,
   type GoogleCalendarStatus,
 } from "@/calendar/google-calendar-client";
-import type { CalendarNames, CalendarPriorityOrder, CalendarPrioritySource } from "@/calendar/types";
+import type { CalendarFeedSource, CalendarLinks, CalendarNames, CalendarPriorityOrder } from "@/calendar/types";
 import { CalendarPriorityPanel } from "@/calendar/calendar-priority-panel";
 import { CalendarImportPanel } from "@/calendar/calendar-import-panel";
 import { isNativeShell } from "@/shared/platform";
@@ -19,7 +19,8 @@ import { TEA_THEMES, useColorScheme, useTeaTheme, type ColorSchemePreference } f
 
 type Props = {
   calendarNames: CalendarNames;
-  onRenameCalendar: (source: CalendarPrioritySource, name: string) => void;
+  calendarLinks: CalendarLinks;
+  onRenameCalendar: (source: CalendarFeedSource, name: string) => void;
   calendarPriorityOrder: CalendarPriorityOrder;
   onCalendarPriorityOrderChange: (order: CalendarPriorityOrder) => void;
   showDuplicateEvents: boolean;
@@ -27,9 +28,10 @@ type Props = {
   accountEmail: string | null;
   syncedAt: number | null;
   onChanged: () => void;
-  onImported: (source: "learn" | "portal" | "other") => Promise<void>;
-  onRemoveCalendar: (source: CalendarPrioritySource) => Promise<void>;
-  onSyncNow: () => Promise<number | null>;
+  onImported: (source: "learn" | "portal" | "other", url: string) => Promise<void>;
+  onRefresh: () => Promise<void>;
+  onRemoveCalendar: (source: CalendarFeedSource) => Promise<void>;
+  onSyncGoogle: () => Promise<number | null>;
   onNotice: (message: string) => void;
   requireAiApproval: boolean;
   onRequireAiApprovalChange: (value: boolean) => void;
@@ -69,6 +71,7 @@ function formatSynced(ms: number | null): string {
 
 export function SettingsPanel({
   calendarNames,
+  calendarLinks,
   onRenameCalendar,
   calendarPriorityOrder,
   onCalendarPriorityOrderChange,
@@ -78,8 +81,9 @@ export function SettingsPanel({
   syncedAt,
   onChanged,
   onImported,
+  onRefresh,
   onRemoveCalendar,
-  onSyncNow,
+  onSyncGoogle,
   onNotice,
   requireAiApproval,
   onRequireAiApprovalChange,
@@ -87,7 +91,6 @@ export function SettingsPanel({
 }: Props) {
   const [status, setStatus] = useState<GoogleCalendarStatus | null>(null);
   const [working, setWorking] = useState(false);
-  const [syncing, setSyncing] = useState(false);
   const [teaTheme, setTeaTheme] = useTeaTheme();
   const [colorScheme, setColorScheme] = useColorScheme();
   const tea = TEA_THEMES.flatMap((group) => group.themes).find((theme) => theme.id === teaTheme);
@@ -144,20 +147,6 @@ export function SettingsPanel({
     }
   }
 
-  async function syncNow() {
-    setSyncing(true);
-    try {
-      const syncedAtMs = await onSyncNow();
-      if (syncedAtMs) {
-        setStatus((prev) => (prev ? { ...prev, lastSyncedAt: syncedAtMs } : prev));
-      }
-    } catch {
-      onNotice("Google Calendar could not be synced.");
-    } finally {
-      setSyncing(false);
-    }
-  }
-
   const connected = status?.connected === true;
 
   return (
@@ -176,16 +165,6 @@ export function SettingsPanel({
             <p className="settings-status">Linked{status?.email ? ` as ${status.email}` : ""}</p>
             <p className="settings-meta">{formatSynced(status?.lastSyncedAt ?? null)}</p>
             <div className="settings-actions">
-              <button
-                type="button"
-                className={`ghost-btn${syncing ? " is-syncing" : ""}`}
-                disabled={working || syncing}
-                aria-busy={syncing}
-                aria-label={syncing ? "Syncing" : "Sync now"}
-                onClick={() => void syncNow()}
-              >
-                {syncing ? <span className="sync-spinner" aria-hidden="true" /> : "Sync now"}
-              </button>
               <button type="button" className="danger-btn" disabled={working} onClick={() => void unlink()}>
                 {working ? "Unlinking…" : "Unlink"}
               </button>
@@ -207,9 +186,19 @@ export function SettingsPanel({
 
       <CalendarImportPanel onImported={onImported} />
 
-      <CalendarPriorityPanel names={calendarNames} onRename={onRenameCalendar} order={calendarPriorityOrder} onReorder={onCalendarPriorityOrderChange}
-        showDuplicates={showDuplicateEvents} onShowDuplicatesChange={onShowDuplicateEventsChange}
-        onRemove={onRemoveCalendar} />
+      <CalendarPriorityPanel
+        names={calendarNames}
+        calendarLinks={calendarLinks}
+        googleConnected={connected}
+        onRename={onRenameCalendar}
+        order={calendarPriorityOrder}
+        onReorder={onCalendarPriorityOrderChange}
+        showDuplicates={showDuplicateEvents}
+        onShowDuplicatesChange={onShowDuplicateEventsChange}
+        onRemove={onRemoveCalendar}
+        onRefresh={onRefresh}
+        onSyncGoogle={onSyncGoogle}
+      />
 
       <section className="settings-section" aria-labelledby="settings-agent">
         <h3 id="settings-agent">Agent</h3>

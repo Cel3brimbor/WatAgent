@@ -1,12 +1,56 @@
-import type { CalendarNames, CalendarPriorityOrder } from "./types";
+import type { CalendarLinks, CalendarNames, CalendarPriorityOrder, CalendarPrioritySource } from "./types";
 
-export const DEFAULT_CALENDAR_PRIORITY: CalendarPriorityOrder = ["learn", "portal"];
+const PRIORITY_SOURCES = new Set<CalendarPrioritySource>(["learn", "portal", "google"]);
+
+export function isCalendarLink(value: string): boolean {
+  return value.length <= 4096 && /^(https|webcal):\/\/\S+$/i.test(value);
+}
+
+export function detectCalendarLink(url: string): "learn" | "portal" | "other" {
+  if (/\b(learn|brightspace|d2l)\b/i.test(url)) return "learn";
+  if (/\bportal\b/i.test(url)) return "portal";
+  return "other";
+}
+
+export function calendarLinksOf(raw: unknown): CalendarLinks {
+  if (!raw || typeof raw !== "object") return {};
+  const record = raw as Record<string, unknown>;
+  const links: CalendarLinks = {};
+  for (const source of ["learn", "portal", "other"] as const) {
+    const value = typeof record[source] === "string" ? record[source].trim() : "";
+    if (isCalendarLink(value)) links[source] = value;
+  }
+  return links;
+}
 
 export function calendarPriorityOrderOf(raw: unknown, legacy?: unknown): CalendarPriorityOrder {
-  if (Array.isArray(raw) && raw.length <= 2 && raw.every((source) => source === "learn" || source === "portal") && new Set(raw).size === raw.length) {
+  if (Array.isArray(raw) && raw.length <= 3 && raw.every((source) => PRIORITY_SOURCES.has(source as CalendarPrioritySource)) && new Set(raw).size === raw.length) {
     return [...raw] as CalendarPriorityOrder;
   }
-  return legacy === "portal" ? ["portal", "learn"] : [...DEFAULT_CALENDAR_PRIORITY];
+  return legacy === "portal" ? ["portal", "learn"] : [];
+}
+
+//learn and portal join only after a saved link has finished importing. google joins once the account is linked.
+export function activeCalendarPriority(
+  order: CalendarPriorityOrder,
+  links: CalendarLinks,
+  googleConnected: boolean | null,
+  imported: Partial<Record<"learn" | "portal", boolean>> = {},
+): CalendarPriorityOrder {
+  const ready = (source: "learn" | "portal") => Boolean(links[source] && imported[source]);
+  const next = order.filter((source) => (source === "google" ? googleConnected !== false : ready(source)));
+  for (const source of ["learn", "portal"] as const) {
+    if (!ready(source) || next.includes(source)) continue;
+    const googleAt = next.indexOf("google");
+    if (googleAt === -1) next.push(source);
+    else next.splice(googleAt, 0, source);
+  }
+  if (googleConnected === true && !next.includes("google")) next.push("google");
+  return next;
+}
+
+export function sameCalendarPriority(a: CalendarPriorityOrder, b: CalendarPriorityOrder): boolean {
+  return a.length === b.length && a.every((source, index) => source === b[index]);
 }
 
 export function showDuplicateEventsOf(raw: unknown, legacy?: unknown): boolean {

@@ -31,9 +31,11 @@ type Props = {
   samples: SmartTagTarget[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  groupOn?: boolean;
+  onToggleGroup?: (on: boolean) => void;
 };
 
-export function SmartTagsPanel({ tags, onChange, calendars, samples, open, onOpenChange }: Props) {
+export function SmartTagsPanel({ tags, onChange, calendars, samples, open, onOpenChange, groupOn = true, onToggleGroup }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const listRef = useRef<HTMLUListElement>(null);
   useFlip(listRef, tags.map((tag) => tag.id).join("|"));
@@ -67,6 +69,18 @@ export function SmartTagsPanel({ tags, onChange, calendars, samples, open, onOpe
   return (
     <section className="side-cal-list smart-tags">
       <div className="smart-tags-head">
+        {onToggleGroup ? (
+          <button
+            type="button"
+            className={`side-cal-check side-cal-group-check${groupOn ? " is-on" : ""}`}
+            style={{ color: "var(--accent)", background: groupOn ? "var(--accent)" : "transparent" }}
+            aria-pressed={groupOn}
+            aria-label={`${groupOn ? "Pause" : "Turn on"} every smart tag`}
+            onClick={() => onToggleGroup(!groupOn)}
+          >
+            {groupOn ? <CheckIcon /> : null}
+          </button>
+        ) : null}
         <button
           type="button"
           className="side-cal-heading"
@@ -102,16 +116,19 @@ export function SmartTagsPanel({ tags, onChange, calendars, samples, open, onOpe
               const label = smartTagLabel(tag);
               return (
                 <li key={tag.id} data-flip-id={tag.id} className={`smart-tag${editing ? " is-editing" : ""}`}>
-                  <div className={`side-cal-row${tag.enabled ? "" : " is-paused"}`}>
+                  <div className={`side-cal-row${groupOn && tag.enabled ? "" : " is-paused"}`}>
                     <button
                       type="button"
-                      className={`side-cal-check${tag.enabled ? " is-on" : ""}`}
-                      style={{ color: tag.color, background: tag.enabled ? tag.color : "transparent" }}
-                      aria-pressed={tag.enabled}
-                      aria-label={`${tag.enabled ? "Pause" : "Turn on"} ${label}`}
-                      onClick={() => patch(tag.id, { enabled: !tag.enabled })}
+                      className={`side-cal-check${groupOn && tag.enabled ? " is-on" : ""}`}
+                      style={{ color: tag.color, background: groupOn && tag.enabled ? tag.color : "transparent" }}
+                      aria-pressed={groupOn && tag.enabled}
+                      aria-label={`${groupOn && tag.enabled ? "Pause" : "Turn on"} ${label}`}
+                      onClick={() => {
+                        if (!groupOn) return;
+                        patch(tag.id, { enabled: !tag.enabled });
+                      }}
                     >
-                      {tag.enabled ? <CheckIcon /> : null}
+                      {groupOn && tag.enabled ? <CheckIcon /> : null}
                     </button>
                     <button
                       type="button"

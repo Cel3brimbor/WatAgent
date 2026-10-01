@@ -4,14 +4,17 @@ import { useEffect, useId, useLayoutEffect, useRef, useState, type RefObject } f
 import { ConfirmDialog } from "@/shared/confirm-dialog";
 import { RenameCalendarDialog } from "@/calendar/calendar-priority-panel";
 import type { ExternalCalendarRef } from "@/calendar/external-calendars";
-import type { CalendarPrioritySource, CalendarView } from "@/calendar/types";
+import { formatFeedSyncSummary, syncImportedFeed } from "@/calendar/calendar-sync";
+import type { CalendarFeedSource, CalendarLinks, CalendarView, ImportedCalendarSource } from "@/calendar/types";
 import { addDays, addMonths, isToday, monthCells, startOfLocalDay, startOfWeek } from "@/calendar/date-utils";
 import type { GoogleCalendarRef } from "@/calendar/google-calendar-client";
 import { isExcludedGoogleCalendarName } from "@/calendar/calendar-lists";
 import {
   CALENDAR_PALETTE,
+  calendarGroupsOf,
   isSidebarHidden,
   type CalendarColors,
+  type CalendarGroups,
   type CalendarSourceFilter,
   type SidePanelSectionsOpen,
 } from "@/calendar/preferences";
@@ -48,8 +51,12 @@ type Props = {
   colors: CalendarColors;
   onColors: (next: CalendarColors) => void;
   externalCalendars: ExternalCalendarRef[];
-  onRenameExternal: (source: CalendarPrioritySource, name: string) => void;
-  onRemoveExternal: (source: CalendarPrioritySource) => Promise<void>;
+  calendarLinks: CalendarLinks;
+  onRenameExternal: (source: CalendarFeedSource, name: string) => void;
+  onRemoveExternal: (source: CalendarFeedSource) => Promise<void>;
+  onRefreshCalendars: () => Promise<void>;
+  onSyncGoogle: () => Promise<number | null>;
+  onNotice: (message: string) => void;
   googleCalendars: GoogleCalendarRef[];
   colorOverrides: Record<string, string>;
   onColorOverrides: (next: Record<string, string>) => void;
@@ -78,8 +85,12 @@ export function CalendarSidePanel({
   colors,
   onColors,
   externalCalendars,
+  calendarLinks,
   onRenameExternal,
   onRemoveExternal,
+  onRefreshCalendars,
+  onSyncGoogle,
+  onNotice,
   googleCalendars,
   colorOverrides,
   onColorOverrides,
@@ -94,6 +105,7 @@ export function CalendarSidePanel({
   const [removing, setRemoving] = useState<ExternalCalendarRef | null>(null);
   const [removeBusy, setRemoveBusy] = useState(false);
   const [removeError, setRemoveError] = useState<string | null>(null);
+  const [syncBusy, setSyncBusy] = useState(false);
   const [cursor, setCursor] = useState(() => startOfLocalDay(focus));
   const [menu, setMenu] = useState<MenuState | null>(null);
   const menuPresence = usePresence(menu);
@@ -148,6 +160,10 @@ export function CalendarSidePanel({
     checked: !sources.mutedGoogleIds.includes(calendar.id),
   }));
   const allRows: Row[] = [...localRows, ...externalRows, ...googleRows];
+  const groups = calendarGroupsOf(sources.groups);
+  function setGroup(key: keyof CalendarGroups, on: boolean) {
+    onSources({ ...sources, groups: { ...groups, [key]: on } });
+  }
   const externalById = (id: string) => externalCalendars.find((calendar) => calendar.id === id);
   const visible = (row: Row) => !isSidebarHidden(sources, row.id);
   const watagentRows = localRows.filter(visible);
@@ -225,16 +241,17 @@ export function CalendarSidePanel({
   function displayOnly(id: string) {
     const ids = [...googleCalendars.map((calendar) => calendar.id), ...externalCalendars.map((calendar) => calendar.id)];
     if (externalById(id)) {
-      onSources({ events: false, tasks: false, google: false, mutedGoogleIds: ids.filter((item) => item !== id), hiddenIds: sources.hiddenIds.filter((item) => item !== id) });
+      onSources({ ...sources, events: false, tasks: false, google: false, mutedGoogleIds: ids.filter((item) => item !== id), hiddenIds: sources.hiddenIds.filter((item) => item !== id) });
       setMenu(null);
       return;
     }
     if (id === "events") {
-      onSources({ events: true, tasks: false, google: false, mutedGoogleIds: ids, hiddenIds: [] });
+      onSources({ ...sources, events: true, tasks: false, google: false, mutedGoogleIds: ids, hiddenIds: [] });
     } else if (id === "tasks") {
-      onSources({ events: false, tasks: true, google: false, mutedGoogleIds: ids, hiddenIds: [] });
+      onSources({ ...sources, events: false, tasks: true, google: false, mutedGoogleIds: ids, hiddenIds: [] });
     } else {
       onSources({
+        ...sources,
         events: false,
         tasks: false,
         google: true,
@@ -269,6 +286,40 @@ export function CalendarSidePanel({
     const top = Math.min(anchor.bottom + 6, window.innerHeight - 220);
     setMenu({ id: row.id, name: row.name, color: row.color, top, left });
   }
+
+  async function syncCalendarRow(id: string) {
+    if (syncBusy) return;
+    const external = externalById(id);
+    const isGoogle = googleCalendars.some((calendar) => calendar.id === id);
+    if (!external && !isGoogle) return;
+    setSyncBusy(true);
+    setMenu(null);
+    try {
+      if (external) {
+        const source = external.source as ImportedCalendarSource;
+        const url = calendarLinks[source];
+        if (!url) {
+          onNotice("No calendar link saved for this feed. Import it again in Settings.");
+          return;
+        }
+        const result = await syncImportedFeed(source, url);
+        await onRefreshCalendars();
+        onNotice(formatFeedSyncSummary(external.name, result));
+        return;
+      }
+      await onSyncGoogle();
+      await onRefreshCalendars();
+      onNotice("Google Calendar synced.");
+    } catch (err) {
+      onNotice(err instanceof Error ? err.message : "This calendar could not be synced.");
+    } finally {
+      setSyncBusy(false);
+    }
+  }
+
+  const menuExternal = shownMenu ? externalById(shownMenu.id) : undefined;
+  const menuIsGoogle = shownMenu ? googleCalendars.some((calendar) => calendar.id === shownMenu.id) : false;
+  const menuCanSync = Boolean(menuExternal || menuIsGoogle);
 
   return (
     <div className="side-cal">
@@ -321,21 +372,27 @@ export function CalendarSidePanel({
             onSidePanelSections({ ...sidePanelSections, watagent: !sidePanelSections.watagent })
           }
           rows={watagentRows}
+          groupOn={groups.watagent}
+          onToggleGroup={(on) => setGroup("watagent", on)}
           menuId={menu?.id}
           onToggleRow={toggle}
           onOpenMenu={openRowMenu}
         />
         {externalRows.filter(visible).length > 0 ? <CalendarGroup title="External calendars" open={externalOpen}
           onToggle={() => setExternalOpen((open) => !open)} rows={externalRows.filter(visible)}
+          groupOn={groups.external} onToggleGroup={(on) => setGroup("external", on)}
           menuId={menu?.id} onToggleRow={toggle} onOpenMenu={openRowMenu} /> : null}
         {removeError ? <p role="alert" className="calendar-import-error">{removeError}</p> : null}
         {removeBusy ? <p role="status" className="modal-hint">Removing calendar…</p> : null}
+        {syncBusy ? <p role="status" className="modal-hint">Syncing calendar…</p> : null}
         {otherRows.length > 0 ? (
           <CalendarGroup
-            title="Other calendars"
+            title="Google calendar"
             open={sidePanelSections.other}
             onToggle={() => onSidePanelSections({ ...sidePanelSections, other: !sidePanelSections.other })}
             rows={otherRows}
+            groupOn={groups.other}
+            onToggleGroup={(on) => setGroup("other", on)}
             menuId={menu?.id}
             onToggleRow={toggle}
             onOpenMenu={openRowMenu}
@@ -348,6 +405,8 @@ export function CalendarSidePanel({
           samples={smartTagSamples}
           open={sidePanelSections.smartTags}
           onOpenChange={(open) => onSidePanelSections({ ...sidePanelSections, smartTags: open })}
+          groupOn={groups.smartTags}
+          onToggleGroup={(on) => setGroup("smartTags", on)}
         />
         {hiddenRows.length > 0 ? (
           <CalendarGroup
@@ -365,14 +424,15 @@ export function CalendarSidePanel({
           menuRef={menuRef}
           menu={shownMenu}
           open={menuPresence.open}
+          onSync={menuCanSync && !syncBusy ? () => void syncCalendarRow(shownMenu.id) : undefined}
           onDisplayOnly={() => displayOnly(shownMenu.id)}
           onHide={() => hideCalendar(shownMenu.id)}
           onColor={(color) => paint(shownMenu.id, color)}
-          onRename={externalById(shownMenu.id)?.source !== "other" && externalById(shownMenu.id) ? () => {
-            setRenaming(externalById(shownMenu.id)!); setMenu(null);
+          onRename={menuExternal?.source !== "other" && menuExternal ? () => {
+            setRenaming(menuExternal); setMenu(null);
           } : undefined}
-          onRemove={!removeBusy && externalById(shownMenu.id)?.source !== "other" && externalById(shownMenu.id) ? () => {
-            setRemoving(externalById(shownMenu.id)!); setMenu(null);
+          onRemove={!removeBusy && menuExternal?.source !== "other" && menuExternal ? () => {
+            setRemoving(menuExternal); setMenu(null);
           } : undefined}
         />
       ) : null}
@@ -400,6 +460,8 @@ function CalendarGroup({
   rows,
   menuId,
   hidden,
+  groupOn = true,
+  onToggleGroup,
   onToggleRow,
   onOpenMenu,
   onUnhide,
@@ -411,22 +473,38 @@ function CalendarGroup({
   rows: Row[];
   menuId?: string;
   hidden?: boolean;
+  groupOn?: boolean;
+  onToggleGroup?: (on: boolean) => void;
   onToggleRow?: (id: string, checked: boolean) => void;
   onOpenMenu?: (row: Row, anchor: DOMRect) => void;
   onUnhide?: (id: string) => void;
 }) {
   return (
     <section className="side-cal-list">
-      <button
-        type="button"
-        className="side-cal-heading"
-        id={headingId}
-        aria-expanded={open}
-        onClick={onToggle}
-      >
-        <span>{title}</span>
-        <ChevronIcon open={open} />
-      </button>
+      <div className="side-cal-heading-row">
+        {onToggleGroup && !hidden ? (
+          <button
+            type="button"
+            className={`side-cal-check side-cal-group-check${groupOn ? " is-on" : ""}`}
+            style={{ color: "var(--accent)", background: groupOn ? "var(--accent)" : "transparent" }}
+            aria-pressed={groupOn}
+            aria-label={`${groupOn ? "Hide" : "Show"} every calendar in ${title}`}
+            onClick={() => onToggleGroup(!groupOn)}
+          >
+            {groupOn ? <CheckIcon /> : null}
+          </button>
+        ) : null}
+        <button
+          type="button"
+          className="side-cal-heading"
+          id={headingId}
+          aria-expanded={open}
+          onClick={onToggle}
+        >
+          <span>{title}</span>
+          <ChevronIcon open={open} />
+        </button>
+      </div>
       <Disclosure open={open}>
         <ul>
           {rows.map((row) => (
@@ -436,13 +514,16 @@ function CalendarGroup({
               ) : (
                 <button
                   type="button"
-                  className={`side-cal-check${row.checked ? " is-on" : ""}`}
-                  style={{ color: row.color, background: row.checked ? row.color : "transparent" }}
-                  aria-pressed={row.checked}
-                  aria-label={`${row.checked ? "Hide" : "Show"} ${row.name}`}
-                  onClick={() => onToggleRow?.(row.id, !row.checked)}
+                  className={`side-cal-check${groupOn && row.checked ? " is-on" : ""}`}
+                  style={{ color: row.color, background: groupOn && row.checked ? row.color : "transparent" }}
+                  aria-pressed={groupOn && row.checked}
+                  aria-label={`${groupOn && row.checked ? "Hide" : "Show"} ${row.name}`}
+                  onClick={() => {
+                    if (!groupOn) return;
+                    onToggleRow?.(row.id, !row.checked);
+                  }}
                 >
-                  {row.checked ? <CheckIcon /> : null}
+                  {groupOn && row.checked ? <CheckIcon /> : null}
                 </button>
               )}
               {row.google ? <GoogleCalendarIcon /> : null}
@@ -479,6 +560,7 @@ function CalendarOptionsMenu({
   menuRef,
   menu,
   open,
+  onSync,
   onDisplayOnly,
   onHide,
   onColor,
@@ -488,6 +570,7 @@ function CalendarOptionsMenu({
   menuRef: RefObject<HTMLDivElement | null>;
   menu: MenuState;
   open: boolean;
+  onSync?: () => void;
   onDisplayOnly: () => void;
   onHide: () => void;
   onColor: (color: string) => void;
@@ -516,6 +599,11 @@ function CalendarOptionsMenu({
       inert={!open}
       style={{ top: box.top, left: box.left }}
     >
+      {onSync ? (
+        <button type="button" role="menuitem" onClick={onSync}>
+          Sync calendar
+        </button>
+      ) : null}
       <button type="button" role="menuitem" onClick={onDisplayOnly}>
         Display this only
       </button>

@@ -1,5 +1,5 @@
-import { calendarNamesOf, calendarPriorityOrderOf, showDuplicateEventsOf } from "@/calendar/calendar-priority";
-import type { CalendarNames, CalendarPriorityOrder, CalendarView } from "@/calendar/types";
+import { calendarLinksOf, calendarNamesOf, calendarPriorityOrderOf, showDuplicateEventsOf } from "@/calendar/calendar-priority";
+import type { CalendarLinks, CalendarNames, CalendarPriorityOrder, CalendarView } from "@/calendar/types";
 
 const STORAGE_KEY = "watagent.calendar.preferences.v1";
 const VIEWS = new Set<CalendarView>(["day", "week", "month", "year"]);
@@ -30,6 +30,15 @@ export function writeCalendarView(view: CalendarView): void {
 
 const SOURCES_KEY = "watagent.calendar.sources.v1";
 
+export type CalendarGroups = {
+  watagent: boolean;
+  external: boolean;
+  other: boolean;
+  smartTags: boolean;
+  /** True shows hidden calendars on the grid and leaves the Hidden list as it was. */
+  hidden: boolean;
+};
+
 export type CalendarSourceFilter = {
   events: boolean;
   tasks: boolean;
@@ -38,7 +47,20 @@ export type CalendarSourceFilter = {
   mutedGoogleIds: string[];
   /** Calendars moved to the Hidden calendars section. */
   hiddenIds: string[];
+  /** False hides a whole sidebar group without rewriting each calendar's own check. */
+  groups?: CalendarGroups;
 };
+
+export function calendarGroupsOf(raw: unknown): CalendarGroups {
+  const rec = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  return {
+    watagent: rec.watagent !== false,
+    external: rec.external !== false,
+    other: rec.other !== false,
+    smartTags: rec.smartTags !== false,
+    hidden: rec.hidden === true,
+  };
+}
 
 export const ALL_SOURCES: CalendarSourceFilter = {
   events: true,
@@ -70,6 +92,7 @@ export function readSourceFilter(): CalendarSourceFilter {
       hiddenGoogleIds?: unknown;
       mutedGoogleIds?: unknown;
       hiddenIds?: unknown;
+      groups?: unknown;
     };
     const legacyApp = parsed.app !== false;
     const legacyMuted = idList(parsed.hiddenGoogleIds);
@@ -79,6 +102,7 @@ export function readSourceFilter(): CalendarSourceFilter {
       google: parsed.google !== false,
       mutedGoogleIds: idList(parsed.mutedGoogleIds).length > 0 ? idList(parsed.mutedGoogleIds) : legacyMuted,
       hiddenIds: idList(parsed.hiddenIds),
+      ...(parsed.groups && typeof parsed.groups === "object" ? { groups: calendarGroupsOf(parsed.groups) } : {}),
     };
   } catch {
     return ALL_SOURCES;
@@ -247,12 +271,12 @@ const CALENDAR_PRIORITY_ORDER_KEY = "watagent.calendar.priority-order.v1";
 const SHOW_DUPLICATE_EVENTS_KEY = "watagent.calendar.show-duplicates.v1";
 
 export function readCalendarPriorityOrder(): CalendarPriorityOrder {
-  if (typeof window === "undefined") return ["learn", "portal"];
+  if (typeof window === "undefined") return [];
   try {
     const raw = window.localStorage.getItem(CALENDAR_PRIORITY_ORDER_KEY);
     const legacy = window.localStorage.getItem(LEGACY_DUPLICATE_PRIORITY_KEY);
     return calendarPriorityOrderOf(raw ? JSON.parse(raw) : undefined, legacy);
-  } catch { return ["learn", "portal"]; }
+  } catch { return []; }
 }
 
 export function readShowDuplicateEvents(): boolean {
@@ -268,6 +292,16 @@ export function writeCalendarPriority(order: CalendarPriorityOrder, showDuplicat
     window.localStorage.setItem(CALENDAR_PRIORITY_ORDER_KEY, JSON.stringify(order));
     window.localStorage.setItem(SHOW_DUPLICATE_EVENTS_KEY, JSON.stringify(showDuplicates));
   } catch { /* Cache is optional. */ }
+}
+
+export function readCalendarLinks(): CalendarLinks {
+  try { return calendarLinksOf(JSON.parse(window.localStorage.getItem("watagent.calendar.links.v1") ?? "{}")); }
+  catch { return {}; }
+}
+
+export function writeCalendarLinks(links: CalendarLinks): void {
+  try { window.localStorage.setItem("watagent.calendar.links.v1", JSON.stringify(calendarLinksOf(links))); }
+  catch { return; }
 }
 
 export function readCalendarNames(): CalendarNames {

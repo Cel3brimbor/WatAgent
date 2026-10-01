@@ -10,28 +10,85 @@ import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalList
 import { CSS } from "@dnd-kit/utilities";
 import { Switch } from "@/shared/switch";
 import { reorderCalendarPriority } from "@/calendar/calendar-priority";
-import type { CalendarNames, CalendarPriorityOrder, CalendarPrioritySource } from "@/calendar/types";
+import {
+  feedSyncProgressLabel,
+  formatFeedSyncSummary,
+  syncImportedFeed,
+} from "@/calendar/calendar-sync";
+import type { CalendarImportProgress } from "@/calendar/client";
+import type { CalendarFeedSource, CalendarLinks, CalendarNames, CalendarPriorityOrder, CalendarPrioritySource } from "@/calendar/types";
 
-const LABELS: Record<CalendarPrioritySource, string> = { learn: "LEARN / Brightspace", portal: "Portal" };
+const LABELS: Record<CalendarPrioritySource, string> = {
+  learn: "LEARN / Brightspace",
+  portal: "Portal",
+  google: "Google Calendar",
+};
 
-export function CalendarPriorityPanel({ names, onRename, order, onReorder, showDuplicates, onShowDuplicatesChange, onRemove }: {
+export function CalendarPriorityPanel({ names, calendarLinks, googleConnected, onRename, order, onReorder, showDuplicates, onShowDuplicatesChange, onRemove, onRefresh, onSyncGoogle }: {
   names: CalendarNames;
-  onRename: (source: CalendarPrioritySource, name: string) => void;
+  calendarLinks: CalendarLinks;
+  googleConnected: boolean;
+  onRename: (source: CalendarFeedSource, name: string) => void;
   order: CalendarPriorityOrder;
   onReorder: (order: CalendarPriorityOrder) => void;
   showDuplicates: boolean;
   onShowDuplicatesChange: (show: boolean) => void;
-  onRemove: (source: CalendarPrioritySource) => Promise<void>;
+  onRemove: (source: CalendarFeedSource) => Promise<void>;
+  onRefresh: () => Promise<void>;
+  onSyncGoogle: () => Promise<number | null>;
 }) {
-  const [menu, setMenu] = useState<(NonNullable<ContextMenuState> & { source: CalendarPrioritySource }) | null>(null);
+  const [menu, setMenu] = useState<(NonNullable<ContextMenuState> & { source: CalendarFeedSource }) | null>(null);
   const labels = { ...LABELS, ...names };
-  const [renaming, setRenaming] = useState<CalendarPrioritySource | null>(null);
-  const [pendingRemove, setPendingRemove] = useState<CalendarPrioritySource | null>(null);
-  const [removing, setRemoving] = useState<CalendarPrioritySource | null>(null);
+  const [renaming, setRenaming] = useState<CalendarFeedSource | null>(null);
+  const [pendingRemove, setPendingRemove] = useState<CalendarFeedSource | null>(null);
+  const [removing, setRemoving] = useState<CalendarFeedSource | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState<CalendarPrioritySource | null>(null);
+  const [syncProgress, setSyncProgress] = useState<CalendarImportProgress | null>(null);
+  const [syncResults, setSyncResults] = useState<Partial<Record<CalendarPrioritySource, string>>>({});
   const closeMenu = useCallback(() => setMenu(null), []);
 
-  async function remove(source: CalendarPrioritySource) {
+  function canSync(source: CalendarPrioritySource): boolean {
+    if (source === "google") return googleConnected;
+    return Boolean(calendarLinks[source]);
+  }
+
+  async function syncSource(source: CalendarPrioritySource) {
+    if (syncing || removing) return;
+    if (!canSync(source)) {
+      setError(source === "google" ? "Link Google Calendar first." : "Import this calendar link above first.");
+      return;
+    }
+    setError(null);
+    setSyncResults((current) => {
+      const next = { ...current };
+      delete next[source];
+      return next;
+    });
+    setSyncing(source);
+    setSyncProgress({ done: 0, total: null });
+    const name = labels[source];
+    try {
+      if (source === "google") {
+        await onSyncGoogle();
+        await onRefresh();
+        setSyncResults((current) => ({ ...current, google: "Google Calendar synced." }));
+        return;
+      }
+      const url = calendarLinks[source];
+      if (!url) return;
+      const result = await syncImportedFeed(source, url, setSyncProgress);
+      await onRefresh();
+      setSyncResults((current) => ({ ...current, [source]: formatFeedSyncSummary(name, result) }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "This calendar could not be synced.");
+    } finally {
+      setSyncing(null);
+      setSyncProgress(null);
+    }
+  }
+
+  async function remove(source: CalendarFeedSource) {
     if (removing) return;
     setPendingRemove(null);
     setMenu(null);
@@ -57,8 +114,9 @@ export function CalendarPriorityPanel({ names, onRename, order, onReorder, showD
     <section className="settings-section" aria-labelledby="settings-calendar-priority">
       <h3 id="settings-calendar-priority">Calendar priority</h3>
       <p id="calendar-priority-hint" className="modal-hint">
-        Drag calendars to set their priority. The calendar at the top wins when LEARN and Portal titles match
-        on the same day. Matching ignores capitalization and extra spaces. Both records are kept.
+        LEARN and Portal show up here after their events finish importing. Google Calendar joins while it is linked, and it works best last.
+        Drag to set priority. The calendar at the top wins when the same title appears on the same day.
+        Matching ignores capitalization and extra spaces. Both records are kept.
       </p>
       <DndContext id="calendar-priority" sensors={sensors} collisionDetection={closestCenter} onDragEnd={dragEnd}
         accessibility={{
@@ -73,12 +131,20 @@ export function CalendarPriorityPanel({ names, onRename, order, onReorder, showD
         <SortableContext items={order} strategy={verticalListSortingStrategy}>
           <ol className="calendar-priority-list" aria-label="Calendar priority, highest first" aria-describedby="calendar-priority-hint">
             {order.map((source, index) => <PriorityRow key={source} source={source} label={labels[source]} rank={index + 1}
-              busy={removing !== null} removing={removing === source} menuOpen={menu?.source === source}
-              onMenu={(element) => setMenu((current) => current?.source === source ? null : { ...menuStateFromElement(element), source })} />)}
+              busy={removing !== null || syncing !== null} removing={removing === source} menuOpen={menu?.source === source}
+              syncing={syncing === source} syncProgress={syncing === source ? syncProgress : null}
+              syncResult={syncResults[source]} syncEnabled={canSync(source)}
+              onSync={() => void syncSource(source)}
+              onMenu={source === "google" ? undefined : (element) => setMenu((current) => current?.source === source ? null : { ...menuStateFromElement(element), source })} />)}
           </ol>
         </SortableContext>
       </DndContext>
-      {order.length === 0 ? <p className="modal-hint">No calendars in the priority list. Import a calendar link to add it back.</p> : null}
+      {order.length === 0 ? <p className="modal-hint">No calendars yet. Paste a LEARN or Portal link above, or link Google Calendar.</p> : null}
+      {order.includes("google") && order[order.length - 1] !== "google" ? (
+        <p className="calendar-priority-warning" role="status">
+          Drag Google Calendar to the bottom. LEARN and Portal should outrank it when the same class is on both calendars.
+        </p>
+      ) : null}
       {error ? <p className="calendar-import-error" role="alert">{error}</p> : null}
       <ContextMenu state={menu} onClose={closeMenu} items={menu ? [{
         id: "rename", label: "Rename calendar", disabled: removing !== null,
@@ -101,29 +167,57 @@ export function CalendarPriorityPanel({ names, onRename, order, onReorder, showD
   );
 }
 
-function PriorityRow({ source, label, rank, busy, removing, menuOpen, onMenu }: {
+function PriorityRow({ source, label, rank, busy, removing, menuOpen, syncing, syncProgress, syncResult, syncEnabled, onSync, onMenu }: {
   source: CalendarPrioritySource; label: string; rank: number; busy: boolean; removing: boolean; menuOpen: boolean;
-  onMenu: (element: HTMLButtonElement) => void;
+  syncing: boolean; syncProgress: CalendarImportProgress | null; syncResult?: string; syncEnabled: boolean;
+  onSync: () => void;
+  onMenu?: (element: HTMLButtonElement) => void;
 }) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id: source, disabled: busy });
+  const progressLabel = syncProgress ? feedSyncProgressLabel(label, syncProgress) : "";
   return (
-    <li ref={setNodeRef} className={`calendar-priority-row${isDragging ? " is-dragging" : ""}`}
+    <li ref={setNodeRef} className={`calendar-priority-item${isDragging ? " is-dragging" : ""}`}
       style={{ transform: CSS.Transform.toString(transform), transition }}>
-      <button ref={setActivatorNodeRef} type="button" className="calendar-priority-handle"
-        {...attributes} {...listeners} disabled={busy} aria-label={`Drag ${label}, priority ${rank}`}>
-        <svg width="16" height="20" viewBox="0 0 16 20" fill="currentColor" aria-hidden="true">
-          {[5, 10, 15].map((y) => <g key={y}><circle cx="5" cy={y} r="1.5" /><circle cx="11" cy={y} r="1.5" /></g>)}
-        </svg>
-      </button>
-      <span className="calendar-priority-rank" aria-hidden="true">{rank}</span>
-      <span className="calendar-priority-name">{label}</span>
-      {rank === 1 ? <span className="calendar-priority-badge">Highest priority</span> : null}
-      <button type="button" className="calendar-priority-menu" disabled={busy}
-        aria-label={`Options for ${label}`} aria-haspopup="menu" aria-expanded={menuOpen}
-        onClick={(event) => onMenu(event.currentTarget)}>
-        <DotsIcon />
-      </button>
-      {removing ? <span className="calendar-priority-progress" role="status">Removing…</span> : null}
+      <div className="calendar-priority-row">
+        <button ref={setActivatorNodeRef} type="button" className="calendar-priority-handle"
+          {...attributes} {...listeners} disabled={busy} aria-label={`Drag ${label}, priority ${rank}`}>
+          <svg width="16" height="20" viewBox="0 0 16 20" fill="currentColor" aria-hidden="true">
+            {[5, 10, 15].map((y) => <g key={y}><circle cx="5" cy={y} r="1.5" /><circle cx="11" cy={y} r="1.5" /></g>)}
+          </svg>
+        </button>
+        <span className="calendar-priority-rank" aria-hidden="true">{rank}</span>
+        <span className="calendar-priority-name">{label}</span>
+        {rank === 1 ? <span className="calendar-priority-badge">Highest priority</span> : null}
+        <button
+          type="button"
+          className={`calendar-priority-sync${syncing ? " is-syncing" : ""}`}
+          disabled={busy || syncing || !syncEnabled}
+          aria-busy={syncing}
+          aria-label={syncing ? `Syncing ${label}` : `Sync ${label}`}
+          onClick={onSync}
+        >
+          {syncing ? <span className="sync-spinner" aria-hidden="true" /> : "Sync"}
+        </button>
+        {onMenu ? <button type="button" className="calendar-priority-menu" disabled={busy}
+          aria-label={`Options for ${label}`} aria-haspopup="menu" aria-expanded={menuOpen}
+          onClick={(event) => onMenu(event.currentTarget)}>
+          <DotsIcon />
+        </button> : null}
+        {removing ? <span className="calendar-priority-progress" role="status">Removing…</span> : null}
+      </div>
+      {syncing ? (
+        <div className="calendar-import-status calendar-priority-sync-status">
+          <progress
+            className="calendar-import-meter"
+            aria-label={syncProgress ? progressLabel : `Syncing ${label}`}
+            {...(syncProgress?.total == null ? {} : { value: syncProgress.done, max: Math.max(syncProgress.total, 1) })}
+          />
+          <p className="modal-hint">{syncProgress ? progressLabel : `Syncing ${label}…`}</p>
+        </div>
+      ) : null}
+      {!syncing && syncResult ? (
+        <p className="calendar-priority-sync-result settings-status" role="status">{syncResult}</p>
+      ) : null}
     </li>
   );
 }

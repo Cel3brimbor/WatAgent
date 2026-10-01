@@ -33,6 +33,16 @@ export function SideNav({ section, collapsed, onSection, onToggle, children }: P
         <span className="side-nav-brand" aria-hidden="true">
           WatAgent
         </span>
+        <button
+          type="button"
+          className={`side-nav-gear${section === "settings" ? " is-active" : ""}`}
+          aria-current={section === "settings" ? "page" : undefined}
+          aria-label="Settings"
+          title="Settings"
+          onClick={() => onSection("settings")}
+        >
+          <BarIcon id="settings" />
+        </button>
       </div>
       <div className="side-nav-group">
         {BARS.map((bar) => (
@@ -50,16 +60,6 @@ export function SideNav({ section, collapsed, onSection, onToggle, children }: P
         ))}
       </div>
       <div className="side-nav-extra">{children}</div>
-      <button
-        type="button"
-        className={`side-nav-bar side-nav-settings${section === "settings" ? " is-active" : ""}`}
-        aria-current={section === "settings" ? "page" : undefined}
-        aria-label="Settings"
-        onClick={() => onSection("settings")}
-      >
-        <BarIcon id="settings" />
-        <span className="side-nav-label">Settings</span>
-      </button>
     </nav>
   );
 }

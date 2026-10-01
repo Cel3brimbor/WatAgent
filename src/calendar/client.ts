@@ -1,4 +1,4 @@
-import { apiJson } from "@/shared/api-base";
+import { ApiError, apiFetch, apiJson } from "@/shared/api-base";
 import { parseCalendarMeta, type CalendarItemDoc, type CalendarItemMeta } from "@/calendar/types";
 
 function timeZone(): string {
@@ -67,15 +67,71 @@ export async function deleteCalendarItem(id: string): Promise<void> {
   });
 }
 
-export async function importCalendarLink(input: {
-  url: string; rangeStartUTC: number; rangeEndUTC: number;
-  source?: "auto" | "learn" | "portal" | "other";
-}): Promise<{ imported: number; added: number; updated: number; unchanged: number; source: "learn" | "portal" | "other" }> {
-  return apiJson("/api/calendar/import", {
+export type CalendarImportProgress = { done: number; total: number | null };
+export type CalendarImportResult = {
+  imported: number; added: number; updated: number; unchanged: number; removed: number;
+  existed: boolean;
+  source: "learn" | "portal" | "other";
+};
+
+function importErrorMessage(payload: unknown, fallback: string): string {
+  if (payload && typeof payload === "object" && "error" in payload && typeof payload.error === "string") return payload.error;
+  return fallback;
+}
+
+export async function importCalendarLink(
+  input: { url: string; rangeStartUTC: number; rangeEndUTC: number; source?: "auto" | "learn" | "portal" | "other" },
+  onProgress?: (progress: CalendarImportProgress) => void,
+): Promise<CalendarImportResult> {
+  const res = await apiFetch("/api/calendar/import", {
     method: "POST",
     cache: "no-store",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ ...input, timeZone: timeZone() }),
   });
+  const type = res.headers.get("content-type") ?? "";
+  if (!res.ok || !type.includes("ndjson") || !res.body) {
+    const payload = await res.json().catch(() => null);
+    throw new ApiError(importErrorMessage(payload, "Unable to import this calendar. Try again."), res.status);
+  }
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let result: CalendarImportResult | null = null;
+  const take = (line: string) => {
+    if (!line.trim()) return;
+    const event = JSON.parse(line) as Record<string, unknown>;
+    if (event.type === "error") throw new ApiError(importErrorMessage(event, "Unable to import this calendar. Try again."), 400);
+    if (event.type === "progress" && typeof event.done === "number") {
+      onProgress?.({ done: event.done, total: typeof event.total === "number" ? event.total : null });
+    }
+    if (event.type === "done" && (event.source === "learn" || event.source === "portal" || event.source === "other")) {
+      result = {
+        imported: Number(event.imported) || 0,
+        added: Number(event.added) || 0,
+        updated: Number(event.updated) || 0,
+        unchanged: Number(event.unchanged) || 0,
+        removed: Number(event.removed) || 0,
+        existed: event.existed === true,
+        source: event.source,
+      };
+    }
+  };
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+      for (const line of lines) take(line);
+      if (done) break;
+    }
+    if (buffer.trim()) take(buffer);
+  } finally {
+    await reader.cancel().catch(() => undefined);
+  }
+  if (!result) throw new ApiError("Unable to import this calendar. Try again.", 500);
+  return result;
 }
 
 export async function removeImportedCalendar(source: "learn" | "portal"): Promise<{ calendarPriorityOrder: ("learn" | "portal")[] }> {

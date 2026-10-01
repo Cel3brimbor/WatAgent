@@ -12,6 +12,7 @@ type Props = {
   onClose: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
+  calendarLabel?: string;
 };
 
 function safeHttps(raw: string | undefined, hosts?: string[]): string | undefined {
@@ -56,7 +57,7 @@ function originFor(anchor: DOMRect, left: number, top: number, width: number): s
   return `${Math.round(x)}px ${Math.round(y)}px`;
 }
 
-export function GoogleEventCard({ item, anchor, open = true, onClose, onEdit, onDelete }: Props) {
+export function GoogleEventCard({ item, anchor, open = true, onClose, onEdit, onDelete, calendarLabel }: Props) {
   const cardRef = useRef<HTMLDivElement | null>(null);
   const [box, setBox] = useState(() => {
     const width = 420;
@@ -71,14 +72,17 @@ export function GoogleEventCard({ item, anchor, open = true, onClose, onEdit, on
   const when = formatGoogleWhen(item.startUTC, item.endUTC, item.allDay);
   const location = (details?.location ?? item.location)?.trim() || "";
   const description = (details?.description ?? item.description)?.trim() || "";
-  const calendarName = details?.calendarName?.trim() || "WatAgent";
+  const calendarName = details?.calendarName?.trim() || calendarLabel?.trim() || "WatAgent";
   const googleColor = details?.calendarColor;
+  const ownColor = item.calendarColor;
   const color =
     googleColor && /^#[0-9a-fA-F]{6}$/.test(googleColor)
       ? googleColor
-      : details
-        ? "var(--gcal-color)"
-        : "var(--event-color)";
+      : ownColor && /^#[0-9a-fA-F]{6}$/.test(ownColor)
+        ? ownColor
+        : details
+          ? "var(--gcal-color)"
+          : "var(--event-color)";
   const htmlLink = safeHttps(details?.htmlLink, ["google.com"]);
   const meetLink = safeHttps(details?.meetLink, ["meet.google.com"]);
   const locationHref = location

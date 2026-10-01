@@ -1,4 +1,4 @@
-import { calendarNamesOf, calendarPriorityOrderOf, showDuplicateEventsOf } from "@/calendar/calendar-priority";
+import { calendarLinksOf, calendarNamesOf, calendarPriorityOrderOf, showDuplicateEventsOf } from "@/calendar/calendar-priority";
 import {
   ALL_SOURCES,
   DEFAULT_COLORS,
@@ -6,23 +6,26 @@ import {
   readCalendarColors,
   readCalendarView,
   readCalendarNames,
+  readCalendarLinks,
   readCalendarPriorityOrder,
   readShowDuplicateEvents,
   readColorOverrides,
   readSidePanelSections,
   readSourceFilter,
+  calendarGroupsOf,
   DEFAULT_SIDE_PANEL_SECTIONS,
   type CalendarColors,
   type CalendarSourceFilter,
   type SidePanelSectionsOpen,
 } from "@/calendar/preferences";
 import { parseSmartTagsFromUnknown, readSmartTags, type SmartTag } from "@/calendar/smart-tags";
-import type { CalendarNames, CalendarPriorityOrder, CalendarView } from "@/calendar/types";
+import type { CalendarLinks, CalendarNames, CalendarPriorityOrder, CalendarView } from "@/calendar/types";
 
 export type UserCalendarPreferencesV1 = {
   version: 1;
   view: CalendarView;
   calendarNames: CalendarNames;
+  calendarLinks: CalendarLinks;
   calendarPriorityOrder: CalendarPriorityOrder;
   showDuplicateEvents: boolean;
   sources: CalendarSourceFilter;
@@ -53,6 +56,7 @@ function sourcesOf(raw: unknown): CalendarSourceFilter | null {
     google: rec.google !== false,
     mutedGoogleIds: idList(rec.mutedGoogleIds),
     hiddenIds: idList(rec.hiddenIds),
+    ...(rec.groups && typeof rec.groups === "object" ? { groups: calendarGroupsOf(rec.groups) } : {}),
   };
 }
 
@@ -99,6 +103,7 @@ export function readLocalCalendarPreferences(): UserCalendarPreferencesV1 {
     version: 1,
     view: readCalendarView(),
     calendarNames: readCalendarNames(),
+    calendarLinks: readCalendarLinks(),
     calendarPriorityOrder: readCalendarPriorityOrder(),
     showDuplicateEvents: readShowDuplicateEvents(),
     sources: readSourceFilter(),
@@ -126,6 +131,7 @@ export function parseUserCalendarPreferencesDoc(
     version: 1,
     view,
     calendarNames: calendarNamesOf(rec.calendarNames),
+    calendarLinks: rec.calendarLinks !== undefined ? calendarLinksOf(rec.calendarLinks) : fallbacks.calendarLinks,
     calendarPriorityOrder: calendarPriorityOrderOf(rec.calendarPriorityOrder, rec.duplicatePriority),
     showDuplicateEvents: showDuplicateEventsOf(rec.showDuplicateEvents, rec.duplicatePriority),
     sources,
@@ -141,8 +147,10 @@ export function parseUserCalendarPreferencesDoc(
 }
 
 export function preferencesDocHasContent(doc: UserCalendarPreferencesV1): boolean {
-  if (doc.calendarPriorityOrder[0] !== "learn" || doc.showDuplicateEvents) return true;
-  if (Object.keys(doc.calendarNames).length > 0) return true;
+  const order = doc.calendarPriorityOrder;
+  const untouchedOrder = order.length === 0 || (order[0] === "learn" && order[1] === "portal" && order.length === 2);
+  if (!untouchedOrder || doc.showDuplicateEvents) return true;
+  if (Object.keys(doc.calendarNames).length > 0 || Object.keys(doc.calendarLinks).length > 0) return true;
   if (doc.smartTags.length > 0) return true;
   if (doc.navCollapsed) return true;
   if (JSON.stringify(doc.sidePanelSections) !== JSON.stringify(DEFAULT_SIDE_PANEL_SECTIONS)) return true;

@@ -1,9 +1,11 @@
 export type CalendarItemKind = "event" | "task";
 
 export type ImportedCalendarSource = "learn" | "portal" | "other";
-export type CalendarPrioritySource = "learn" | "portal";
+export type CalendarFeedSource = "learn" | "portal";
+export type CalendarPrioritySource = CalendarFeedSource | "google";
 export type CalendarPriorityOrder = CalendarPrioritySource[];
-export type CalendarNames = Partial<Record<CalendarPrioritySource, string>>;
+export type CalendarNames = Partial<Record<CalendarFeedSource, string>>;
+export type CalendarLinks = Partial<Record<ImportedCalendarSource, string>>;
 
 export type CalendarItemMeta = {
   kind: CalendarItemKind;
@@ -93,7 +95,7 @@ export function parseCalendarMeta(raw: unknown): CalendarItemMeta | undefined {
   return {
     kind,
     startUTC: start,
-    endUTC: Number.isFinite(end) && end > start ? end : start + 60 * 60 * 1000,
+    endUTC: Number.isFinite(end) && end >= start ? end : start + 60 * 60 * 1000,
     allDay: Boolean(rec.allDay),
     completed: kind === "task" ? Boolean(rec.completed) : undefined,
     googleEventId: googleEventIdOf(rec.googleEventId),
