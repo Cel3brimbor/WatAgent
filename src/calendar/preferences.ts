@@ -1,4 +1,5 @@
-import type { CalendarView } from "@/calendar/types";
+import { calendarNamesOf, calendarPriorityOrderOf, showDuplicateEventsOf } from "@/calendar/calendar-priority";
+import type { CalendarNames, CalendarPriorityOrder, CalendarView } from "@/calendar/types";
 
 const STORAGE_KEY = "watagent.calendar.preferences.v1";
 const VIEWS = new Set<CalendarView>(["day", "week", "month", "year"]);
@@ -33,7 +34,7 @@ export type CalendarSourceFilter = {
   events: boolean;
   tasks: boolean;
   google: boolean;
-  /** Google calendars unchecked in the sidebar (hidden from the grid only). */
+  /** Google and imported calendars unchecked in the sidebar (hidden from the grid only). */
   mutedGoogleIds: string[];
   /** Calendars moved to the Hidden calendars section. */
   hiddenIds: string[];
@@ -239,4 +240,42 @@ export function writeSidePanelSections(sections: SidePanelSectionsOpen): void {
   } catch {
     return;
   }
+}
+
+const LEGACY_DUPLICATE_PRIORITY_KEY = "watagent.calendar.duplicate-priority.v1";
+const CALENDAR_PRIORITY_ORDER_KEY = "watagent.calendar.priority-order.v1";
+const SHOW_DUPLICATE_EVENTS_KEY = "watagent.calendar.show-duplicates.v1";
+
+export function readCalendarPriorityOrder(): CalendarPriorityOrder {
+  if (typeof window === "undefined") return ["learn", "portal"];
+  try {
+    const raw = window.localStorage.getItem(CALENDAR_PRIORITY_ORDER_KEY);
+    const legacy = window.localStorage.getItem(LEGACY_DUPLICATE_PRIORITY_KEY);
+    return calendarPriorityOrderOf(raw ? JSON.parse(raw) : undefined, legacy);
+  } catch { return ["learn", "portal"]; }
+}
+
+export function readShowDuplicateEvents(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const raw = window.localStorage.getItem(SHOW_DUPLICATE_EVENTS_KEY);
+    return showDuplicateEventsOf(raw ? JSON.parse(raw) : undefined, window.localStorage.getItem(LEGACY_DUPLICATE_PRIORITY_KEY));
+  } catch { return false; }
+}
+
+export function writeCalendarPriority(order: CalendarPriorityOrder, showDuplicates: boolean): void {
+  try {
+    window.localStorage.setItem(CALENDAR_PRIORITY_ORDER_KEY, JSON.stringify(order));
+    window.localStorage.setItem(SHOW_DUPLICATE_EVENTS_KEY, JSON.stringify(showDuplicates));
+  } catch { /* Cache is optional. */ }
+}
+
+export function readCalendarNames(): CalendarNames {
+  try { return calendarNamesOf(JSON.parse(window.localStorage.getItem("watagent.calendar.names.v1") ?? "{}")); }
+  catch { return {}; }
+}
+
+export function writeCalendarNames(names: CalendarNames): void {
+  try { window.localStorage.setItem("watagent.calendar.names.v1", JSON.stringify(calendarNamesOf(names))); }
+  catch { return; }
 }

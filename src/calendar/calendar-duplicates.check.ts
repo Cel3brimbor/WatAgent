@@ -1,0 +1,52 @@
+import assert from "node:assert/strict";
+import { dedupeCalendarTitles, normalizedCalendarTitle } from "./calendar-duplicates";
+import { calendarNamesOf, calendarPriorityOrderOf, reorderCalendarPriority, showDuplicateEventsOf } from "./calendar-priority";
+import type { TimelineItem } from "./types";
+
+const start = new Date(2026, 9, 1, 12).getTime();
+const learn: TimelineItem = { id: "learn", kind: "event", title: " CS 246   Assignment 1 ", startUTC: start, endUTC: start + 3600000, allDay: false, importSource: "learn", description: "Full assignment details" };
+const portal: TimelineItem = { ...learn, id: "portal", title: "cs 246 assignment 1", importSource: "portal", description: undefined };
+const nextDay: TimelineItem = { ...portal, id: "tomorrow", startUTC: new Date(2026, 9, 2, 12).getTime() };
+assert.equal(normalizedCalendarTitle("Ａssignment\u00a0  1"), "assignment 1");
+assert.deepEqual(dedupeCalendarTitles([portal, learn], ["learn", "portal"]), [learn]);
+assert.deepEqual(dedupeCalendarTitles([portal, learn], ["portal", "learn"]), [portal]);
+assert.deepEqual(dedupeCalendarTitles([portal, learn], ["learn", "portal"], true), [portal, learn]);
+assert.deepEqual(dedupeCalendarTitles([learn, nextDay], ["learn", "portal"]), [learn, nextDay]);
+assert.deepEqual(dedupeCalendarTitles([portal], ["learn", "portal"]), [portal], "no hiding without preferred match");
+const googlePortal: TimelineItem = { ...portal, id: "gcal", kind: "gcal_event", importSource: undefined, google: { calendarName: "UWaterloo Portal" } };
+assert.deepEqual(dedupeCalendarTitles([googlePortal, learn], ["learn", "portal"]), [learn]);
+const googleLearn: TimelineItem = { ...learn, id: "google-learn", kind: "gcal_event", importSource: undefined, google: { calendarName: "LEARN calendar" } };
+assert.deepEqual(dedupeCalendarTitles([googlePortal, googleLearn], ["portal", "learn"]), [googlePortal]);
+const task = { ...portal, id: "task", kind: "task" as const };
+const manual = { ...portal, id: "manual", importSource: undefined };
+const other = { ...portal, id: "other", importSource: "other" as const };
+const draft = { ...portal, id: "draft", editorDraft: true };
+const pending = { ...portal, id: "pending", pendingApproval: true };
+assert.deepEqual(dedupeCalendarTitles([learn, task, manual, other, draft, pending], ["learn", "portal"]), [learn, task, manual, other, draft, pending]);
+assert.deepEqual(dedupeCalendarTitles([learn, { ...learn, id: "distinct" }, portal], ["learn", "portal"]).map((item) => item.id), ["learn", "distinct"]);
+assert.equal(portal.description, undefined, "records are not overwritten");
+console.log("Title normalization, day boundaries, LEARN/Portal priority, Google overlays, show-both, and record preservation passed.");
+
+const order = calendarPriorityOrderOf(undefined);
+assert.deepEqual(order, ["learn", "portal"]);
+assert.deepEqual(calendarPriorityOrderOf(undefined, "portal"), ["portal", "learn"]);
+assert.deepEqual(calendarPriorityOrderOf(["portal", "learn"]), ["portal", "learn"]);
+assert.deepEqual(calendarPriorityOrderOf(["learn", "learn"]), ["learn", "portal"]);
+assert.deepEqual(calendarPriorityOrderOf(["portal"]), ["portal"]);
+assert.equal(showDuplicateEventsOf(undefined, "show_all"), true);
+assert.equal(showDuplicateEventsOf(false, "show_all"), false);
+const dragged = reorderCalendarPriority(order, "portal", "learn");
+assert.deepEqual(dragged, ["portal", "learn"]);
+assert.deepEqual(dedupeCalendarTitles([learn, portal], dragged), [portal], "dragging Portal to the top changes the duplicate winner");
+assert.deepEqual(reorderCalendarPriority(dragged, "learn", "portal"), ["learn", "portal"]);
+assert.equal(reorderCalendarPriority(order, "learn", "learn"), order);
+assert.equal(reorderCalendarPriority(order, "unknown", "learn"), order);
+assert.deepEqual(dedupeCalendarTitles([learn, portal], dragged, true), [learn, portal], "show-both retains the chosen order");
+
+assert.deepEqual(calendarPriorityOrderOf([]), []);
+assert.deepEqual(dedupeCalendarTitles([learn, portal, manual], ["portal"]), [portal, manual]);
+assert.deepEqual(dedupeCalendarTitles([learn, portal, manual], [], true), [manual], "show both does not restore removed calendars");
+assert.deepEqual(reorderCalendarPriority(["portal"], "portal", "learn"), ["portal"]);
+
+assert.deepEqual(calendarNamesOf({ learn: "  My courses  ", portal: "", other: "ignored" }), { learn: "My courses" });
+assert.deepEqual(calendarNamesOf({ learn: "x".repeat(81), portal: 5 }), {});

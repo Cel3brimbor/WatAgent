@@ -70,7 +70,7 @@ export function TimelineStrip({ item, compact, layout = "inline", onOpen, onComp
         className={`calendar-strip is-gcal-event${compact ? " is-compact" : ""}${layoutClass}`}
         aria-label={item.title}
         title={item.smartTag ? `${item.title} · ${item.smartTag.name}` : undefined}
-        style={stripColorStyle(item.smartTag?.color ?? item.google?.calendarColor)}
+        style={stripColorStyle(item.smartTag?.color ?? item.calendarColor ?? item.google?.calendarColor)}
         onClick={(event) => {
           event.stopPropagation();
           onOpen(item, event.currentTarget.getBoundingClientRect());
@@ -95,7 +95,7 @@ export function TimelineStrip({ item, compact, layout = "inline", onOpen, onComp
       type="button"
         className={`calendar-strip is-${item.kind}${item.completed ? " is-done" : ""}${item.pendingApproval ? " is-pending" : ""}${item.editorDraft ? " is-editor-draft" : ""}${compact ? " is-compact" : ""}${layoutClass}`}
       title={item.smartTag ? `${item.title} · ${item.smartTag.name}` : undefined}
-      style={stripColorStyle(item.smartTag?.color)}
+      style={stripColorStyle(item.smartTag?.color ?? item.calendarColor)}
         onClick={(event) => {
           event.stopPropagation();
           onOpen(item, event.currentTarget.getBoundingClientRect());

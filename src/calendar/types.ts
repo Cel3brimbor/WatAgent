@@ -1,5 +1,10 @@
 export type CalendarItemKind = "event" | "task";
 
+export type ImportedCalendarSource = "learn" | "portal" | "other";
+export type CalendarPrioritySource = "learn" | "portal";
+export type CalendarPriorityOrder = CalendarPrioritySource[];
+export type CalendarNames = Partial<Record<CalendarPrioritySource, string>>;
+
 export type CalendarItemMeta = {
   kind: CalendarItemKind;
   startUTC: number;
@@ -7,6 +12,8 @@ export type CalendarItemMeta = {
   allDay: boolean;
   completed?: boolean;
   googleEventId?: string;
+  icsImportId?: string;
+  importSource?: ImportedCalendarSource;
   location?: string;
   description?: string;
 };
@@ -49,12 +56,14 @@ export type TimelineItem = {
   endUTC: number;
   allDay: boolean;
   completed?: boolean;
+  importSource?: ImportedCalendarSource;
   pendingApproval?: boolean;
   editorDraft?: boolean;
   google?: GoogleEventDetails;
   location?: string;
   description?: string;
   /** Display-only overlay; never sent to Google or the API. */
+  calendarColor?: string;
   smartTag?: { id: string; name: string; color: string };
 };
 
@@ -88,6 +97,8 @@ export function parseCalendarMeta(raw: unknown): CalendarItemMeta | undefined {
     allDay: Boolean(rec.allDay),
     completed: kind === "task" ? Boolean(rec.completed) : undefined,
     googleEventId: googleEventIdOf(rec.googleEventId),
+    icsImportId: typeof rec.icsImportId === "string" && /^[0-9a-f-]{36}$/.test(rec.icsImportId) ? rec.icsImportId : undefined,
+    importSource: rec.importSource === "learn" || rec.importSource === "portal" || rec.importSource === "other" ? rec.importSource : undefined,
     location: optionalText(rec.location, 300, false),
     description: optionalText(rec.description, 4000, true),
   };
@@ -101,6 +112,8 @@ export function calendarMetaEqual(a: CalendarItemMeta, b: CalendarItemMeta): boo
     a.allDay === b.allDay &&
     a.completed === b.completed &&
     a.googleEventId === b.googleEventId &&
+    a.icsImportId === b.icsImportId &&
+    a.importSource === b.importSource &&
     a.location === b.location &&
     a.description === b.description
   );
