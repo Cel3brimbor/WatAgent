@@ -14,8 +14,15 @@ export function LoginScreen({ error, onSignIn }: Props) {
 
   return (
     <main className="login-shell">
+      <section className="login-intro" aria-hidden="true">
+        <p className="login-mark">WatAgent</p>
+        <p className="login-headline">
+          Your days, <em>thoughtfully</em> planned.
+        </p>
+        <span className="login-rule" />
+      </section>
       <section className="login-card">
-        <h1>WatAgent</h1>
+        <h1>Welcome</h1>
         <p className="login-subtitle">Your calendar, with an assistant that can plan it for you.</p>
         {message ? (
           <p className="login-error" role="alert">
