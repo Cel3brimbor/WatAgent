@@ -122,9 +122,9 @@ export type CalendarColors = {
 };
 
 export const DEFAULT_COLORS: CalendarColors = {
-  event: "#3f9d85",
-  task: "#e0a43a",
-  google: "#5b7fd6",
+  event: "#5b8a72",
+  task: "#c99a3c",
+  google: "#5f74a8",
   useGoogleColors: true,
 };
 
