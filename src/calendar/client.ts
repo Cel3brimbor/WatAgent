@@ -1,4 +1,5 @@
 import { apiJson } from "@/shared/api-base";
+import { demoItems, isDemoMode } from "./demo";
 import { parseCalendarMeta, type CalendarItemDoc, type CalendarItemMeta } from "@/calendar/types";
 
 function timeZone(): string {
@@ -27,6 +28,7 @@ export function calendarItemsOf(raw: unknown): CalendarItemDoc[] {
 }
 
 export async function listCalendarItems(): Promise<CalendarItemDoc[]> {
+  if (isDemoMode()) return demoItems();
   const payload = await apiJson<{ items?: unknown }>("/api/calendar/items");
   return calendarItemsOf(payload.items);
 }

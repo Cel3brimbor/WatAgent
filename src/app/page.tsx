@@ -6,6 +6,7 @@ import { CalendarProvider } from "@/calendar/store";
 import { LoginScreen } from "@/auth/login-screen";
 import { restoreSession, signIn, signOut } from "@/auth/session";
 import type { AuthUser } from "@/auth/types";
+import { DEMO_USER, isDemoMode } from "@/calendar/demo";
 
 type AuthState = { status: "loading" } | { status: "signed-out" } | { status: "signed-in"; user: AuthUser };
 
@@ -14,6 +15,10 @@ export default function Home() {
 
   useEffect(() => {
     let cancelled = false;
+    if (isDemoMode()) {
+      setAuth({ status: "signed-in", user: DEMO_USER });
+      return;
+    }
     restoreSession()
       .then((user) => {
         if (!cancelled) setAuth(user ? { status: "signed-in", user } : { status: "signed-out" });
