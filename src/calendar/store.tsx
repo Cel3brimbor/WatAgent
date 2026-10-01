@@ -287,9 +287,17 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     [dropItem, putItem, refreshPending, wrote],
   );
 
+  const approvalWriteRef = useRef(0);
   const updateRequireAiApproval = useCallback(async (value: boolean) => {
-    await setRequireAiApproval(value);
+    const write = ++approvalWriteRef.current;
+    //move the switch immediately; the save round-trip was holding it for over a second
     setRequireAiApprovalState(value);
+    try {
+      await setRequireAiApproval(value);
+    } catch (err) {
+      if (approvalWriteRef.current === write) setRequireAiApprovalState(!value);
+      throw err;
+    }
   }, []);
 
   const approvePendingChanges = useCallback(

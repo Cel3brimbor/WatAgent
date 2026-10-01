@@ -77,8 +77,9 @@ export function CalendarWeekView({
           <span className="calendar-all-day-label">All-day</span>
           {days.map((date) => {
             const allDay = itemsForDay(date).filter((item) => item.allDay);
+            const tone = `${isToday(date) ? " is-today" : ""}${date.getDay() % 6 === 0 ? " is-weekend" : ""}`;
             return (
-              <div key={`${date.toISOString()}-all`} className="calendar-week-all-day-col">
+              <div key={`${date.toISOString()}-all`} className={`calendar-week-all-day-col${tone}`}>
                 {allDay.map((item) => (
                   <TimelineStrip
                     key={item.id}
@@ -116,6 +117,7 @@ export function CalendarWeekView({
             dayStart.getTime(),
           );
           const nowTop = isToday(date) ? nowLineTop(now, dayStart.getTime()) : null;
+          const tone = `${isToday(date) ? " is-today" : ""}${date.getDay() % 6 === 0 ? " is-weekend" : ""}`;
           const selection =
             slots.selection?.key === dayIndex
               ? slots.selection
@@ -123,7 +125,7 @@ export function CalendarWeekView({
           return (
             <div
               key={date.toISOString()}
-              className={`calendar-week-col${isToday(date) ? " is-today" : ""}${date.getDay() % 6 === 0 ? " is-weekend" : ""}`}
+              className={`calendar-week-col${tone}`}
               {...slots.bind(dayIndex)}
             >
               {HOURS.map((hour) => (

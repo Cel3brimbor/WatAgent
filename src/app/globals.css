@@ -1860,6 +1860,24 @@ select {
 
 .calendar-week-all-day {
   grid-template-columns: 4.2rem repeat(7, minmax(0, 1fr));
+  gap: 0;
+  align-items: stretch;
+  padding-bottom: 0;
+  margin-bottom: 0;
+}
+
+.calendar-week-all-day-col {
+  min-height: 2.15rem;
+  padding: 0.25rem 0.3rem 0.4rem;
+  border-left: 1px solid var(--line);
+}
+
+.calendar-week-all-day-col.is-weekend {
+  background: var(--surface-sunken);
+}
+
+.calendar-week-all-day-col.is-today {
+  background: var(--accent-soft);
 }
 
 .calendar-all-day-label {
@@ -4733,9 +4751,15 @@ select {
   position: absolute;
   inset: 0;
   z-index: 1;
+  width: 100%;
+  height: 100%;
   margin: 0;
+  padding: 0;
+  border: 0;
   opacity: 0;
   cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
 }
 
 .switch-input:disabled {
@@ -4748,6 +4772,7 @@ select {
   height: 100%;
   border-radius: 999px;
   background: color-mix(in srgb, var(--ink) 16%, transparent);
+  pointer-events: none;
   transition: background-color 220ms var(--ease-out);
 }
 
