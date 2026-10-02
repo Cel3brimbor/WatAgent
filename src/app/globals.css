@@ -3139,6 +3139,122 @@ select {
   box-shadow: none;
 }
 
+/*date and time read as two tappable chips, like a native calendar, instead of one long iso string*/
+.calendar-editor-when {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.calendar-editor-pill {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-height: 2rem;
+  padding: 0.25rem 0.65rem;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: var(--hover);
+  color: var(--ink);
+  font-size: 0.9rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+  white-space: nowrap;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out),
+    transform var(--dur-spring) var(--ease-spring);
+}
+
+@media (hover: hover) {
+  .calendar-editor-pill:hover {
+    background: var(--press);
+  }
+}
+
+/*press lands on pointer-down*/
+.calendar-editor-pill:active {
+  transform: scale(0.97);
+  transition-duration: var(--dur-press);
+}
+
+.calendar-editor-pill:focus-within {
+  border-color: var(--accent);
+  background: var(--paper);
+  box-shadow: 0 0 0 3px var(--glow);
+}
+
+.calendar-editor-pill[data-invalid] {
+  border-color: var(--danger);
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+/*the real input covers the chip: invisible, but it takes the click, the keys and opens the system picker*/
+.calendar-editor-pill-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.calendar-editor-pill-input::-webkit-calendar-picker-indicator {
+  position: absolute;
+  inset: 0;
+  width: auto;
+  height: auto;
+  cursor: pointer;
+}
+
+/*while focused the real field shows in place of the label, so typed digits are visible as they go in*/
+.calendar-editor-pill:focus-within > span {
+  display: none;
+}
+
+.calendar-editor-pill:focus-within .calendar-editor-pill-input {
+  position: static;
+  width: auto;
+  height: auto;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  opacity: 1;
+  cursor: text;
+}
+
+.calendar-editor-pill:focus-within .calendar-editor-pill-input::-webkit-calendar-picker-indicator {
+  display: none;
+}
+
+.calendar-editor-pill-input::-webkit-datetime-edit,
+.calendar-editor-pill-input::-webkit-date-and-time-value {
+  padding: 0;
+  text-align: left;
+}
+
+.calendar-editor-duration {
+  margin-left: 0.15rem;
+  color: var(--ink-soft);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.calendar-editor-duration[data-invalid] {
+  color: var(--danger);
+  font-weight: 600;
+}
+
 /*the inset reset clears the global select chevron; put it back at the cell edge*/
 .calendar-editor-select {
   padding-right: 1.5rem;
