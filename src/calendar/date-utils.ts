@@ -43,7 +43,6 @@ export function startOfWeek(date: Date, weekStartsOn: 0 | 1): Date {
   return addDays(start, -offset);
 }
 
-/** Monday of the work week shown for this date; on a weekend that is the coming Monday. */
 export function startOfWorkWeek(date: Date): Date {
   const start = startOfLocalDay(date);
   const day = start.getDay();
