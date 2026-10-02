@@ -1,3 +1,4 @@
+import { AGENT_EFFORTS, type AgentEffort } from "@/agent/agent-effort";
 import { apiJson } from "@/shared/api-base";
 import { parseCalendarMeta, type CalendarItemMeta } from "@/calendar/types";
 import type { ColorSchemePreference, TeaThemeId } from "@/shared/tea-theme";
@@ -56,10 +57,15 @@ function colorSchemeOf(raw: unknown): ColorSchemePreference | null {
   return raw === "light" || raw === "dark" || raw === "system" ? raw : null;
 }
 
+function agentEffortOf(raw: unknown): AgentEffort | null {
+  return typeof raw === "string" && (AGENT_EFFORTS as readonly string[]).includes(raw) ? (raw as AgentEffort) : null;
+}
+
 export type CalendarSettings = {
   requireAiApproval: boolean;
   teaTheme: TeaThemeId | null;
   colorScheme: ColorSchemePreference | null;
+  agentEffort: AgentEffort | null;
 };
 
 export async function getCalendarSettings(): Promise<CalendarSettings> {
@@ -68,6 +74,7 @@ export async function getCalendarSettings(): Promise<CalendarSettings> {
     requireAiApproval: payload.requireAiApproval === true,
     teaTheme: teaThemeOf(payload.teaTheme),
     colorScheme: colorSchemeOf(payload.colorScheme),
+    agentEffort: agentEffortOf(payload.agentEffort),
   };
 }
 
@@ -75,6 +82,7 @@ export async function patchCalendarSettings(patch: {
   requireAiApproval?: boolean;
   teaTheme?: TeaThemeId | null;
   colorScheme?: ColorSchemePreference | null;
+  agentEffort?: AgentEffort | null;
 }): Promise<CalendarSettings> {
   const payload = await apiJson<Record<string, unknown>>("/api/calendar/settings", {
     method: "PATCH",
@@ -84,6 +92,7 @@ export async function patchCalendarSettings(patch: {
     requireAiApproval: payload.requireAiApproval === true,
     teaTheme: teaThemeOf(payload.teaTheme),
     colorScheme: colorSchemeOf(payload.colorScheme),
+    agentEffort: agentEffortOf(payload.agentEffort),
   };
 }
 

@@ -609,7 +609,8 @@ select {
 /*feedback lands on press, not release; release settles back on the spring*/
 .ghost-btn:active:not(:disabled),
 .primary-btn:active:not(:disabled),
-.danger-btn:active:not(:disabled) {
+.danger-btn:active:not(:disabled),
+.composer-effort:active {
   transform: scale(0.97);
   transition-duration: var(--dur-press);
 }
@@ -639,6 +640,7 @@ select {
 .side-cal-row:active,
 .calendar-filter:active,
 .context-menu-item:active:not(:disabled),
+.composer-effort:active,
 .side-cal-menu > button:active {
   background: var(--press);
 }
@@ -668,6 +670,7 @@ select {
 .side-cal-row,
 .calendar-filter,
 .context-menu-item,
+.composer-effort,
 .side-cal-menu > button,
 .calendar-strip,
 .todo-main,
@@ -4765,9 +4768,10 @@ select {
 
 .composer-box {
   display: flex;
-  align-items: flex-end;
-  gap: 0.4rem;
-  padding: 0.35rem 0.35rem 0.35rem 0.75rem;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.1rem;
+  padding: 0.4rem 0.4rem 0.35rem 0.65rem;
   border: 1px solid var(--line);
   border-radius: 18px;
   background: var(--panel-solid);
@@ -4782,10 +4786,10 @@ select {
 }
 
 .composer-input {
-  flex: 1;
+  width: 100%;
   min-height: 2.6rem;
   max-height: 12rem;
-  padding: 0.3rem 0;
+  padding: 0.25rem 0.15rem 0.15rem 0.1rem;
   border: 0;
   background: transparent;
   font-size: 0.9rem;
@@ -4793,6 +4797,72 @@ select {
   resize: none;
   outline: none;
   field-sizing: content;
+}
+
+.composer-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.composer-effort {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  min-width: 0;
+  max-width: calc(100% - 2.4rem);
+  height: 1.75rem;
+  margin-left: -0.25rem;
+  padding: 0 0.45rem;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 0.75rem;
+  font-weight: 560;
+  letter-spacing: 0.01em;
+}
+
+.composer-effort-name {
+  flex: 0 0 auto;
+}
+
+.composer-effort-value {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-effort .glyph {
+  width: 0.72rem;
+  height: 0.72rem;
+  opacity: 0.72;
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+
+.composer-effort[aria-expanded="true"] {
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+  color: var(--ink);
+}
+
+.composer-effort[aria-expanded="true"] .glyph {
+  transform: rotate(180deg);
+}
+
+.composer-effort:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+@media (hover: hover) {
+  .composer-effort:hover {
+    background: color-mix(in srgb, var(--ink) 7%, transparent);
+    color: var(--ink);
+  }
 }
 
 .composer-send {
@@ -5070,6 +5140,43 @@ select {
 
 .context-menu-item.is-danger {
   color: var(--danger);
+}
+
+.effort-menu {
+  min-width: 11.5rem;
+}
+
+.effort-menu-label {
+  margin: 0;
+  padding: 0.28rem 0.6rem 0.2rem;
+  color: var(--ink-soft);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.effort-menu .context-menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.effort-menu .context-menu-item.is-selected {
+  color: var(--ink);
+}
+
+.effort-menu .glyph {
+  width: 0.85rem;
+  height: 0.85rem;
+  color: var(--accent);
+}
+
+.effort-menu-check {
+  width: 0.85rem;
+  height: 0.85rem;
+  flex-shrink: 0;
 }
 
 .modal-backdrop {

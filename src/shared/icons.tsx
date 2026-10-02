@@ -39,6 +39,14 @@ export function ChevronRightIcon(props: IconProps) {
   );
 }
 
+export function ChevronDownIcon(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <path d="M3.75 6.25 8 10.5l4.25-4.25" />
+    </Glyph>
+  );
+}
+
 export function CloseIcon(props: IconProps) {
   return (
     <Glyph {...props}>

@@ -1,6 +1,8 @@
 "use client";
 
 import { useRef, useState, type FormEvent, type KeyboardEvent } from "react";
+import { AgentEffortButton } from "@/agent/agent-effort-button";
+import type { AgentEffort } from "@/agent/agent-effort";
 import { ArrowUpIcon, StopIcon } from "@/shared/icons";
 
 const MAX_CHARS = 20_000;
@@ -8,12 +10,14 @@ const MAX_CHARS = 20_000;
 type Props = {
   busy: boolean;
   error: string | null;
+  effort: AgentEffort;
+  onEffort: (effort: AgentEffort) => void;
   onSend: (payload: { text: string }) => void;
   onStop: () => void;
   onError: (message: string | null) => void;
 };
 
-export function ChatComposer({ busy, error, onSend, onStop, onError }: Props) {
+export function ChatComposer({ busy, error, effort, onEffort, onSend, onStop, onError }: Props) {
   const [text, setText] = useState("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const ready = text.trim().length > 0;
@@ -58,20 +62,23 @@ export function ChatComposer({ busy, error, onSend, onStop, onError }: Props) {
           onChange={(event) => setText(event.target.value)}
           onKeyDown={onKeyDown}
         />
-        {busy ? (
-          <button type="button" className="composer-send is-stop" onClick={onStop} aria-label="Stop">
-            <StopIcon />
-          </button>
-        ) : (
-          <button
-            type="submit"
-            className={`composer-send${ready ? " is-ready" : ""}`}
-            disabled={!ready}
-            aria-label="Send"
-          >
-            <ArrowUpIcon />
-          </button>
-        )}
+        <div className="composer-bar">
+          <AgentEffortButton value={effort} onChange={onEffort} />
+          {busy ? (
+            <button type="button" className="composer-send is-stop" onClick={onStop} aria-label="Stop">
+              <StopIcon />
+            </button>
+          ) : (
+            <button
+              type="submit"
+              className={`composer-send${ready ? " is-ready" : ""}`}
+              disabled={!ready}
+              aria-label="Send"
+            >
+              <ArrowUpIcon />
+            </button>
+          )}
+        </div>
       </div>
     </form>
   );

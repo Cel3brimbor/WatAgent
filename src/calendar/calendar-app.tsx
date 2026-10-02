@@ -81,6 +81,7 @@ import { SideNav, type AppSection } from "@/calendar/side-nav";
 import { TodoList } from "@/calendar/todo-list";
 import { CalendarChatPanel } from "@/agent/calendar-chat-panel";
 import type { PendingAiChange } from "@/calendar/approval-client";
+import type { AgentEffort } from "@/agent/agent-effort";
 import { readAgentStream } from "@/agent/stream";
 import type { ChatMessage, ToolEventRecord } from "@/agent/types";
 import { apiFetch } from "@/shared/api-base";
@@ -114,6 +115,7 @@ type Range = { rangeStartUTC: number; rangeEndUTC: number };
 
 type SendPayload = {
   text: string;
+  effort: AgentEffort;
   branch?: { kind: "edit"; messageId: string } | { kind: "regenerate"; messageId: string };
 };
 
@@ -944,6 +946,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
           endDateUTC: bounds.endDateUTC,
           timeZone: timeZone(),
           timelineDigest,
+          effort: payload.effort,
           messages: visible
             .filter((message) => message.content.trim())
             .slice(-80)

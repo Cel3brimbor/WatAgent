@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
+import type { AgentEffort } from "@/agent/agent-effort";
+import { useAgentEffort } from "@/agent/use-agent-effort";
 import { AgentThinkingBlock } from "@/agent/agent-thinking-block";
 import { ChatBubbleTools } from "@/agent/bubble-tools";
 import { ChatComposer } from "@/agent/chat-composer";
@@ -18,6 +20,7 @@ const PANEL_EXIT_MS = 320;
 
 type SendPayload = {
   text: string;
+  effort: AgentEffort;
   branch?: { kind: "edit"; messageId: string } | { kind: "regenerate"; messageId: string };
 };
 
@@ -87,6 +90,7 @@ export function CalendarChatPanel({
   const pinnedRef = useRef(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState("");
+  const { effort, setEffort } = useAgentEffort();
 
   useEffect(() => {
     onResizingChange(chatResize.resizing);
@@ -103,9 +107,9 @@ export function CalendarChatPanel({
 
   if (!presence.value) return null;
 
-  function send(payload: SendPayload) {
+  function send(payload: Omit<SendPayload, "effort">) {
     pinnedRef.current = true;
-    onSend(payload);
+    onSend({ ...payload, effort });
   }
 
   function submitEdit(messageId: string) {
@@ -259,7 +263,15 @@ export function CalendarChatPanel({
           onRejectAll={onRejectAll}
           onInspect={onInspectPending}
         />
-        <ChatComposer busy={busy} error={error} onSend={send} onStop={onStop} onError={onError} />
+        <ChatComposer
+          busy={busy}
+          error={error}
+          effort={effort}
+          onEffort={setEffort}
+          onSend={send}
+          onStop={onStop}
+          onError={onError}
+        />
       </div>
     </aside>
   );
