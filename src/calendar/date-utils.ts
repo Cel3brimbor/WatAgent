@@ -53,6 +53,15 @@ export function startOfWeek(date: Date, weekStartsOn: 0 | 1): Date {
   return addDays(start, -offset);
 }
 
+/** Monday of the work week shown for this date; on a weekend that is the coming Monday. */
+export function startOfWorkWeek(date: Date): Date {
+  const start = startOfLocalDay(date);
+  const day = start.getDay();
+  if (day === 6) return addDays(start, 2);
+  if (day === 0) return addDays(start, 1);
+  return addDays(start, 1 - day);
+}
+
 export function sameLocalDay(a: Date, b: Date): boolean {
   return (
     a.getFullYear() === b.getFullYear() &&
@@ -67,7 +76,7 @@ export function isToday(date: Date): boolean {
 
 export function shiftFocus(focus: Date, view: CalendarView, delta: number): Date {
   if (view === "day") return addDays(focus, delta);
-  if (view === "week") return addDays(focus, delta * 7);
+  if (view === "week" || view === "workweek") return addDays(focus, delta * 7);
   if (view === "month") return addMonths(focus, delta);
   return addYears(focus, delta);
 }
@@ -81,9 +90,9 @@ export function formatFocusLabel(focus: Date, view: CalendarView, weekStartsOn: 
       year: "numeric",
     });
   }
-  if (view === "week") {
-    const start = startOfWeek(focus, weekStartsOn);
-    const end = addDays(start, 6);
+  if (view === "week" || view === "workweek") {
+    const start = view === "workweek" ? startOfWorkWeek(focus) : startOfWeek(focus, weekStartsOn);
+    const end = addDays(start, view === "workweek" ? 4 : 6);
     const sameMonth = start.getMonth() === end.getMonth();
     const sameYear = start.getFullYear() === end.getFullYear();
     const startLabel = start.toLocaleDateString(undefined, { month: "short", day: "numeric" });

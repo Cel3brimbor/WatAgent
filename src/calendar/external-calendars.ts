@@ -1,5 +1,6 @@
 import type { CalendarItemDoc, CalendarLinks, CalendarNames, CalendarPriorityOrder } from "./types";
 import { calendarGroupsOf, type CalendarSourceFilter } from "./preferences";
+import { localCalendarIdOf } from "./local-calendars";
 
 export type ExternalCalendarRef = { id: string; name: string; source: "learn" | "portal" | "other" };
 export function externalCalendarId(source: string): string { return `ics:${source}`; }
@@ -28,8 +29,9 @@ export function calendarItemVisible(item: CalendarItemDoc, filter: CalendarSourc
     if (!groups.external) return false;
     return !filter.hiddenIds.includes(id) && !filter.mutedGoogleIds.includes(id);
   }
-  const id = item.calendar.kind === "task" ? "tasks" : "events";
+  const id = localCalendarIdOf(item.calendar) ?? "events";
   if (groups.hidden && filter.hiddenIds.includes(id)) return true;
-  if (!groups.watagent) return false;
-  return filter[id] && !filter.hiddenIds.includes(id);
+  if (!groups.watagent || filter.hiddenIds.includes(id)) return false;
+  //user-made calendars share the per-calendar mute list with imported ones
+  return id === "events" || id === "tasks" ? filter[id] : !filter.mutedGoogleIds.includes(id);
 }

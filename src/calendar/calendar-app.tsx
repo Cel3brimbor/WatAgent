@@ -12,6 +12,7 @@ import {
   shiftFocus,
   startOfLocalDay,
   startOfWeek,
+  startOfWorkWeek,
 } from "@/calendar/date-utils";
 import { removeImportedCalendar } from "@/calendar/client";
 import { calendarItemVisible, externalCalendarId, externalCalendarsOf } from "@/calendar/external-calendars";
@@ -27,6 +28,7 @@ import {
   readCalendarPriorityOrder,
   readShowDuplicateEvents,
   readColorOverrides,
+  CALENDAR_PALETTE,
   readSidePanelSections,
   readSourceFilter,
   isSidebarHidden,
@@ -64,6 +66,16 @@ import { GoogleEventCard } from "@/calendar/google-event-card";
 import { rememberPlace } from "@/calendar/place-memory";
 import { SettingsPanel } from "@/calendar/settings-panel";
 import { useCalendarPreferencesSync } from "@/calendar/use-calendar-preferences-sync";
+import {
+  BUILTIN_CALENDARS,
+  calendarIdField,
+  defaultEventCalendarId,
+  localCalendarIdOf,
+  newLocalCalendar,
+  readLocalCalendars,
+  shownLocalCalendars,
+  type LocalCalendar,
+} from "@/calendar/local-calendars";
 import { useAppearanceSync } from "@/calendar/use-appearance-sync";
 import { SideNav, type AppSection } from "@/calendar/side-nav";
 import { TodoList } from "@/calendar/todo-list";
@@ -87,12 +99,13 @@ function importedCalendarLabel(source: TimelineItem["importSource"], names: Cale
 
 const VIEW_OPTIONS: SegmentOption<CalendarView>[] = [
   { value: "day", label: "Day", hint: "Day (D)" },
+  { value: "workweek", label: "5 Day", hint: "5 days, Monday to Friday (5)" },
   { value: "week", label: "Week", hint: "Week (W)" },
   { value: "month", label: "Month", hint: "Month (M)" },
   { value: "year", label: "Year", hint: "Year (Y)" },
 ];
 
-const VIEW_DEPTH: Record<CalendarView, number> = { year: 0, month: 1, week: 2, day: 3 };
+const VIEW_DEPTH: Record<CalendarView, number> = { year: 0, month: 1, week: 2, workweek: 2, day: 3 };
 
 //which way the stage should move: sideways through time, or zooming between granularities
 type NavDirection = "next" | "prev" | "in" | "out" | "none";
@@ -183,8 +196,8 @@ function googleWeekLoadRange(focus: Date, weekStartsOn: 0 | 1): Range {
 
 function googleFetchRange(focus: Date, view: CalendarView, weekStartsOn: 0 | 1): Range {
   if (view === "month") return googleMonthLoadRange(focus);
-  if (view === "week") {
-    return rangeUnion(googleWeekLoadRange(focus, weekStartsOn), googleMonthLoadRange(focus));
+  if (view === "week" || view === "workweek") {
+    return rangeUnion(googleWeekLoadRange(view === "workweek" ? startOfWorkWeek(focus) : focus, weekStartsOn), googleMonthLoadRange(focus));
   }
   if (view === "day") return googleWeekLoadRange(focus, weekStartsOn);
   return googleRange(focus, view, weekStartsOn);
@@ -198,6 +211,10 @@ function googleRange(focus: Date, view: CalendarView, weekStartsOn: 0 | 1): Rang
   if (view === "week") {
     const start = startOfWeek(focus, weekStartsOn);
     return { rangeStartUTC: start.getTime(), rangeEndUTC: addDays(start, 7).getTime() };
+  }
+  if (view === "workweek") {
+    const start = startOfWorkWeek(focus);
+    return { rangeStartUTC: start.getTime(), rangeEndUTC: addDays(start, 5).getTime() };
   }
   if (view === "month") {
     const start = startOfLocalDay(new Date(focus.getFullYear(), focus.getMonth(), 1));
@@ -244,6 +261,7 @@ function timeZone(): string {
 function periodStart(focus: Date, view: CalendarView, weekStartsOn: 0 | 1): number {
   if (view === "day") return startOfLocalDay(focus).getTime();
   if (view === "week") return startOfWeek(focus, weekStartsOn).getTime();
+  if (view === "workweek") return startOfWorkWeek(focus).getTime();
   if (view === "month") return new Date(focus.getFullYear(), focus.getMonth(), 1).getTime();
   return new Date(focus.getFullYear(), 0, 1).getTime();
 }
@@ -285,6 +303,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
   const [sources, setSources] = useState<CalendarSourceFilter>(() => readSourceFilter());
   const [colors, setColors] = useState<CalendarColors>(() => readCalendarColors());
   const [colorOverrides, setColorOverrides] = useState<Record<string, string>>(() => readColorOverrides());
+  const [localCalendars, setLocalCalendars] = useState<LocalCalendar[]>(() => readLocalCalendars());
   const [smartTags, setSmartTags] = useState<SmartTag[]>(() => readSmartTags());
   const [sidePanelSections, setSidePanelSections] = useState<SidePanelSectionsOpen>(() => readSidePanelSections());
   const groups = calendarGroupsOf(sources.groups);
@@ -329,6 +348,15 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
     () => mergeEditorDraft(calendar.displayItems, draft),
     [calendar.displayItems, draft],
   );
+  const shownCalendars = useMemo(() => shownLocalCalendars(localCalendars, calendar.items), [localCalendars, calendar.items]);
+  const localCalendarCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const item of calendar.items) {
+      const id = localCalendarIdOf(item.calendar);
+      if (id) counts[id] = (counts[id] ?? 0) + 1;
+    }
+    return counts;
+  }, [calendar.items]);
 
   const period = periodStart(focus, view, weekStartsOn);
   const lastPeriodRef = useRef({ period, view, section });
@@ -348,13 +376,14 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
 
   useCalendarPreferencesSync(
     calendar.hydrated,
-    { view, calendarNames, calendarLinks, calendarPriorityOrder, showDuplicateEvents, sources, colors, colorOverrides, smartTags, navCollapsed, sidePanelSections },
+    { view, calendarNames, calendarLinks, calendarPriorityOrder, showDuplicateEvents, localCalendars, sources, colors, colorOverrides, smartTags, navCollapsed, sidePanelSections },
     {
       setView,
       setCalendarNames,
       setCalendarLinks,
       setCalendarPriorityOrder,
       setShowDuplicateEvents,
+      setLocalCalendars,
       setSources,
       setColors,
       setColorOverrides,
@@ -454,7 +483,12 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
           if (filterGroups.hidden && filter.hiddenIds.includes(event.calendarId)) return true;
           return googleShown && !isSidebarHidden(filter, event.calendarId) && !filter.mutedGoogleIds.includes(event.calendarId);
         }),
-      }), priorityOrder, showDuplicateEvents).map((item) => ({ ...item, calendarColor: item.importSource ? colorOverrides[externalCalendarId(item.importSource)] ?? colors.event : undefined }));
+      }), priorityOrder, showDuplicateEvents).map((item) => ({
+        ...item,
+        calendarColor: item.importSource
+          ? colorOverrides[externalCalendarId(item.importSource)] ?? colors.event
+          : item.calendarId ? colorOverrides[item.calendarId] ?? colors.event : undefined,
+      }));
     },
     [itemsForUi, busyBlocks, shownOverlayEvents, priorityOrder, showDuplicateEvents, colorOverrides, colors.event],
   );
@@ -598,6 +632,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
       if (key === "t") setFocus(startOfLocalDay(new Date()));
       if (key === "d") setView("day");
       if (key === "w") setView("week");
+      if (key === "5") setView("workweek");
       if (key === "m") setView("month");
       if (key === "y") setView("year");
       if (event.key === "ArrowLeft") setFocus((current) => shiftFocus(current, view, -1));
@@ -730,6 +765,50 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
     }
   }
 
+  function createLocalCalendar(name: string) {
+    const created = newLocalCalendar(name);
+    const used = new Set(Object.values(colorOverrides));
+    const color = CALENDAR_PALETTE.find((option) => !used.has(option) && option !== colors.event && option !== colors.task)
+      ?? CALENDAR_PALETTE[localCalendars.length % CALENDAR_PALETTE.length];
+    setColorOverrides((overrides) => ({ ...overrides, [created.id]: color }));
+    setLocalCalendars((list) => [...list, created]);
+    setNotice(`Created ${created.name}.`);
+  }
+
+  function renameLocalCalendar(id: string, name: string) {
+    setLocalCalendars((list) => {
+      //a built-in that came back after deletion is shown but not stored; store it with its new name
+      const base = list.some((entry) => entry.id === id)
+        ? list
+        : [...BUILTIN_CALENDARS.filter((entry) => entry.id === id), ...list];
+      return base.map((entry) => (entry.id === id ? { ...entry, name: name.trim().slice(0, 60) } : entry));
+    });
+  }
+
+  async function deleteLocalCalendar(id: string) {
+    const name = shownCalendars.find((entry) => entry.id === id)?.name ?? "Calendar";
+    const ids = calendar.items.filter((item) => localCalendarIdOf(item.calendar) === id).map((item) => item.id);
+    const failed = await calendar.removeMany(ids);
+    if (failed > 0) {
+      throw new Error(`${failed} of ${ids.length} items in ${name} could not be deleted, so the calendar was kept. Try again.`);
+    }
+    setLocalCalendars((list) => list.filter((entry) => entry.id !== id));
+    setSources((current) => ({
+      ...current,
+      mutedGoogleIds: current.mutedGoogleIds.filter((entry) => entry !== id),
+      hiddenIds: current.hiddenIds.filter((entry) => entry !== id),
+      ...(id === "events" ? { events: true } : id === "tasks" ? { tasks: true } : {}),
+    }));
+    if (id.startsWith("cal-")) {
+      setColorOverrides((overrides) => {
+        const next = { ...overrides };
+        delete next[id];
+        return next;
+      });
+    }
+    setNotice(ids.length ? `Deleted ${name} and its ${ids.length} item${ids.length === 1 ? "" : "s"}.` : `Deleted ${name}.`);
+  }
+
   function confirmItemDelete() {
     const target = itemDelete;
     if (!target) return;
@@ -785,6 +864,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
       endUTC: draft.endUTC,
       allDay: draft.allDay,
       completed: draft.kind === "task" ? Boolean(draft.completed) : undefined,
+      calendarId: draft.kind === "event" ? calendarIdField(draft.calendarId ?? defaultEventCalendarId(localCalendars)) : undefined,
       ...(location ? { location } : {}),
       ...(description ? { description } : {}),
     };
@@ -990,6 +1070,11 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
           smartTagSamples={smartTagSamples}
           sidePanelSections={sidePanelSections}
           onSidePanelSections={setSidePanelSections}
+          localCalendars={shownCalendars}
+          localCalendarCounts={localCalendarCounts}
+          onCreateCalendar={createLocalCalendar}
+          onRenameCalendar={renameLocalCalendar}
+          onDeleteCalendar={deleteLocalCalendar}
         />
       </SideNav>
       <div className="calendar-shell">
@@ -1137,10 +1222,11 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
                 onCompleteTask={calendar.completeTask}
               />
             ) : null}
-            {section === "calendar" && view === "week" ? (
+            {section === "calendar" && (view === "week" || view === "workweek") ? (
               <CalendarWeekView
                 focus={focus}
                 weekStartsOn={weekStartsOn}
+                days={view === "workweek" ? Array.from({ length: 5 }, (_, i) => addDays(startOfWorkWeek(focus), i)) : undefined}
                 itemsForDay={itemsForDay}
                 editorDraft={draft}
                 onOpen={onOpenItem}
@@ -1297,6 +1383,8 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
           onChange={setDraft}
           onSave={saveDraft}
           onCancel={closeEditor}
+          calendars={shownCalendars}
+          defaultCalendarId={defaultEventCalendarId(localCalendars)}
           onDelete={
             shownDraft.google
               ? shownDraft.google.deletable

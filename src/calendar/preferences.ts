@@ -2,7 +2,7 @@ import { calendarLinksOf, calendarNamesOf, calendarPriorityOrderOf, showDuplicat
 import type { CalendarLinks, CalendarNames, CalendarPriorityOrder, CalendarView } from "@/calendar/types";
 
 const STORAGE_KEY = "watagent.calendar.preferences.v1";
-const VIEWS = new Set<CalendarView>(["day", "week", "month", "year"]);
+const VIEWS = new Set<CalendarView>(["day", "workweek", "week", "month", "year"]);
 
 export function readCalendarView(defaultView: CalendarView = "week"): CalendarView {
   if (typeof window === "undefined") return defaultView;

@@ -1,5 +1,6 @@
 "use client";
 
+import type { CSSProperties } from "react";
 import type { TimelineItem } from "@/calendar/types";
 import {
   addDays,
@@ -7,7 +8,6 @@ import {
   isToday,
   startOfLocalDay,
   startOfWeek,
-  weekdayLabels,
 } from "@/calendar/date-utils";
 import { TimelineStrip } from "@/calendar/timeline-strip";
 import {
@@ -35,6 +35,8 @@ type Props = {
   onCreateAllDay: (date: Date) => void;
   onSelectDay: (date: Date) => void;
   onCompleteTask?: (id: string, completed: boolean) => void;
+  /** Show these days instead of the full week (the 5-day view passes Monday–Friday). */
+  days?: Date[];
 };
 
 export function CalendarWeekView({
@@ -47,17 +49,18 @@ export function CalendarWeekView({
   onCreateAllDay,
   onSelectDay,
   onCompleteTask,
+  days: shownDays,
 }: Props) {
   const now = useNowMs();
   const weekStart = startOfWeek(focus, weekStartsOn);
-  const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
-  const labels = weekdayLabels(weekStartsOn);
+  const days = shownDays ?? Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+  const labels = days.map((date) => date.toLocaleDateString(undefined, { weekday: "short" }));
   const slots = useSlotDrag<number>((dayIndex, startHour, endHour) =>
     onCreateTimed(days[dayIndex], startHour, endHour),
   );
 
   return (
-    <div className="calendar-week">
+    <div className="calendar-week" style={{ "--week-days": days.length } as CSSProperties}>
       <div className="calendar-sticky">
         <div className="calendar-week-head">
           <div className="calendar-week-gutter" />

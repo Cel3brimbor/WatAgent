@@ -16,6 +16,8 @@ export type CalendarItemMeta = {
   googleEventId?: string;
   icsImportId?: string;
   importSource?: ImportedCalendarSource;
+  /** A user-made WatAgent calendar; absent means the built-in WatAgent (events) or Tasks calendar. */
+  calendarId?: string;
   location?: string;
   description?: string;
 };
@@ -60,6 +62,7 @@ export type TimelineItem = {
   allDay: boolean;
   completed?: boolean;
   importSource?: ImportedCalendarSource;
+  calendarId?: string;
   pendingApproval?: boolean;
   pendingVerb?: "add" | "delete" | "edit";
   editorDraft?: boolean;
@@ -71,7 +74,7 @@ export type TimelineItem = {
   smartTag?: { id: string; name: string; color: string };
 };
 
-export type CalendarView = "day" | "week" | "month" | "year";
+export type CalendarView = "day" | "workweek" | "week" | "month" | "year";
 
 function googleEventIdOf(raw: unknown): string | undefined {
   if (typeof raw !== "string") return undefined;
@@ -103,6 +106,7 @@ export function parseCalendarMeta(raw: unknown): CalendarItemMeta | undefined {
     googleEventId: googleEventIdOf(rec.googleEventId),
     icsImportId: typeof rec.icsImportId === "string" && /^[0-9a-f-]{36}$/.test(rec.icsImportId) ? rec.icsImportId : undefined,
     importSource: rec.importSource === "learn" || rec.importSource === "portal" || rec.importSource === "other" ? rec.importSource : undefined,
+    calendarId: typeof rec.calendarId === "string" && /^cal-[0-9a-f-]{36}$/.test(rec.calendarId) ? rec.calendarId : undefined,
     location: optionalText(rec.location, 300, false),
     description: optionalText(rec.description, 4000, true),
   };
@@ -118,6 +122,7 @@ export function calendarMetaEqual(a: CalendarItemMeta, b: CalendarItemMeta): boo
     a.googleEventId === b.googleEventId &&
     a.icsImportId === b.icsImportId &&
     a.importSource === b.importSource &&
+    a.calendarId === b.calendarId &&
     a.location === b.location &&
     a.description === b.description
   );

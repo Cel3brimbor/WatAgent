@@ -1913,7 +1913,7 @@ select {
 }
 
 .calendar-week-all-day {
-  grid-template-columns: 4.2rem repeat(7, minmax(0, 1fr));
+  grid-template-columns: 4.2rem repeat(var(--week-days, 7), minmax(0, 1fr));
   gap: 0;
   align-items: stretch;
   padding-bottom: 0;
@@ -2049,7 +2049,7 @@ select {
 }
 
 .calendar-week-body {
-  grid-template-columns: 4.2rem repeat(7, minmax(0, 1fr));
+  grid-template-columns: 4.2rem repeat(var(--week-days, 7), minmax(0, 1fr));
 }
 
 .calendar-hours {
@@ -2149,7 +2149,7 @@ select {
 
 .calendar-week-head {
   display: grid;
-  grid-template-columns: 4.2rem repeat(7, minmax(0, 1fr));
+  grid-template-columns: 4.2rem repeat(var(--week-days, 7), minmax(0, 1fr));
   margin-bottom: 0.4rem;
 }
 
@@ -3137,6 +3137,16 @@ select {
 
 .calendar-editor-input-inset:focus {
   box-shadow: none;
+}
+
+/*the inset reset clears the global select chevron; put it back at the cell edge*/
+.calendar-editor-select {
+  padding-right: 1.5rem;
+  background-image: var(--select-chevron);
+  background-repeat: no-repeat;
+  background-position: right 0 center;
+  background-size: 1rem 1rem;
+  cursor: pointer;
 }
 
 .calendar-editor-area {
@@ -5915,4 +5925,8 @@ h3 {
 @media (hover: none), (pointer: coarse) {
   .calendar-priority-menu,
   .calendar-priority-sync { opacity: 1; }
+}
+
+.side-cal-menu .side-cal-menu-danger {
+  color: var(--danger);
 }

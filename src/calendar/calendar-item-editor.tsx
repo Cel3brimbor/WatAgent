@@ -7,6 +7,7 @@ import { SegmentedControl, type SegmentOption } from "@/shared/segmented-control
 import { Switch } from "@/shared/switch";
 import { useDialog } from "@/shared/use-dialog";
 import { LocationField } from "@/calendar/location-field";
+import type { LocalCalendar } from "@/calendar/local-calendars";
 
 export type GoogleDraftTarget = {
   calendarId: string;
@@ -25,6 +26,10 @@ export type CalendarDraft = {
   completed?: boolean;
   location?: string;
   description?: string;
+  /** WatAgent calendar for events: "events" or a user-made cal-<uuid>; unset means the default. */
+  calendarId?: string;
+  /** Imported (LEARN/Portal/.ics) items stay in their feed, so no calendar picker. */
+  imported?: boolean;
   google?: GoogleDraftTarget;
 };
 
@@ -36,6 +41,9 @@ type Props = {
   onSave: () => void;
   onCancel: () => void;
   onDelete?: () => void;
+  /** Event calendars the picker offers. */
+  calendars?: LocalCalendar[];
+  defaultCalendarId?: string;
 };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -59,9 +67,13 @@ const KIND_OPTIONS: SegmentOption<CalendarItemKind>[] = [
   { value: "task", label: "Task" },
 ];
 
-export function CalendarItemEditor({ draft, open = true, onChange, onSave, onCancel, onDelete }: Props) {
+export function CalendarItemEditor({ draft, open = true, onChange, onSave, onCancel, onDelete, calendars = [], defaultCalendarId = "events" }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const allDayId = useId();
+  const eventCalendars = calendars.filter((calendar) => calendar.kind === "event");
+  const chosenCalendar = draft.calendarId ?? defaultCalendarId;
+  const showCalendarPicker = !draft.google && !draft.imported && draft.kind === "event"
+    && (eventCalendars.length > 1 || !eventCalendars.some((calendar) => calendar.id === chosenCalendar));
   const locationFieldId = useId();
   useDialog(ref, { open, onEscape: onCancel });
 
@@ -175,6 +187,25 @@ export function CalendarItemEditor({ draft, open = true, onChange, onSave, onCan
           {draft.kind === "event" && !draft.google ? (
             <section className="calendar-editor-section" aria-label="Details">
               <div className="calendar-editor-group">
+                {showCalendarPicker ? (
+                  <label className="calendar-editor-cell">
+                    <span className="calendar-editor-cell-label">Calendar</span>
+                    <select
+                      className="calendar-editor-input calendar-editor-input-inset calendar-editor-select"
+                      value={chosenCalendar}
+                      onChange={(event) => onChange({ ...draft, calendarId: event.target.value })}
+                    >
+                      {eventCalendars.some((calendar) => calendar.id === chosenCalendar) ? null : (
+                        <option value={chosenCalendar}>WatAgent</option>
+                      )}
+                      {eventCalendars.map((calendar) => (
+                        <option key={calendar.id} value={calendar.id}>
+                          {calendar.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
                 <LocationField
                   labelId={locationFieldId}
                   value={draft.location ?? ""}
@@ -278,5 +309,7 @@ export function draftFromMeta(id: string, title: string, calendar: CalendarItemM
     completed: calendar.completed,
     location: calendar.location,
     description: calendar.description,
+    calendarId: calendar.kind === "event" && !calendar.importSource ? calendar.calendarId ?? "events" : undefined,
+    imported: Boolean(calendar.importSource),
   };
 }
