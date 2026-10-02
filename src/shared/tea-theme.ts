@@ -49,12 +49,18 @@ export const DEFAULT_TEA_THEME: TeaThemeId = "earl-grey";
 
 export const TEA_THEMES: TeaOrigin[] = [
   {
-    origin: "British",
+    origin: "China",
     themes: [
-      { id: "earl-grey", name: "Earl Grey", note: "Warm paper, terracotta", paper: "#faf7f2", accent: "#c2593b" },
-      { id: "lady-grey", name: "Lady Grey", note: "Soft grey, cornflower blue", paper: "#f5f6f8", accent: "#5a6fa8" },
-      { id: "assam", name: "Assam", note: "Malty, deep copper", paper: "#f7f1ea", accent: "#9a4a1f" },
-      { id: "ceylon", name: "Ceylon", note: "Bright amber citrus", paper: "#fbf6ec", accent: "#b0600f" },
+      { id: "longjing", name: "Longjing", note: "Dragon Well jade", paper: "#f2f6f3", accent: "#3d8a6e" },
+      { id: "jasmine", name: "Jasmine", note: "Pale and cool, misty teal", paper: "#f7f8f5", accent: "#4e7f88" },
+      { id: "puerh", name: "Pu-erh", note: "Aged, earthy mahogany", paper: "#f4efeb", accent: "#7a3b2e" },
+      {
+        id: "tieguanyin",
+        name: "Tieguanyin",
+        note: "Pale creamy yellow, orchid gold",
+        paper: "#faf6e8",
+        accent: "#b8943a",
+      },
     ],
   },
   {
@@ -74,18 +80,12 @@ export const TEA_THEMES: TeaOrigin[] = [
     ],
   },
   {
-    origin: "China",
+    origin: "British",
     themes: [
-      { id: "longjing", name: "Longjing", note: "Dragon Well jade", paper: "#f2f6f3", accent: "#3d8a6e" },
-      { id: "jasmine", name: "Jasmine", note: "Pale and cool, misty teal", paper: "#f7f8f5", accent: "#4e7f88" },
-      { id: "puerh", name: "Pu-erh", note: "Aged, earthy mahogany", paper: "#f4efeb", accent: "#7a3b2e" },
-      {
-        id: "tieguanyin",
-        name: "Tieguanyin",
-        note: "Pale creamy yellow, orchid gold",
-        paper: "#faf6e8",
-        accent: "#b8943a",
-      },
+      { id: "earl-grey", name: "Earl Grey", note: "Warm paper, terracotta", paper: "#faf7f2", accent: "#c2593b" },
+      { id: "lady-grey", name: "Lady Grey", note: "Soft grey, cornflower blue", paper: "#f5f6f8", accent: "#5a6fa8" },
+      { id: "assam", name: "Assam", note: "Malty, deep copper", paper: "#f7f1ea", accent: "#9a4a1f" },
+      { id: "ceylon", name: "Ceylon", note: "Bright amber citrus", paper: "#fbf6ec", accent: "#b0600f" },
     ],
   },
 ];
