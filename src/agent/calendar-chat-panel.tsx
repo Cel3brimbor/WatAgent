@@ -47,6 +47,7 @@ type Props = {
   onReject: (id: string) => void;
   onApproveAll: () => void;
   onRejectAll: () => void;
+  onInspectPending: (change: PendingAiChange) => void;
 };
 
 export function CalendarChatPanel({
@@ -75,6 +76,7 @@ export function CalendarChatPanel({
   onReject,
   onApproveAll,
   onRejectAll,
+  onInspectPending,
 }: Props) {
   const panelRef = useRef<HTMLElement>(null);
   const chatResize = useChatResize(panelRef);
@@ -255,6 +257,7 @@ export function CalendarChatPanel({
           onReject={onReject}
           onApproveAll={onApproveAll}
           onRejectAll={onRejectAll}
+          onInspect={onInspectPending}
         />
         <ChatComposer busy={busy} error={error} onSend={send} onStop={onStop} onError={onError} />
       </div>

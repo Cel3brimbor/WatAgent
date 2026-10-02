@@ -29,6 +29,7 @@ export type CalendarItemDoc = {
   pendingApproval?: boolean;
   pendingChangeId?: string;
   pendingAction?: "upsert" | "delete";
+  pendingVerb?: "add" | "delete" | "edit";
   /** Optimistic row while the item editor is open. */
   editorDraft?: boolean;
 };
@@ -60,6 +61,7 @@ export type TimelineItem = {
   completed?: boolean;
   importSource?: ImportedCalendarSource;
   pendingApproval?: boolean;
+  pendingVerb?: "add" | "delete" | "edit";
   editorDraft?: boolean;
   google?: GoogleEventDetails;
   location?: string;

@@ -25,6 +25,8 @@ function itemLocation(item: TimelineItem): string | null {
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
 
+const VERB_LABEL = { add: "Added", delete: "Removed", edit: "Updated" } as const;
+
 function stripColorStyle(color: string | undefined): CSSProperties | undefined {
   if (!color || !HEX.test(color)) return undefined;
   return { "--strip-color": color } as CSSProperties;
@@ -89,18 +91,25 @@ export function TimelineStrip({ item, compact, layout = "inline", onOpen, onComp
   }
 
   const timeLabel = item.allDay ? null : timeRange(item);
+  const verb = item.pendingVerb;
 
   return (
     <button
       type="button"
-        className={`calendar-strip is-${item.kind}${item.completed ? " is-done" : ""}${item.pendingApproval ? " is-pending" : ""}${item.editorDraft ? " is-editor-draft" : ""}${compact ? " is-compact" : ""}${layoutClass}`}
+      data-calendar-item={item.id}
+      className={`calendar-strip is-${item.kind}${item.completed ? " is-done" : ""}${item.pendingApproval ? " is-pending" : ""}${verb ? ` is-pending-${verb}` : ""}${item.editorDraft ? " is-editor-draft" : ""}${compact ? " is-compact" : ""}${layoutClass}`}
       title={item.smartTag ? `${item.title} · ${item.smartTag.name}` : undefined}
       style={stripColorStyle(item.smartTag?.color ?? item.calendarColor)}
-        onClick={(event) => {
+      onClick={(event) => {
           event.stopPropagation();
           onOpen(item, event.currentTarget.getBoundingClientRect());
         }}
     >
+      {verb ? (
+        <span className={`calendar-strip-mark is-${verb}`}>
+          <span className="calendar-strip-mark-label">{VERB_LABEL[verb]}</span>
+        </span>
+      ) : null}
       {item.kind === "task" ? (
         <span
           className={`calendar-strip-check${item.completed ? " is-checked" : ""}`}

@@ -21,6 +21,7 @@ export function mergePendingIntoItems(
         pendingApproval: true,
         pendingChangeId: change.id,
         pendingAction: "delete",
+        pendingVerb: "delete",
       };
     }
     if (!change.calendar) return item;
@@ -31,6 +32,7 @@ export function mergePendingIntoItems(
       pendingApproval: true,
       pendingChangeId: change.id,
       pendingAction: "upsert",
+      pendingVerb: "edit",
     };
   });
 
@@ -45,6 +47,7 @@ export function mergePendingIntoItems(
       pendingApproval: true,
       pendingChangeId: change.id,
       pendingAction: "upsert",
+      pendingVerb: "add",
     });
   }
   return sortItems(merged);

@@ -68,6 +68,7 @@ import { useAppearanceSync } from "@/calendar/use-appearance-sync";
 import { SideNav, type AppSection } from "@/calendar/side-nav";
 import { TodoList } from "@/calendar/todo-list";
 import { CalendarChatPanel } from "@/agent/calendar-chat-panel";
+import type { PendingAiChange } from "@/calendar/approval-client";
 import { readAgentStream } from "@/agent/stream";
 import type { ChatMessage, ToolEventRecord } from "@/agent/types";
 import { apiFetch } from "@/shared/api-base";
@@ -615,11 +616,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
   function onOpenItem(item: TimelineItem, anchor?: DOMRect) {
     if (item.editorDraft) return;
     if (item.kind === "gcal_busy") return;
-    if (item.pendingApproval) {
-      setNotice("Approve or undo this Agent change in the chat.");
-      return;
-    }
-    if (item.kind === "gcal_event" || item.kind === "event") {
+    if (item.pendingApproval || item.kind === "gcal_event" || item.kind === "event") {
       setDraft(null);
       setGooglePeek({
         item,
@@ -630,6 +627,82 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
     const existing = calendar.items.find((row) => row.id === item.id);
     if (existing) setDraft(draftFromMeta(existing.id, existing.title, existing.calendar));
   }
+
+  const openItemRef = useRef(onOpenItem);
+  openItemRef.current = onOpenItem;
+  const revealRef = useRef<{ id: string; startUTC: number; triedDay: boolean } | null>(null);
+  const [revealSerial, setRevealSerial] = useState(0);
+
+  function revealPending(change: PendingAiChange) {
+    const meta = change.calendar ?? change.previousCalendar;
+    if (!meta) return;
+    revealRef.current = { id: change.sourceId, startUTC: meta.startUTC, triedDay: false };
+    setSection("calendar");
+    setFocus(startOfLocalDay(new Date(meta.startUTC)));
+    if (view === "year") setView("day");
+    setRevealSerial((n) => n + 1);
+  }
+
+  useEffect(() => {
+    const target = revealRef.current;
+    if (!target || section !== "calendar") return;
+    let cancelled = false;
+    let timer = 0;
+    let stage: HTMLElement | null = null;
+    let done = () => {};
+    const frame = requestAnimationFrame(() => {
+      if (cancelled) return;
+      const node = document.querySelector(`[data-calendar-item="${CSS.escape(target.id)}"]`);
+      if (!(node instanceof HTMLElement)) {
+        if (view !== "day" && !target.triedDay) {
+          target.triedDay = true;
+          setView("day");
+          return;
+        }
+        if (view !== "day") return;
+        setNotice("That change isn't on the calendar.");
+        revealRef.current = null;
+        return;
+      }
+      const item = itemsForDay(startOfLocalDay(new Date(target.startUTC))).find((row) => row.id === target.id);
+      if (!item) {
+        revealRef.current = null;
+        return;
+      }
+      const boundsHost = node.closest(".calendar-stage");
+      const bounds = boundsHost instanceof HTMLElement
+        ? boundsHost.getBoundingClientRect()
+        : new DOMRect(0, 0, window.innerWidth, window.innerHeight);
+      const rect = node.getBoundingClientRect();
+      const inView = rect.height > 0
+        && rect.top >= bounds.top - 1
+        && rect.bottom <= bounds.bottom + 1
+        && rect.left >= bounds.left - 1
+        && rect.right <= bounds.right + 1;
+      done = () => {
+        if (cancelled || revealRef.current !== target) return;
+        revealRef.current = null;
+        openItemRef.current(item, node.getBoundingClientRect());
+      };
+      if (inView) {
+        done();
+        return;
+      }
+      const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      node.scrollIntoView({ block: "center", inline: "nearest", behavior: reduce ? "auto" : "smooth" });
+      if (boundsHost instanceof HTMLElement) {
+        stage = boundsHost;
+        stage.addEventListener("scrollend", done, { once: true });
+      }
+      timer = window.setTimeout(done, reduce ? 40 : 420);
+    });
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(frame);
+      window.clearTimeout(timer);
+      stage?.removeEventListener("scrollend", done);
+    };
+  }, [revealSerial, section, view, focus, itemsForDay]);
 
   function patchOverlay(
     target: { calendarId: string; eventId: string },
@@ -1138,6 +1211,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
           onRejectAll={() =>
             void calendar.rejectPendingChanges({ all: true }).catch(() => setNotice("Unable to undo changes."))
           }
+          onInspectPending={revealPending}
         />
       </div>
 
@@ -1150,7 +1224,9 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
           calendarLabel={importedCalendarLabel(shownPeek.item.importSource, calendarNames)}
           onClose={closePeek}
           onEdit={
-            shownPeek.item.kind === "event"
+            shownPeek.item.pendingApproval
+              ? undefined
+              : shownPeek.item.kind === "event"
               ? () => {
                   const existing = calendar.items.find((row) => row.id === shownPeek.item.id);
                   setGooglePeek(null);
@@ -1165,7 +1241,9 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
                 : undefined
           }
           onDelete={
-            shownPeek.item.kind === "event"
+            shownPeek.item.pendingApproval
+              ? undefined
+              : shownPeek.item.kind === "event"
               ? () => {
                   setGooglePeek(null);
                   setItemDelete({

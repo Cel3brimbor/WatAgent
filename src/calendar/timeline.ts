@@ -56,6 +56,7 @@ export function aggregateTimeline(input: {
       completed: meta.completed,
       importSource: meta.importSource,
       pendingApproval: event.pendingApproval,
+      pendingVerb: event.pendingVerb,
       editorDraft: event.editorDraft,
       location: meta.location,
       description: meta.description,

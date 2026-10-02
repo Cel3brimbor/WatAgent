@@ -16,6 +16,7 @@ type Props = {
   onReject: (id: string) => void;
   onApproveAll: () => void;
   onRejectAll: () => void;
+  onInspect: (change: PendingAiChange) => void;
 };
 
 type ChangeVerb = "add" | "delete" | "edit";
@@ -74,23 +75,25 @@ function editDiffs(change: PendingAiChange): DiffLine[] {
   return lines;
 }
 
+const VERB_NAME: Record<ChangeVerb, string> = { add: "Added", delete: "Removed", edit: "Updated" };
+
 function Sign({ verb }: { verb: ChangeVerb }) {
   if (verb === "add") {
     return (
-      <span className="ai-approval-sign is-add" aria-hidden>
+      <span className="ai-approval-sign is-add" title="Addition">
         +
       </span>
     );
   }
   if (verb === "delete") {
     return (
-      <span className="ai-approval-sign is-delete" aria-hidden>
+      <span className="ai-approval-sign is-delete" title="Removal">
         −
       </span>
     );
   }
   return (
-    <span className="ai-approval-sign is-edit" aria-hidden>
+    <span className="ai-approval-sign is-edit" title="Update">
       <RedoIcon />
     </span>
   );
@@ -103,6 +106,7 @@ export function AiApprovalPanel({
   onReject,
   onApproveAll,
   onRejectAll,
+  onInspect,
 }: Props) {
   //keep the last batch on screen while the panel slides away
   const presence = usePresence(items.length > 0 ? items : null);
@@ -172,9 +176,16 @@ export function AiApprovalPanel({
                     <ChevronRightIcon />
                   </button>
                 ) : null}
-                <Sign verb={verb} />
-                <span className="ai-approval-title">{change.title}</span>
-                <span className="ai-approval-when">{whenLabel(change)}</span>
+                <button
+                  type="button"
+                  className="ai-approval-jump"
+                  aria-label={`${VERB_NAME[verb]}: ${change.title}. Show on calendar`}
+                  onClick={() => onInspect(change)}
+                >
+                  <Sign verb={verb} />
+                  <span className="ai-approval-title">{change.title}</span>
+                  <span className="ai-approval-when">{whenLabel(change)}</span>
+                </button>
                 <div className="ai-approval-row-actions">
                   <button type="button" className="ghost-btn" disabled={busy} onClick={() => onReject(change.id)}>
                     Undo
