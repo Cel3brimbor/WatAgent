@@ -71,8 +71,8 @@ export function CalendarImportPanel({ onImported }: {
       setResult(imported.imported === 0 && imported.removed === 0
         ? "No events found in this date range."
         : imported.existed
-          ? `Updated ${imported.updated} ${noun(imported.updated)}. ${imported.added} added, ${imported.removed} deleted, ${imported.unchanged} unchanged.`
-          : `Imported ${imported.imported} ${noun(imported.imported)}. ${imported.added} added, ${imported.updated} updated, ${imported.removed} deleted, ${imported.unchanged} unchanged.`);
+          ? `Updated ${imported.updated} ${noun(imported.updated)}. ${imported.added} added, ${imported.removed} removed, ${imported.unchanged} unchanged.`
+          : `Imported ${imported.imported} ${noun(imported.imported)}. ${imported.added} added, ${imported.updated} updated, ${imported.removed} removed, ${imported.unchanged} unchanged.`);
     } catch (err) {
       setUrl(link);
       setError(err instanceof Error ? err.message : "Unable to import this calendar. Try again.");
