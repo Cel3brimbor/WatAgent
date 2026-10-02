@@ -5108,6 +5108,20 @@ select {
   margin-top: 1rem;
 }
 
+/*a single field in a modal: full width, the input's own ring instead of the global outline*/
+.modal-form .calendar-editor-field {
+  margin: 0.75rem 0 0;
+}
+
+.modal-form .calendar-editor-input {
+  width: 100%;
+  font-size: 0.95rem;
+}
+
+.modal-form .calendar-editor-input:focus-visible {
+  outline: none;
+}
+
 /* ───────────────────────── editorial layer ─────────────────────────
    paper-and-ink restyle: serif display type, hairline surfaces, terracotta for chrome.
    sits after the component rules and before the phone breakpoint so mobile overrides still win */
