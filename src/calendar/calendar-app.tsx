@@ -64,6 +64,7 @@ import { GoogleEventCard } from "@/calendar/google-event-card";
 import { rememberPlace } from "@/calendar/place-memory";
 import { SettingsPanel } from "@/calendar/settings-panel";
 import { useCalendarPreferencesSync } from "@/calendar/use-calendar-preferences-sync";
+import { useAppearanceSync } from "@/calendar/use-appearance-sync";
 import { SideNav, type AppSection } from "@/calendar/side-nav";
 import { TodoList } from "@/calendar/todo-list";
 import { CalendarChatPanel } from "@/agent/calendar-chat-panel";
@@ -341,6 +342,8 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
     lastPeriodRef.current = { period, view, section };
   }, [period, view, section]);
   const stageKey = section === "calendar" ? `${view}:${period}` : section;
+
+  useAppearanceSync(calendar.hydrated);
 
   useCalendarPreferencesSync(
     calendar.hydrated,

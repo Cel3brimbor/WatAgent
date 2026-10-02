@@ -1,5 +1,6 @@
 import { apiJson } from "@/shared/api-base";
 import { parseCalendarMeta, type CalendarItemMeta } from "@/calendar/types";
+import type { ColorSchemePreference, TeaThemeId } from "@/shared/tea-theme";
 
 export type PendingAiChange = {
   id: string;
@@ -30,16 +31,64 @@ function pendingOf(raw: unknown): PendingAiChange | null {
   };
 }
 
-export async function getCalendarSettings(): Promise<{ requireAiApproval: boolean }> {
+const TEA_THEME_IDS = new Set([
+  "earl-grey",
+  "lady-grey",
+  "assam",
+  "ceylon",
+  "matcha",
+  "sunrouge",
+  "hojicha",
+  "sakura",
+  "yuzu",
+  "omija",
+  "longjing",
+  "jasmine",
+  "puerh",
+  "tieguanyin",
+]);
+
+function teaThemeOf(raw: unknown): TeaThemeId | null {
+  return typeof raw === "string" && TEA_THEME_IDS.has(raw) ? (raw as TeaThemeId) : null;
+}
+
+function colorSchemeOf(raw: unknown): ColorSchemePreference | null {
+  return raw === "light" || raw === "dark" || raw === "system" ? raw : null;
+}
+
+export type CalendarSettings = {
+  requireAiApproval: boolean;
+  teaTheme: TeaThemeId | null;
+  colorScheme: ColorSchemePreference | null;
+};
+
+export async function getCalendarSettings(): Promise<CalendarSettings> {
   const payload = await apiJson<Record<string, unknown>>("/api/calendar/settings");
-  return { requireAiApproval: payload.requireAiApproval === true };
+  return {
+    requireAiApproval: payload.requireAiApproval === true,
+    teaTheme: teaThemeOf(payload.teaTheme),
+    colorScheme: colorSchemeOf(payload.colorScheme),
+  };
+}
+
+export async function patchCalendarSettings(patch: {
+  requireAiApproval?: boolean;
+  teaTheme?: TeaThemeId | null;
+  colorScheme?: ColorSchemePreference | null;
+}): Promise<CalendarSettings> {
+  const payload = await apiJson<Record<string, unknown>>("/api/calendar/settings", {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+  return {
+    requireAiApproval: payload.requireAiApproval === true,
+    teaTheme: teaThemeOf(payload.teaTheme),
+    colorScheme: colorSchemeOf(payload.colorScheme),
+  };
 }
 
 export async function setRequireAiApproval(requireAiApproval: boolean): Promise<void> {
-  await apiJson("/api/calendar/settings", {
-    method: "PATCH",
-    body: JSON.stringify({ requireAiApproval }),
-  });
+  await patchCalendarSettings({ requireAiApproval });
 }
 
 export async function listPendingChanges(): Promise<PendingAiChange[]> {

@@ -1,9 +1,22 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 //keep in sync with public/tea-theme.js, which applies the saved theme and scheme before first paint
 const STORAGE_KEY = "watagent.theme.v1";
+
+export const APPEARANCE_LOCAL_EVENT = "watagent-appearance-local";
+export const APPEARANCE_REMOTE_EVENT = "watagent-appearance-remote";
+
+function notifyAppearanceLocal(): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event(APPEARANCE_LOCAL_EVENT));
+}
+
+function notifyAppearanceRemote(): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event(APPEARANCE_REMOTE_EVENT));
+}
 
 export type TeaThemeId =
   | "earl-grey"
@@ -18,7 +31,8 @@ export type TeaThemeId =
   | "omija"
   | "longjing"
   | "jasmine"
-  | "puerh";
+  | "puerh"
+  | "tieguanyin";
 
 export type TeaTheme = {
   id: TeaThemeId;
@@ -65,6 +79,13 @@ export const TEA_THEMES: TeaOrigin[] = [
       { id: "longjing", name: "Longjing", note: "Dragon Well jade", paper: "#f2f6f3", accent: "#3d8a6e" },
       { id: "jasmine", name: "Jasmine", note: "Pale and cool, misty teal", paper: "#f7f8f5", accent: "#4e7f88" },
       { id: "puerh", name: "Pu-erh", note: "Aged, earthy mahogany", paper: "#f4efeb", accent: "#7a3b2e" },
+      {
+        id: "tieguanyin",
+        name: "Tieguanyin",
+        note: "Pale creamy yellow, orchid gold",
+        paper: "#faf6e8",
+        accent: "#b8943a",
+      },
     ],
   },
 ];
@@ -95,13 +116,25 @@ export function writeTeaTheme(id: TeaThemeId): void {
   if (typeof window === "undefined") return;
   try {
     window.localStorage.setItem(STORAGE_KEY, id);
+    notifyAppearanceLocal();
   } catch {
     return;
   }
 }
 
+export function applyStoredAppearance(): void {
+  applyTeaTheme(readTeaTheme());
+  applyColorScheme(readColorScheme());
+  notifyAppearanceRemote();
+}
+
 export function useTeaTheme(): [TeaThemeId, (id: TeaThemeId) => void] {
   const [theme, setTheme] = useState<TeaThemeId>(readTeaTheme);
+  useEffect(() => {
+    const onRemote = () => setTheme(readTeaTheme());
+    window.addEventListener(APPEARANCE_REMOTE_EVENT, onRemote);
+    return () => window.removeEventListener(APPEARANCE_REMOTE_EVENT, onRemote);
+  }, []);
   const choose = useCallback((id: TeaThemeId) => {
     setTheme(id);
     applyTeaTheme(id);
@@ -135,15 +168,26 @@ export function applyColorScheme(pref: ColorSchemePreference): void {
   document.documentElement.setAttribute("data-scheme", dark ? "dark" : "light");
 }
 
+export function writeColorScheme(pref: ColorSchemePreference): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(SCHEME_KEY, pref);
+    notifyAppearanceLocal();
+  } catch {
+    return;
+  }
+}
+
 export function useColorScheme(): [ColorSchemePreference, (pref: ColorSchemePreference) => void] {
   const [scheme, setScheme] = useState<ColorSchemePreference>(readColorScheme);
+  useEffect(() => {
+    const onRemote = () => setScheme(readColorScheme());
+    window.addEventListener(APPEARANCE_REMOTE_EVENT, onRemote);
+    return () => window.removeEventListener(APPEARANCE_REMOTE_EVENT, onRemote);
+  }, []);
   const choose = useCallback((pref: ColorSchemePreference) => {
     setScheme(pref);
-    try {
-      window.localStorage.setItem(SCHEME_KEY, pref);
-    } catch {
-      //still applied for this session
-    }
+    writeColorScheme(pref);
     applyColorScheme(pref);
   }, []);
   return [scheme, choose];

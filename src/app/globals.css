@@ -242,6 +242,17 @@
   --on-accent: #fdf6f3;
 }
 
+:root[data-tea="tieguanyin"] {
+  --paper: #faf6e8;
+  --panel-solid: #fffdf5;
+  --nav-bg: #f2ead4;
+  --ink: #221e14;
+  --ink-soft: #6f684f;
+  --accent: #b8943a;
+  --accent-deep: #7f6726;
+  --on-accent: #fffbf0;
+}
+
 :root[data-scheme="dark"][data-tea] {
   --accent-soft: color-mix(in srgb, var(--accent) 8%, transparent);
   --glow: color-mix(in srgb, var(--accent) 20%, transparent);
@@ -378,6 +389,17 @@
   --accent: #c47a66;
   --accent-deep: #e0ad9e;
   --on-accent: #1b0b07;
+}
+
+:root[data-scheme="dark"][data-tea="tieguanyin"] {
+  --paper: #17150f;
+  --panel-solid: #201d15;
+  --nav-bg: #1b1811;
+  --ink: #f0ead8;
+  --ink-soft: #aaa188;
+  --accent: #e0c06a;
+  --accent-deep: #f0dba0;
+  --on-accent: #1a1406;
 }
 
 @supports (transition-timing-function: linear(0, 1)) {
@@ -3403,7 +3425,7 @@ select {
 .tea-option {
   position: relative;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 0.6rem;
   padding: 0.5rem 0.6rem;
   border-radius: 10px;
@@ -3436,6 +3458,7 @@ select {
 
 .tea-swatch {
   flex-shrink: 0;
+  margin-top: 0.05rem;
   width: 1.75rem;
   height: 1.75rem;
   border-radius: 50%;
@@ -3455,11 +3478,10 @@ select {
 }
 
 .tea-note {
-  overflow: hidden;
   color: var(--ink-soft);
   font-size: 0.75rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.35;
+  text-wrap: pretty;
 }
 
 .calendar-sync-result {
