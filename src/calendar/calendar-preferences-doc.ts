@@ -20,6 +20,7 @@ import {
 } from "@/calendar/preferences";
 import { parseSmartTagsFromUnknown, readSmartTags, type SmartTag } from "@/calendar/smart-tags";
 import type { CalendarLinks, CalendarNames, CalendarPriorityOrder, CalendarView } from "@/calendar/types";
+import { BUILTIN_CALENDARS, localCalendarsOf, readLocalCalendars, type LocalCalendar } from "@/calendar/local-calendars";
 
 export type UserCalendarPreferencesV1 = {
   version: 1;
@@ -28,6 +29,7 @@ export type UserCalendarPreferencesV1 = {
   calendarLinks: CalendarLinks;
   calendarPriorityOrder: CalendarPriorityOrder;
   showDuplicateEvents: boolean;
+  localCalendars: LocalCalendar[];
   sources: CalendarSourceFilter;
   colors: CalendarColors;
   colorOverrides: Record<string, string>;
@@ -36,7 +38,7 @@ export type UserCalendarPreferencesV1 = {
   sidePanelSections: SidePanelSectionsOpen;
 };
 
-const VIEWS = new Set<CalendarView>(["day", "week", "month", "year"]);
+const VIEWS = new Set<CalendarView>(["day", "workweek", "week", "month", "year"]);
 
 function idList(raw: unknown): string[] {
   if (!Array.isArray(raw)) return [];
@@ -106,6 +108,7 @@ export function readLocalCalendarPreferences(): UserCalendarPreferencesV1 {
     calendarLinks: readCalendarLinks(),
     calendarPriorityOrder: readCalendarPriorityOrder(),
     showDuplicateEvents: readShowDuplicateEvents(),
+    localCalendars: readLocalCalendars(),
     sources: readSourceFilter(),
     colors: readCalendarColors(),
     colorOverrides: readColorOverrides(),
@@ -134,6 +137,7 @@ export function parseUserCalendarPreferencesDoc(
     calendarLinks: rec.calendarLinks !== undefined ? calendarLinksOf(rec.calendarLinks) : fallbacks.calendarLinks,
     calendarPriorityOrder: calendarPriorityOrderOf(rec.calendarPriorityOrder, rec.duplicatePriority),
     showDuplicateEvents: showDuplicateEventsOf(rec.showDuplicateEvents, rec.duplicatePriority),
+    localCalendars: rec.localCalendars !== undefined ? localCalendarsOf(rec.localCalendars) : fallbacks.localCalendars,
     sources,
     colors,
     colorOverrides: rec.colorOverrides !== undefined ? overridesOf(rec.colorOverrides) : fallbacks.colorOverrides,
@@ -152,6 +156,7 @@ export function preferencesDocHasContent(doc: UserCalendarPreferencesV1): boolea
   if (!untouchedOrder || doc.showDuplicateEvents) return true;
   if (Object.keys(doc.calendarNames).length > 0 || Object.keys(doc.calendarLinks).length > 0) return true;
   if (doc.smartTags.length > 0) return true;
+  if (JSON.stringify(doc.localCalendars) !== JSON.stringify(BUILTIN_CALENDARS)) return true;
   if (doc.navCollapsed) return true;
   if (JSON.stringify(doc.sidePanelSections) !== JSON.stringify(DEFAULT_SIDE_PANEL_SECTIONS)) return true;
   if (doc.view !== "week") return true;

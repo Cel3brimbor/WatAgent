@@ -6,7 +6,7 @@ import { RenameCalendarDialog } from "@/calendar/calendar-priority-panel";
 import type { ExternalCalendarRef } from "@/calendar/external-calendars";
 import { formatFeedSyncSummary, syncImportedFeed } from "@/calendar/calendar-sync";
 import type { CalendarFeedSource, CalendarLinks, CalendarView, ImportedCalendarSource } from "@/calendar/types";
-import { addDays, addMonths, isToday, monthCells, startOfLocalDay, startOfWeek } from "@/calendar/date-utils";
+import { addDays, addMonths, isToday, monthCells, startOfLocalDay, startOfWeek, startOfWorkWeek } from "@/calendar/date-utils";
 import type { GoogleCalendarRef } from "@/calendar/google-calendar-client";
 import { isExcludedGoogleCalendarName } from "@/calendar/calendar-lists";
 import {
@@ -20,7 +20,8 @@ import {
 } from "@/calendar/preferences";
 import type { SmartTag, SmartTagTarget } from "@/calendar/smart-tags";
 import { SmartTagsPanel } from "@/calendar/smart-tags-panel";
-import { CheckIcon, ChevronIcon, DotsIcon, GoogleCalendarIcon } from "@/calendar/sidebar-icons";
+import { CheckIcon, ChevronIcon, DotsIcon, GoogleCalendarIcon, PlusIcon } from "@/calendar/sidebar-icons";
+import type { LocalCalendar } from "@/calendar/local-calendars";
 import { ChevronLeftIcon, ChevronRightIcon } from "@/shared/icons";
 import { Disclosure } from "@/shared/disclosure";
 import { usePresence } from "@/shared/use-presence";
@@ -65,6 +66,12 @@ type Props = {
   smartTagSamples: SmartTagTarget[];
   sidePanelSections: SidePanelSectionsOpen;
   onSidePanelSections: (next: SidePanelSectionsOpen) => void;
+  localCalendars: LocalCalendar[];
+  /** Items in each WatAgent calendar, for the delete confirmation. */
+  localCalendarCounts: Record<string, number>;
+  onCreateCalendar: (name: string) => void;
+  onRenameCalendar: (id: string, name: string) => void;
+  onDeleteCalendar: (id: string) => Promise<void>;
 };
 
 function sameDay(a: Date, b: Date): boolean {
@@ -99,6 +106,11 @@ export function CalendarSidePanel({
   smartTagSamples,
   sidePanelSections,
   onSidePanelSections,
+  localCalendars,
+  localCalendarCounts,
+  onCreateCalendar,
+  onRenameCalendar,
+  onDeleteCalendar,
 }: Props) {
   const [externalOpen, setExternalOpen] = useState(true);
   const [renaming, setRenaming] = useState<ExternalCalendarRef | null>(null);
@@ -106,6 +118,10 @@ export function CalendarSidePanel({
   const [removeBusy, setRemoveBusy] = useState(false);
   const [removeError, setRemoveError] = useState<string | null>(null);
   const [syncBusy, setSyncBusy] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [renamingLocal, setRenamingLocal] = useState<LocalCalendar | null>(null);
+  const [deleting, setDeleting] = useState<LocalCalendar | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
   const [cursor, setCursor] = useState(() => startOfLocalDay(focus));
   const [menu, setMenu] = useState<MenuState | null>(null);
   const menuPresence = usePresence(menu);
@@ -136,16 +152,23 @@ export function CalendarSidePanel({
 
   const cells = monthCells(cursor, weekStartsOn);
   const weekStartDate = startOfWeek(focus, weekStartsOn);
-  const weekEndDate = addDays(weekStartDate, 7);
+  const shownStart = view === "workweek" ? startOfWorkWeek(focus) : weekStartDate;
+  const shownEnd = addDays(shownStart, view === "workweek" ? 5 : 7);
   const weekdayLetters = Array.from({ length: 7 }, (_, index) =>
     addDays(weekStartDate, index).toLocaleDateString(undefined, { weekday: "narrow" }),
   );
   const monthTitle = cursor.toLocaleDateString(undefined, { month: "long", year: "numeric" });
 
-  const localRows: Row[] = [
-    { id: "events", name: "WatAgent", color: colors.event, checked: sources.events },
-    { id: "tasks", name: "Tasks", color: colors.task, checked: sources.tasks },
-  ];
+  const localRows: Row[] = localCalendars.map((calendar) => ({
+    id: calendar.id,
+    name: calendar.name,
+    color: calendar.id === "events" ? colors.event : calendar.id === "tasks" ? colors.task : colorOverrides[calendar.id] || colors.event,
+    checked: calendar.id === "events" ? sources.events : calendar.id === "tasks" ? sources.tasks : !sources.mutedGoogleIds.includes(calendar.id),
+  }));
+  const localById = (id: string) => localCalendars.find((calendar) => calendar.id === id);
+  //user-made calendars mute through the same per-calendar list as imported feeds
+  const isCustom = (id: string) => id.startsWith("cal-");
+  const customIds = localCalendars.filter((calendar) => isCustom(calendar.id)).map((calendar) => calendar.id);
   const googleRows: Row[] = googleCalendars
     .filter((calendar) => !isExcludedGoogleCalendarName(calendar.name))
     .map((calendar) => ({
@@ -172,7 +195,7 @@ export function CalendarSidePanel({
   const smartTagCalendars = allRows.map((row) => ({ id: row.id, name: row.name, google: Boolean(row.google) }));
 
   function toggle(id: string, checked: boolean) {
-    if (externalById(id)) {
+    if (externalById(id) || isCustom(id)) {
       onSources({ ...sources, mutedGoogleIds: checked ? sources.mutedGoogleIds.filter((item) => item !== id) : [...new Set([...sources.mutedGoogleIds, id])] });
       return;
     }
@@ -187,7 +210,7 @@ export function CalendarSidePanel({
     const ids = googleCalendars.map((calendar) => calendar.id);
     if (checked) {
       if (!sources.google) {
-        onSources({ ...sources, google: true, mutedGoogleIds: [...sources.mutedGoogleIds.filter((item) => externalById(item)), ...ids.filter((item) => item !== id)] });
+        onSources({ ...sources, google: true, mutedGoogleIds: [...sources.mutedGoogleIds.filter((item) => externalById(item) || isCustom(item)), ...ids.filter((item) => item !== id)] });
         return;
       }
       onSources({
@@ -218,7 +241,7 @@ export function CalendarSidePanel({
 
   function unhideCalendar(id: string) {
     const hiddenIds = sources.hiddenIds.filter((item) => item !== id);
-    if (externalById(id)) {
+    if (externalById(id) || isCustom(id)) {
       onSources({ ...sources, hiddenIds, mutedGoogleIds: sources.mutedGoogleIds.filter((item) => item !== id) });
       return;
     }
@@ -239,8 +262,8 @@ export function CalendarSidePanel({
   }
 
   function displayOnly(id: string) {
-    const ids = [...googleCalendars.map((calendar) => calendar.id), ...externalCalendars.map((calendar) => calendar.id)];
-    if (externalById(id)) {
+    const ids = [...googleCalendars.map((calendar) => calendar.id), ...externalCalendars.map((calendar) => calendar.id), ...customIds];
+    if (externalById(id) || isCustom(id)) {
       onSources({ ...sources, events: false, tasks: false, google: false, mutedGoogleIds: ids.filter((item) => item !== id), hiddenIds: sources.hiddenIds.filter((item) => item !== id) });
       setMenu(null);
       return;
@@ -318,6 +341,7 @@ export function CalendarSidePanel({
   }
 
   const menuExternal = shownMenu ? externalById(shownMenu.id) : undefined;
+  const menuLocal = shownMenu ? localById(shownMenu.id) : undefined;
   const menuIsGoogle = shownMenu ? googleCalendars.some((calendar) => calendar.id === shownMenu.id) : false;
   const menuCanSync = Boolean(menuExternal || menuIsGoogle);
 
@@ -343,7 +367,7 @@ export function CalendarSidePanel({
         {cells.map((cell) => {
           const selected = sameDay(cell.date, focus);
           const today = isToday(cell.date);
-          const inWeek = view === "week" && cell.date >= weekStartDate && cell.date < weekEndDate;
+          const inWeek = (view === "week" || view === "workweek") && cell.date >= shownStart && cell.date < shownEnd;
           return (
             <button
               key={cell.date.toISOString()}
@@ -377,6 +401,8 @@ export function CalendarSidePanel({
           menuId={menu?.id}
           onToggleRow={toggle}
           onOpenMenu={openRowMenu}
+          onAdd={localCalendars.length < 50 ? () => setCreating(true) : undefined}
+          addLabel="New calendar"
         />
         {externalRows.filter(visible).length > 0 ? <CalendarGroup title="External calendars" open={externalOpen}
           onToggle={() => setExternalOpen((open) => !open)} rows={externalRows.filter(visible)}
@@ -384,6 +410,7 @@ export function CalendarSidePanel({
           menuId={menu?.id} onToggleRow={toggle} onOpenMenu={openRowMenu} /> : null}
         {removeError ? <p role="alert" className="calendar-import-error">{removeError}</p> : null}
         {removeBusy ? <p role="status" className="modal-hint">Removing calendar…</p> : null}
+        {deleteBusy ? <p role="status" className="modal-hint">Deleting calendar…</p> : null}
         {syncBusy ? <p role="status" className="modal-hint">Syncing calendar…</p> : null}
         {otherRows.length > 0 ? (
           <CalendarGroup
@@ -428,18 +455,41 @@ export function CalendarSidePanel({
           onDisplayOnly={() => displayOnly(shownMenu.id)}
           onHide={() => hideCalendar(shownMenu.id)}
           onColor={(color) => paint(shownMenu.id, color)}
-          onRename={menuExternal?.source !== "other" && menuExternal ? () => {
+          onRename={menuLocal ? () => {
+            setRenamingLocal(menuLocal); setMenu(null);
+          } : menuExternal?.source !== "other" && menuExternal ? () => {
             setRenaming(menuExternal); setMenu(null);
           } : undefined}
-          onRemove={!removeBusy && menuExternal?.source !== "other" && menuExternal ? () => {
+          onRemove={menuLocal ? (deleteBusy ? undefined : () => {
+            setDeleting(menuLocal); setMenu(null);
+          }) : !removeBusy && menuExternal?.source !== "other" && menuExternal ? () => {
             setRemoving(menuExternal); setMenu(null);
           } : undefined}
+          removeLabel={menuLocal ? "Delete calendar" : undefined}
         />
       ) : null}
       {renaming ? <RenameCalendarDialog name={renaming.name} onCancel={() => setRenaming(null)} onSave={(name) => {
         if (renaming.source !== "other") onRenameExternal(renaming.source, name);
         setRenaming(null);
       }} /> : null}
+      {creating ? <RenameCalendarDialog name="" title="New calendar" submitLabel="Create calendar"
+        onCancel={() => setCreating(false)} onSave={(name) => {
+          setCreating(false);
+          onCreateCalendar(name);
+        }} /> : null}
+      {renamingLocal ? <RenameCalendarDialog name={renamingLocal.name} onCancel={() => setRenamingLocal(null)} onSave={(name) => {
+        onRenameCalendar(renamingLocal.id, name);
+        setRenamingLocal(null);
+      }} /> : null}
+      {deleting ? <ConfirmDialog title={`Delete ${deleting.name}?`}
+        message={deleteMessage(deleting, localCalendarCounts[deleting.id] ?? 0)}
+        confirmLabel="Delete calendar" onCancel={() => setDeleting(null)} onConfirm={() => {
+          const target = deleting; setDeleting(null);
+          setDeleteBusy(true); setRemoveError(null);
+          void onDeleteCalendar(target.id)
+            .catch((err) => setRemoveError(err instanceof Error ? err.message : "Unable to delete this calendar. Please try again."))
+            .finally(() => setDeleteBusy(false));
+        }} /> : null}
       {removing ? <ConfirmDialog title={`Remove ${removing.name}?`}
         message="Archive this calendar’s imported events and remove it from the list? Import its link again to restore it."
         confirmLabel="Remove calendar" onCancel={() => setRemoving(null)} onConfirm={() => {
@@ -450,6 +500,12 @@ export function CalendarSidePanel({
         }} /> : null}
     </div>
   );
+}
+
+function deleteMessage(calendar: LocalCalendar, count: number): string {
+  const noun = calendar.kind === "task" ? (count === 1 ? "task" : "tasks") : count === 1 ? "event" : "events";
+  const items = count === 0 ? `It has no ${calendar.kind === "task" ? "tasks" : "events"}.` : `This also deletes its ${count} ${noun}, including copies synced to Google Calendar.`;
+  return `${items} This can’t be undone.`;
 }
 
 function CalendarGroup({
@@ -465,6 +521,8 @@ function CalendarGroup({
   onToggleRow,
   onOpenMenu,
   onUnhide,
+  onAdd,
+  addLabel,
 }: {
   title: string;
   headingId?: string;
@@ -478,6 +536,8 @@ function CalendarGroup({
   onToggleRow?: (id: string, checked: boolean) => void;
   onOpenMenu?: (row: Row, anchor: DOMRect) => void;
   onUnhide?: (id: string) => void;
+  onAdd?: () => void;
+  addLabel?: string;
 }) {
   return (
     <section className="side-cal-list">
@@ -504,6 +564,11 @@ function CalendarGroup({
           <span>{title}</span>
           <ChevronIcon open={open} />
         </button>
+        {onAdd ? (
+          <button type="button" className="smart-tags-add" aria-label={addLabel} title={addLabel} onClick={onAdd}>
+            <PlusIcon />
+          </button>
+        ) : null}
       </div>
       <Disclosure open={open}>
         <ul>
@@ -566,6 +631,7 @@ function CalendarOptionsMenu({
   onColor,
   onRename,
   onRemove,
+  removeLabel = "Remove calendar",
 }: {
   menuRef: RefObject<HTMLDivElement | null>;
   menu: MenuState;
@@ -576,6 +642,7 @@ function CalendarOptionsMenu({
   onColor: (color: string) => void;
   onRename?: () => void;
   onRemove?: () => void;
+  removeLabel?: string;
 }) {
   const [box, setBox] = useState({ top: menu.top, left: menu.left });
 
@@ -611,7 +678,7 @@ function CalendarOptionsMenu({
         Hide calendar
       </button>
       {onRename ? <button type="button" role="menuitem" onClick={onRename}>Rename calendar</button> : null}
-      {onRemove ? <button type="button" role="menuitem" onClick={onRemove}>Remove calendar</button> : null}
+      {onRemove ? <button type="button" role="menuitem" className="side-cal-menu-danger" onClick={onRemove}>{removeLabel}</button> : null}
       <div className="side-cal-swatches" role="group" aria-label="Color">
         {CALENDAR_PALETTE.map((color) => (
           <button

@@ -50,7 +50,17 @@ export function dedupeCalendarTitles(items: TimelineItem[], order: CalendarPrior
     return source !== "learn" && source !== "portal" || order.includes(source);
   });
   if (showDuplicates) return visible;
-  const open = visible.filter((item) => item.kind !== "task" && !item.editorDraft && !item.pendingApproval);
+  //a feed can list one event twice under different UIDs; identical copies from one imported calendar show once
+  const copies = new Set<string>();
+  const distinct = visible.filter((item) => {
+    if (!item.importSource || item.kind === "task" || item.editorDraft || item.pendingApproval) return true;
+    const key = [item.importSource, normalizedCalendarTitle(item.title), item.startUTC, item.endUTC, item.allDay,
+      normalizedCalendarTitle(item.location ?? "")].join("|");
+    if (copies.has(key)) return false;
+    copies.add(key);
+    return true;
+  });
+  const open = distinct.filter((item) => item.kind !== "task" && !item.editorDraft && !item.pendingApproval);
   const parent = open.map((_, index) => index);
   const find = (index: number): number => {
     let cursor = index;
@@ -79,7 +89,7 @@ export function dedupeCalendarTitles(items: TimelineItem[], order: CalendarPrior
     if (!current || order.indexOf(source) < order.indexOf(current)) winnerOf.set(root, source);
   }
   const rootOf = new Map(open.map((item, index) => [item, find(index)]));
-  return visible.filter((item) => {
+  return distinct.filter((item) => {
     if (item.kind === "task" || item.editorDraft || item.pendingApproval) return true;
     const root = rootOf.get(item);
     if (root == null) return true;

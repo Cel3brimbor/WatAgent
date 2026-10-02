@@ -54,6 +54,8 @@ type CalendarContextValue = {
   upsert: (input: { id?: string; title: string; calendar: CalendarItemMeta }) => void;
   completeTask: (id: string, completed: boolean) => void;
   remove: (id: string) => void;
+  /** Deletes many items a few at a time; resolves with how many could not be deleted. */
+  removeMany: (ids: string[]) => Promise<number>;
   applyRemoteCalendarChange: (change: CalendarChange) => void;
   chats: ChatSession[];
   activeChat: ChatSession | null;
@@ -257,6 +259,27 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     (id: string) => {
       dropItem(id);
       void deleteCalendarItem(id).then(wrote).catch(logFailure("delete"));
+    },
+    [dropItem, wrote],
+  );
+
+  const removeMany = useCallback(
+    async (ids: string[]) => {
+      const queue = [...ids];
+      let failed = 0;
+      const worker = async () => {
+        for (let id = queue.shift(); id; id = queue.shift()) {
+          try {
+            await deleteCalendarItem(id);
+            dropItem(id);
+          } catch {
+            failed += 1;
+          }
+        }
+      };
+      await Promise.all(Array.from({ length: Math.min(4, queue.length) }, worker));
+      wrote();
+      return failed;
     },
     [dropItem, wrote],
   );
@@ -491,6 +514,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
       upsert,
       completeTask,
       remove,
+      removeMany,
       applyRemoteCalendarChange,
       chats: chatState.chats,
       activeChat,
@@ -524,6 +548,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
       upsert,
       completeTask,
       remove,
+      removeMany,
       applyRemoteCalendarChange,
       chatState.chats,
       activeChat,

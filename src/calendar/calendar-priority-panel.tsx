@@ -222,7 +222,9 @@ function PriorityRow({ source, label, rank, busy, removing, menuOpen, syncing, s
   );
 }
 
-export function RenameCalendarDialog({ name, onCancel, onSave }: { name: string; onCancel: () => void; onSave: (name: string) => void }) {
+export function RenameCalendarDialog({ name, onCancel, onSave, title = "Rename calendar", submitLabel = "Save name" }: {
+  name: string; onCancel: () => void; onSave: (name: string) => void; title?: string; submitLabel?: string;
+}) {
   const [value, setValue] = useState(name);
   const ref = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -231,13 +233,13 @@ export function RenameCalendarDialog({ name, onCancel, onSave }: { name: string;
   useDialog(ref, { open: true, onEscape: onCancel, initialFocus: inputRef });
   return <div className="modal-backdrop" role="presentation" data-state="open" onClick={onCancel}>
     <div ref={ref} className="modal" role="dialog" aria-modal="true" aria-labelledby={titleId} onClick={(event) => event.stopPropagation()}>
-      <h2 id={titleId}>Rename calendar</h2>
+      <h2 id={titleId}>{title}</h2>
       <form onSubmit={(event) => { event.preventDefault(); if (value.trim()) onSave(value.trim()); }}>
         <label htmlFor={inputId}>Calendar name</label>
         <input ref={inputRef} id={inputId} value={value} onChange={(event) => setValue(event.target.value)} maxLength={80} required autoComplete="off" />
         <div className="modal-actions">
           <button type="button" className="ghost-btn" onClick={onCancel}>Cancel</button>
-          <button type="submit" className="primary-btn" disabled={!value.trim()}>Save name</button>
+          <button type="submit" className="primary-btn" disabled={!value.trim()}>{submitLabel}</button>
         </div>
       </form>
     </div>
