@@ -6,7 +6,7 @@
   function read(key) {
     try {
       return window.localStorage.getItem(key);
-    } catch (e) {
+    } catch {
       return null;
     }
   }

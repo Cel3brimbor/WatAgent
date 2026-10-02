@@ -17,7 +17,7 @@ export function formatFeedSyncSummary(
   if (result.added === 0 && result.updated === 0 && result.removed === 0) {
     return `${name} is up to date (${result.unchanged} unchanged).`;
   }
-  return `${name}: ${result.added} added, ${result.updated} updated, ${result.removed} deleted, ${result.unchanged} unchanged.`;
+  return `${name}: ${result.added} added, ${result.updated} updated, ${result.removed} removed, ${result.unchanged} unchanged.`;
 }
 
 export async function syncImportedFeed(
