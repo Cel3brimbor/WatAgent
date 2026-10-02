@@ -49,7 +49,7 @@ export const DEFAULT_TEA_THEME: TeaThemeId = "earl-grey";
 
 export const TEA_THEMES: TeaOrigin[] = [
   {
-    origin: "English Tea",
+    origin: "British",
     themes: [
       { id: "earl-grey", name: "Earl Grey", note: "Warm paper, terracotta", paper: "#faf7f2", accent: "#c2593b" },
       { id: "lady-grey", name: "Lady Grey", note: "Soft grey, cornflower blue", paper: "#f5f6f8", accent: "#5a6fa8" },
