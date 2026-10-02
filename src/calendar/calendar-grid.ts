@@ -35,6 +35,8 @@ export type TimedLayout = {
 };
 
 export function layoutOverlappingBlocks(items: TimelineItem[], dayStartMs: number): TimedLayout[] {
+  const day = new Date(dayStartMs);
+  const dayEndMs = new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1).getTime();
   const sorted = [...items].sort((a, b) => {
     if (a.startUTC !== b.startUTC) return a.startUTC - b.startUTC;
     if (a.endUTC !== b.endUTC) return b.endUTC - a.endUTC;
@@ -60,10 +62,12 @@ export function layoutOverlappingBlocks(items: TimelineItem[], dayStartMs: numbe
     }
     const colCount = Math.max(1, colEnds.length);
     cluster.forEach((item, i) => {
+      const visibleStart = Math.max(item.startUTC, dayStartMs);
+      const visibleEnd = Math.min(item.endUTC, dayEndMs);
       laid.push({
         item,
-        top: itemTopPx(item.startUTC, dayStartMs),
-        height: itemHeightPx(item.startUTC, item.endUTC),
+        top: itemTopPx(visibleStart, dayStartMs),
+        height: itemHeightPx(visibleStart, visibleEnd),
         col: cols[i],
         cols: colCount,
       });

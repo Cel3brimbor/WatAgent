@@ -5,6 +5,14 @@ export function rangesOverlap(startA: number, endA: number, startB: number, endB
   return startA < endB && endA > startB;
 }
 
+const HOUR_MS = 60 * 60 * 1000;
+
+//a saved instant still has to occupy the hour google calendar draws, including the part after midnight
+function drawnEnd(kind: TimelineItem["kind"], allDay: boolean, startUTC: number, endUTC: number): number {
+  if (allDay || kind === "task" || endUTC !== startUTC) return endUTC;
+  return startUTC + HOUR_MS;
+}
+
 export type BusyBlock = { startUTC: number; endUTC: number };
 
 export type OverlayEvent = {
@@ -51,7 +59,7 @@ export function aggregateTimeline(input: {
       kind: meta.kind,
       title: event.title,
       startUTC: meta.startUTC,
-      endUTC: meta.endUTC,
+      endUTC: drawnEnd(meta.kind, meta.allDay, meta.startUTC, meta.endUTC),
       allDay: meta.allDay,
       completed: meta.completed,
       importSource: meta.importSource,
@@ -71,7 +79,7 @@ export function aggregateTimeline(input: {
       kind: "gcal_event",
       title: event.title,
       startUTC: event.startUTC,
-      endUTC: event.endUTC,
+      endUTC: drawnEnd("gcal_event", event.allDay, event.startUTC, event.endUTC),
       allDay: event.allDay,
       google: {
         calendarId: event.calendarId,
