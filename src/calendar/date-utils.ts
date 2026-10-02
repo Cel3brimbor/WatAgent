@@ -33,17 +33,7 @@ export function localDayBounds(date: Date): { startDateUTC: number; endDateUTC: 
 }
 
 export function localeWeekStartsOn(): 0 | 1 {
-  try {
-    const locale = new Intl.Locale(
-      typeof navigator !== "undefined" ? navigator.language : "en-US",
-    );
-    const first = (locale as Intl.Locale & { weekInfo?: { firstDay?: number } }).weekInfo
-      ?.firstDay;
-    if (first === 1) return 1;
-  } catch {
-    return 0;
-  }
-  return 0;
+  return 1;
 }
 
 export function startOfWeek(date: Date, weekStartsOn: 0 | 1): Date {
