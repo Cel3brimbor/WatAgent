@@ -138,3 +138,21 @@ export function SystemIcon(props: IconProps) {
     </Glyph>
   );
 }
+
+export function EyeIcon(props: IconProps) {
+  return (
+    <Glyph {...props} strokeWidth={1.5}>
+      <path d="M1.75 8S4 3.75 8 3.75 14.25 8 14.25 8 12 12.25 8 12.25 1.75 8 1.75 8Z" />
+      <circle cx="8" cy="8" r="2" />
+    </Glyph>
+  );
+}
+
+export function EyeOffIcon(props: IconProps) {
+  return (
+    <Glyph {...props} strokeWidth={1.5}>
+      <path d="M6.6 3.9A6.4 6.4 0 0 1 8 3.75C12 3.75 14.25 8 14.25 8a11 11 0 0 1-1.6 2.1M4.2 5.1A10.7 10.7 0 0 0 1.75 8S4 12.25 8 12.25a6 6 0 0 0 2.9-.75" />
+      <path d="M6.6 6.6a2 2 0 0 0 2.8 2.8M2.5 2.5l11 11" />
+    </Glyph>
+  );
+}

@@ -234,9 +234,12 @@ export function RenameCalendarDialog({ name, onCancel, onSave, title = "Rename c
   return <div className="modal-backdrop" role="presentation" data-state="open" onClick={onCancel}>
     <div ref={ref} className="modal" role="dialog" aria-modal="true" aria-labelledby={titleId} onClick={(event) => event.stopPropagation()}>
       <h2 id={titleId}>{title}</h2>
-      <form onSubmit={(event) => { event.preventDefault(); if (value.trim()) onSave(value.trim()); }}>
-        <label htmlFor={inputId}>Calendar name</label>
-        <input ref={inputRef} id={inputId} value={value} onChange={(event) => setValue(event.target.value)} maxLength={80} required autoComplete="off" />
+      <form className="modal-form" onSubmit={(event) => { event.preventDefault(); if (value.trim()) onSave(value.trim()); }}>
+        <label className="calendar-editor-field" htmlFor={inputId}>
+          Calendar name
+          <input ref={inputRef} id={inputId} className="calendar-editor-input" value={value} onChange={(event) => setValue(event.target.value)}
+            maxLength={80} required autoComplete="off" spellCheck={false} placeholder="e.g. Clubs, Work shifts" />
+        </label>
         <div className="modal-actions">
           <button type="button" className="ghost-btn" onClick={onCancel}>Cancel</button>
           <button type="submit" className="primary-btn" disabled={!value.trim()}>{submitLabel}</button>
