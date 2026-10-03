@@ -12,9 +12,8 @@ import { fetchCalendarPreferences, saveCalendarPreferences } from "@/calendar/ca
 import {
   writeCalendarColors,
   writeCalendarView,
-  writeCalendarPriority,
-  writeCalendarNames,
-  writeCalendarLinks,
+  writeImportedCalendars,
+  writeMergedCalendars,
   writeColorOverrides,
   writeSidePanelSections,
   writeSourceFilter,
@@ -24,16 +23,14 @@ import {
 } from "@/calendar/preferences";
 import { writeSmartTags, type SmartTag } from "@/calendar/smart-tags";
 import { writeLocalCalendars, type LocalCalendar } from "@/calendar/local-calendars";
-import type { CalendarLinks, CalendarNames, CalendarPriorityOrder, CalendarView } from "@/calendar/types";
+import type { CalendarView, ImportedCalendar, MergedCalendar } from "@/calendar/types";
 
 const SAVE_DEBOUNCE_MS = 600;
 
 export type CalendarPreferencesState = {
   view: CalendarView;
-  calendarNames: CalendarNames;
-  calendarLinks: CalendarLinks;
-  calendarPriorityOrder: CalendarPriorityOrder;
-  showDuplicateEvents: boolean;
+  importedCalendars: ImportedCalendar[];
+  mergedCalendars: MergedCalendar[];
   localCalendars: LocalCalendar[];
   sources: CalendarSourceFilter;
   colors: CalendarColors;
@@ -45,9 +42,8 @@ export type CalendarPreferencesState = {
 
 function writeLocalCache(doc: UserCalendarPreferencesV1): void {
   writeCalendarView(doc.view);
-  writeCalendarNames(doc.calendarNames);
-  writeCalendarLinks(doc.calendarLinks);
-  writeCalendarPriority(doc.calendarPriorityOrder, doc.showDuplicateEvents);
+  writeImportedCalendars(doc.importedCalendars);
+  writeMergedCalendars(doc.mergedCalendars);
   writeLocalCalendars(doc.localCalendars);
   writeSourceFilter(doc.sources);
   writeCalendarColors(doc.colors);
@@ -67,10 +63,8 @@ function toDoc(state: CalendarPreferencesState): UserCalendarPreferencesV1 {
 
 type ApplyPatch = {
   setView: (view: CalendarView) => void;
-  setCalendarNames: (names: CalendarNames) => void;
-  setCalendarLinks: (links: CalendarLinks) => void;
-  setCalendarPriorityOrder: (order: CalendarPriorityOrder) => void;
-  setShowDuplicateEvents: (show: boolean) => void;
+  setImportedCalendars: (calendars: ImportedCalendar[]) => void;
+  setMergedCalendars: (calendars: MergedCalendar[]) => void;
   setLocalCalendars: (calendars: LocalCalendar[]) => void;
   setSources: (sources: CalendarSourceFilter) => void;
   setColors: (colors: CalendarColors) => void;
@@ -82,10 +76,8 @@ type ApplyPatch = {
 
 function applyDoc(doc: UserCalendarPreferencesV1, apply: ApplyPatch): void {
   apply.setView(doc.view);
-  apply.setCalendarNames(doc.calendarNames);
-  apply.setCalendarLinks(doc.calendarLinks);
-  apply.setCalendarPriorityOrder(doc.calendarPriorityOrder);
-  apply.setShowDuplicateEvents(doc.showDuplicateEvents);
+  apply.setImportedCalendars(doc.importedCalendars);
+  apply.setMergedCalendars(doc.mergedCalendars);
   apply.setLocalCalendars(doc.localCalendars);
   apply.setSources(doc.sources);
   apply.setColors(doc.colors);
@@ -132,16 +124,16 @@ export function useCalendarPreferencesSync(ready: boolean, state: CalendarPrefer
     };
   }, [ready]);
 
-  const { view, calendarNames, calendarLinks, calendarPriorityOrder, showDuplicateEvents, localCalendars, sources, colors, colorOverrides, smartTags, navCollapsed, sidePanelSections } = state;
+  const { view, importedCalendars, mergedCalendars, localCalendars, sources, colors, colorOverrides, smartTags, navCollapsed, sidePanelSections } = state;
 
   useEffect(() => {
     if (!ready || skipSaveRef.current) return;
-    const doc = toDoc({ view, calendarNames, calendarLinks, calendarPriorityOrder, showDuplicateEvents, localCalendars, sources, colors, colorOverrides, smartTags, navCollapsed, sidePanelSections });
+    const doc = toDoc({ view, importedCalendars, mergedCalendars, localCalendars, sources, colors, colorOverrides, smartTags, navCollapsed, sidePanelSections });
     writeLocalCache(doc);
     window.clearTimeout(saveTimerRef.current);
     saveTimerRef.current = window.setTimeout(() => {
       void saveCalendarPreferences(doc).catch(() => undefined);
     }, SAVE_DEBOUNCE_MS);
     return () => window.clearTimeout(saveTimerRef.current);
-  }, [ready, view, calendarNames, calendarLinks, calendarPriorityOrder, showDuplicateEvents, localCalendars, sources, colors, colorOverrides, smartTags, navCollapsed, sidePanelSections]);
+  }, [ready, view, importedCalendars, mergedCalendars, localCalendars, sources, colors, colorOverrides, smartTags, navCollapsed, sidePanelSections]);
 }

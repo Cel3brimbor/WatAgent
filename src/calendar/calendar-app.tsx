@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import type { CalendarLinks, CalendarNames, CalendarPriorityOrder, CalendarItemMeta, CalendarView, TimelineItem } from "@/calendar/types";
+import type { CalendarItemMeta, CalendarView, ImportedCalendar, ImportedCalendarSource, MergedCalendar, TimelineItem } from "@/calendar/types";
 import { useCalendar } from "@/calendar/store";
 import {
   addDays,
@@ -16,17 +16,16 @@ import {
 } from "@/calendar/date-utils";
 import { removeImportedCalendar } from "@/calendar/client";
 import { calendarItemVisible, externalCalendarId, externalCalendarsOf } from "@/calendar/external-calendars";
-import { dedupeCalendarTitles } from "@/calendar/calendar-duplicates";
-import { activeCalendarPriority, sameCalendarPriority } from "@/calendar/calendar-priority";
+import { mergeTimeline } from "@/calendar/calendar-merge";
+import { mergedByMember } from "@/calendar/imported-calendars";
+import type { SideExternalCalendar } from "@/calendar/calendar-side-panel";
 import { aggregateTimeline, rangesOverlap, type BusyBlock, type OverlayEvent } from "@/calendar/timeline";
 import {
   ALL_SOURCES,
   readCalendarColors,
   readCalendarView,
-  readCalendarNames,
-  readCalendarLinks,
-  readCalendarPriorityOrder,
-  readShowDuplicateEvents,
+  readImportedCalendars,
+  readMergedCalendars,
   readColorOverrides,
   CALENDAR_PALETTE,
   readSidePanelSections,
@@ -101,19 +100,22 @@ import { SegmentedControl, type SegmentOption } from "@/shared/segmented-control
 import { usePresence } from "@/shared/use-presence";
 import type { AuthUser } from "@/auth/types";
 
-function importedCalendarLabel(source: TimelineItem["importSource"], names: CalendarNames): string | undefined {
-  if (source === "learn") return names.learn || "LEARN / Brightspace";
-  if (source === "portal") return names.portal || "Portal";
-  if (source === "other") return "Imported calendar";
-  return undefined;
+type ImportedLabels = { imported: ImportedCalendar[]; merged: MergedCalendar[] };
+
+//a merged calendar's event says which member it came from
+function importedCalendarLabel(item: Pick<TimelineItem, "importSource" | "mergedCalendarId">, labels: ImportedLabels): string | undefined {
+  if (!item.importSource) return undefined;
+  const own = labels.imported.find((calendar) => calendar.id === item.importSource)?.name ?? "Imported calendar";
+  const merged = item.mergedCalendarId ? labels.merged.find((calendar) => calendar.id === item.mergedCalendarId) : undefined;
+  return merged ? `${merged.name} (from ${own})` : own;
 }
 
 function eventCalendarLabel(
-  item: Pick<TimelineItem, "kind" | "startUTC" | "endUTC" | "allDay" | "importSource" | "calendarId">,
+  item: Pick<TimelineItem, "kind" | "startUTC" | "endUTC" | "allDay" | "importSource" | "mergedCalendarId" | "calendarId">,
   calendars: LocalCalendar[],
-  names: CalendarNames,
+  labels: ImportedLabels,
 ): string | undefined {
-  const imported = importedCalendarLabel(item.importSource, names);
+  const imported = importedCalendarLabel(item, labels);
   if (imported) return imported;
   if (item.kind !== "event" && item.kind !== "task") return undefined;
   const id = localCalendarIdOf({
@@ -305,11 +307,9 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
   const calendar = useCalendar();
   const { syncFromGoogle, createChat, pruneEmptyChats, setAfterWrite } = calendar;
   const [view, setView] = useState<CalendarView>(() => readCalendarView());
-  const [calendarNames, setCalendarNames] = useState<CalendarNames>(() => readCalendarNames());
-  const [calendarLinks, setCalendarLinks] = useState<CalendarLinks>(() => readCalendarLinks());
-  const [calendarPriorityOrder, setCalendarPriorityOrder] = useState<CalendarPriorityOrder>(() => readCalendarPriorityOrder());
+  const [importedCalendars, setImportedCalendars] = useState<ImportedCalendar[]>(() => readImportedCalendars());
+  const [mergedCalendars, setMergedCalendars] = useState<MergedCalendar[]>(() => readMergedCalendars(readImportedCalendars()));
   const [googleConnected, setGoogleConnected] = useState<boolean | null>(null);
-  const [showDuplicateEvents, setShowDuplicateEvents] = useState(() => readShowDuplicateEvents());
   const [section, setSection] = useState<AppSection>("calendar");
   const [navCollapsed, setNavCollapsed] = useState(() => {
     if (typeof window === "undefined") return false;
@@ -458,13 +458,11 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
 
   useCalendarPreferencesSync(
     calendar.hydrated,
-    { view, calendarNames, calendarLinks, calendarPriorityOrder, showDuplicateEvents, localCalendars, sources, colors, colorOverrides, smartTags, navCollapsed, sidePanelSections },
+    { view, importedCalendars, mergedCalendars, localCalendars, sources, colors, colorOverrides, smartTags, navCollapsed, sidePanelSections },
     {
       setView,
-      setCalendarNames,
-      setCalendarLinks,
-      setCalendarPriorityOrder,
-      setShowDuplicateEvents,
+      setImportedCalendars,
+      setMergedCalendars,
       setLocalCalendars,
       setSources,
       setColors,
@@ -475,20 +473,50 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
     },
   );
 
-  const importedFeeds = useMemo(
-    () => ({
-      learn: itemsForUi.some((item) => item.calendar.importSource === "learn"),
-      portal: itemsForUi.some((item) => item.calendar.importSource === "portal"),
-    }),
-    [itemsForUi],
-  );
-  const priorityOrder = useMemo(
-    () => activeCalendarPriority(calendarPriorityOrder, calendarLinks, googleConnected, importedFeeds),
-    [calendarPriorityOrder, calendarLinks, googleConnected, importedFeeds],
-  );
-  useEffect(() => {
-    setCalendarPriorityOrder((current) => (sameCalendarPriority(current, priorityOrder) ? current : priorityOrder));
-  }, [priorityOrder]);
+  const importedLabels = useMemo<ImportedLabels>(() => ({ imported: importedCalendars, merged: mergedCalendars }), [importedCalendars, mergedCalendars]);
+
+  //merged calendars stand in for their members in the side panel
+  const sideExternalCalendars = useMemo<SideExternalCalendar[]>(() => {
+    const byMember = mergedByMember(mergedCalendars);
+    const feedOf = (id: string) => importedCalendars.find((calendar) => externalCalendarId(calendar.id) === id);
+    const rows: SideExternalCalendar[] = mergedCalendars.map((calendar) => ({
+      id: calendar.id,
+      name: calendar.name,
+      feeds: calendar.members.map(feedOf).filter((feed): feed is ImportedCalendar => feed != null),
+      merged: true,
+    }));
+    for (const external of externalCalendarsOf(itemsForUi, importedCalendars)) {
+      if (byMember.has(external.id)) continue;
+      const feed = feedOf(external.id);
+      rows.push({ id: external.id, name: external.name, source: external.source, feeds: feed ? [feed] : [] });
+    }
+    return rows;
+  }, [itemsForUi, importedCalendars, mergedCalendars]);
+
+  const renameExternal = useCallback((id: string, name: string) => {
+    setMergedCalendars((current) => current.map((calendar) => (calendar.id === id ? { ...calendar, name } : calendar)));
+    setImportedCalendars((current) => current.map((calendar) => (externalCalendarId(calendar.id) === id ? { ...calendar, name } : calendar)));
+  }, []);
+
+  //a removed calendar leaves any merge; a merge left with one member goes away
+  const removeImported = useCallback(async (source: ImportedCalendarSource) => {
+    await removeImportedCalendar(source);
+    const id = externalCalendarId(source);
+    setImportedCalendars((current) => current.filter((calendar) => calendar.id !== source));
+    setMergedCalendars((current) =>
+      current
+        .map((calendar) => ({ ...calendar, members: calendar.members.filter((member) => member !== id) }))
+        .filter((calendar) => calendar.members.length >= 2),
+    );
+    await calendar.refresh();
+  }, [calendar]);
+
+  const addImported = useCallback(async (added: ImportedCalendar) => {
+    setImportedCalendars((current) =>
+      current.some((entry) => entry.id === added.id) ? current : [...current, added],
+    );
+    await calendar.refresh();
+  }, [calendar]);
 
   useEffect(() => {
     let cancelled = false;
@@ -557,22 +585,22 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
     (date: Date, filter: CalendarSourceFilter) => {
       const filterGroups = calendarGroupsOf(filter.groups);
       const googleShown = filter.google && filterGroups.other;
-      return dedupeCalendarTitles(aggregateTimeline({
+      return mergeTimeline(aggregateTimeline({
         focus: date,
-        events: itemsForUi.filter((item) => calendarItemVisible(item, filter)),
+        events: itemsForUi.filter((item) => calendarItemVisible(item, filter, mergedCalendars)),
         busyBlocks: !googleShown || shownOverlayEvents.length > 0 ? [] : busyBlocks,
         overlayEvents: shownOverlayEvents.filter((event) => {
           if (filterGroups.hidden && filter.hiddenIds.includes(event.calendarId)) return true;
           return googleShown && !isSidebarHidden(filter, event.calendarId) && !filter.mutedGoogleIds.includes(event.calendarId);
         }),
-      }), priorityOrder, showDuplicateEvents).map((item) => ({
+      }), mergedCalendars).map((item) => ({
         ...item,
         calendarColor: item.importSource
-          ? colorOverrides[externalCalendarId(item.importSource)] ?? colors.event
+          ? colorOverrides[item.mergedCalendarId ?? externalCalendarId(item.importSource)] ?? colors.event
           : item.calendarId ? colorOverrides[item.calendarId] ?? colors.event : undefined,
       }));
     },
-    [itemsForUi, busyBlocks, shownOverlayEvents, priorityOrder, showDuplicateEvents, colorOverrides, colors.event],
+    [itemsForUi, busyBlocks, shownOverlayEvents, mergedCalendars, colorOverrides, colors.event],
   );
 
   const itemsForDay = useCallback(
@@ -1248,22 +1276,12 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
           onSources={setSources}
           colors={colors}
           onColors={setColors}
-          externalCalendars={externalCalendarsOf(itemsForUi, calendarNames, priorityOrder, calendarLinks)}
-          calendarLinks={calendarLinks}
-          onRenameExternal={(source, name) => setCalendarNames((names) => ({ ...names, [source]: name }))}
+          externalCalendars={sideExternalCalendars}
+          onRenameExternal={renameExternal}
           onRefreshCalendars={() => calendar.refresh()}
           onSyncGoogle={() => googlePullRef.current()}
           onNotice={setNotice}
-          onRemoveExternal={async (source) => {
-            await removeImportedCalendar(source);
-            setCalendarLinks((links) => {
-              const next = { ...links };
-              delete next[source];
-              return next;
-            });
-            setCalendarPriorityOrder((order) => order.filter((item) => item !== source));
-            await calendar.refresh();
-          }}
+          onRemoveExternal={removeImported}
           googleCalendars={sidebarCalendars}
           colorOverrides={colorOverrides}
           onColorOverrides={setColorOverrides}
@@ -1383,14 +1401,11 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
               <CalendarMapSection
                 items={itemsForUi}
                 overlayEvents={overlayEvents}
-                priorityOrder={priorityOrder}
-                onPriorityOrder={setCalendarPriorityOrder}
-                showDuplicateEvents={showDuplicateEvents}
-                onShowDuplicateEvents={setShowDuplicateEvents}
+                mergedCalendars={mergedCalendars}
+                onMergedCalendars={setMergedCalendars}
                 sources={sources}
                 onSources={setSources}
-                calendarNames={calendarNames}
-                calendarLinks={calendarLinks}
+                importedCalendars={importedCalendars}
                 colors={colors}
                 colorOverrides={colorOverrides}
                 localCalendars={shownCalendars}
@@ -1412,35 +1427,19 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
             ) : null}
             {section === "settings" ? (
               <SettingsPanel
-                calendarNames={calendarNames}
-                onRenameCalendar={(source, name) => setCalendarNames((names) => ({ ...names, [source]: name }))}
-                calendarPriorityOrder={priorityOrder}
-                onCalendarPriorityOrderChange={setCalendarPriorityOrder}
-                showDuplicateEvents={showDuplicateEvents}
-                onShowDuplicateEventsChange={setShowDuplicateEvents}
+                importedCalendars={importedCalendars}
+                mergedCalendars={mergedCalendars}
+                onRenameCalendar={(id, name) => renameExternal(externalCalendarId(id), name)}
                 accountEmail={user.email}
                 requireAiApproval={calendar.requireAiApproval}
                 onRequireAiApprovalChange={(value) =>
                   void calendar.setRequireAiApproval(value).catch(() => setNotice("Unable to save Agent settings."))
                 }
                 syncedAt={googleSyncedAt}
-                calendarLinks={calendarLinks}
                 onSyncGoogle={() => googlePullRef.current()}
-                onImported={async (source, url) => {
-                  setCalendarLinks((links) => ({ ...links, [source]: url }));
-                  await calendar.refresh();
-                }}
+                onImported={addImported}
                 onRefresh={() => calendar.refresh()}
-                onRemoveCalendar={async (source) => {
-                  await removeImportedCalendar(source);
-                  setCalendarLinks((links) => {
-                    const next = { ...links };
-                    delete next[source];
-                    return next;
-                  });
-                  setCalendarPriorityOrder((order) => order.filter((item) => item !== source));
-                  await calendar.refresh();
-                }}
+                onRemoveCalendar={removeImported}
                 onChanged={() => setGoogleVersion((value) => value + 1)}
                 onNotice={setNotice}
                 onSignOut={onSignOut}
@@ -1552,7 +1551,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
           item={shownPeek.item}
           anchor={shownPeek.anchor}
           open={peek.open}
-          calendarLabel={eventCalendarLabel(shownPeek.item, shownCalendars, calendarNames)}
+          calendarLabel={eventCalendarLabel(shownPeek.item, shownCalendars, importedLabels)}
           onClose={closePeek}
           onEdit={
             shownPeek.item.pendingApproval || isTimelineItemReadOnly(shownPeek.item)
@@ -1581,7 +1580,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
                     id: shownPeek.item.id,
                     title: shownPeek.item.title,
                     kind: "event",
-                    calendarName: eventCalendarLabel(shownPeek.item, shownCalendars, calendarNames),
+                    calendarName: eventCalendarLabel(shownPeek.item, shownCalendars, importedLabels),
                   });
                 }
               : shownPeek.item.google?.deletable

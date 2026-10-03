@@ -1,7 +1,7 @@
 import { runRulesAfterSync } from "@/agent/rules/rules-client";
 import { importCalendarLink, type CalendarImportProgress, type CalendarImportResult } from "@/calendar/client";
 import { academicImportRange } from "@/calendar/calendar-import-panel";
-import type { ImportedCalendarSource } from "@/calendar/types";
+import type { ImportedCalendar } from "@/calendar/types";
 
 export function academicImportRangeUtc(): { rangeStartUTC: number; rangeEndUTC: number } {
   const { from, to } = academicImportRange(new Date());
@@ -22,12 +22,11 @@ export function formatFeedSyncSummary(
 }
 
 export async function syncImportedFeed(
-  source: ImportedCalendarSource,
-  url: string,
+  calendar: Pick<ImportedCalendar, "id" | "url">,
   onProgress?: (progress: CalendarImportProgress) => void,
 ): Promise<CalendarImportResult> {
   const { rangeStartUTC, rangeEndUTC } = academicImportRangeUtc();
-  const result = await importCalendarLink({ url, source, rangeStartUTC, rangeEndUTC }, onProgress);
+  const result = await importCalendarLink({ url: calendar.url, feedId: calendar.id, rangeStartUTC, rangeEndUTC }, onProgress);
   //fresh events may be what an Agent rule is waiting for; they run in the background
   runRulesAfterSync(result.source);
   return result;

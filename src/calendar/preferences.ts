@@ -1,5 +1,5 @@
-import { calendarLinksOf, calendarNamesOf, calendarPriorityOrderOf, showDuplicateEventsOf } from "@/calendar/calendar-priority";
-import type { CalendarLinks, CalendarNames, CalendarPriorityOrder, CalendarView } from "@/calendar/types";
+import { importedCalendarsOf, legacyMergedCalendars, mergedCalendarsOf } from "@/calendar/imported-calendars";
+import type { CalendarView, ImportedCalendar, MergedCalendar } from "@/calendar/types";
 
 const STORAGE_KEY = "watagent.calendar.preferences.v1";
 const VIEWS = new Set<CalendarView>(["day", "workweek", "week", "month", "year"]);
@@ -282,50 +282,43 @@ export function writeSidePanelSections(sections: SidePanelSectionsOpen): void {
   }
 }
 
-const LEGACY_DUPLICATE_PRIORITY_KEY = "watagent.calendar.duplicate-priority.v1";
-const CALENDAR_PRIORITY_ORDER_KEY = "watagent.calendar.priority-order.v1";
-const SHOW_DUPLICATE_EVENTS_KEY = "watagent.calendar.show-duplicates.v1";
+const IMPORTED_CALENDARS_KEY = "watagent.calendar.imported.v1";
+const MERGED_CALENDARS_KEY = "watagent.calendar.merged.v1";
 
-export function readCalendarPriorityOrder(): CalendarPriorityOrder {
+function readJson(key: string): unknown {
+  const raw = window.localStorage.getItem(key);
+  return raw == null ? undefined : JSON.parse(raw);
+}
+
+//before the list, links and names were cached per learn/portal/other slot
+export function readImportedCalendars(): ImportedCalendar[] {
   if (typeof window === "undefined") return [];
   try {
-    const raw = window.localStorage.getItem(CALENDAR_PRIORITY_ORDER_KEY);
-    const legacy = window.localStorage.getItem(LEGACY_DUPLICATE_PRIORITY_KEY);
-    return calendarPriorityOrderOf(raw ? JSON.parse(raw) : undefined, legacy);
+    return importedCalendarsOf(readJson(IMPORTED_CALENDARS_KEY), readJson("watagent.calendar.links.v1"), readJson("watagent.calendar.names.v1"));
   } catch { return []; }
 }
 
-export function readShowDuplicateEvents(): boolean {
-  if (typeof window === "undefined") return false;
-  try {
-    const raw = window.localStorage.getItem(SHOW_DUPLICATE_EVENTS_KEY);
-    return showDuplicateEventsOf(raw ? JSON.parse(raw) : undefined, window.localStorage.getItem(LEGACY_DUPLICATE_PRIORITY_KEY));
-  } catch { return false; }
-}
-
-export function writeCalendarPriority(order: CalendarPriorityOrder, showDuplicates: boolean): void {
-  try {
-    window.localStorage.setItem(CALENDAR_PRIORITY_ORDER_KEY, JSON.stringify(order));
-    window.localStorage.setItem(SHOW_DUPLICATE_EVENTS_KEY, JSON.stringify(showDuplicates));
-  } catch { /* Cache is optional. */ }
-}
-
-export function readCalendarLinks(): CalendarLinks {
-  try { return calendarLinksOf(JSON.parse(window.localStorage.getItem("watagent.calendar.links.v1") ?? "{}")); }
-  catch { return {}; }
-}
-
-export function writeCalendarLinks(links: CalendarLinks): void {
-  try { window.localStorage.setItem("watagent.calendar.links.v1", JSON.stringify(calendarLinksOf(links))); }
+export function writeImportedCalendars(calendars: ImportedCalendar[]): void {
+  try { window.localStorage.setItem(IMPORTED_CALENDARS_KEY, JSON.stringify(calendars)); }
   catch { return; }
 }
 
-export function readCalendarNames(): CalendarNames {
-  try { return calendarNamesOf(JSON.parse(window.localStorage.getItem("watagent.calendar.names.v1") ?? "{}")); }
-  catch { return {}; }
+//before merged calendars, a priority order hid the lower feed's duplicate copies
+export function readMergedCalendars(imported: ImportedCalendar[]): MergedCalendar[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = readJson(MERGED_CALENDARS_KEY);
+    if (raw !== undefined) return mergedCalendarsOf(raw);
+    return legacyMergedCalendars(
+      readJson("watagent.calendar.priority-order.v1"),
+      readJson("watagent.calendar.show-duplicates.v1"),
+      window.localStorage.getItem("watagent.calendar.duplicate-priority.v1"),
+      imported,
+    );
+  } catch { return []; }
 }
 
-export function writeCalendarNames(names: CalendarNames): void {
-  try { window.localStorage.setItem("watagent.calendar.names.v1", JSON.stringify(calendarNamesOf(names))); }
+export function writeMergedCalendars(calendars: MergedCalendar[]): void {
+  try { window.localStorage.setItem(MERGED_CALENDARS_KEY, JSON.stringify(calendars)); }
   catch { return; }
 }
