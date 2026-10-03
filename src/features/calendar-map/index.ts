@@ -1,0 +1,16 @@
+//the only entry point other code may import; see README.md for how to mount, remove or lift it out
+export { CalendarMap, type CalendarMapProps } from "./calendar-map";
+export { createLocalLayoutStore } from "./layout-store";
+export type {
+  LayoutStore,
+  MapChange,
+  MapEdge,
+  MapEdgeAction,
+  MapFunction,
+  MapLinkFunction,
+  MapNode,
+  MapNodeDrop,
+  MapNodeFunction,
+  MapNodeGroup,
+  MapPoint,
+} from "./types";

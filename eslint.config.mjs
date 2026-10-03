@@ -34,6 +34,40 @@ const eslintConfig = [
       ],
     },
   },
+  //the calendar map is portable: it reaches the app only through props, and the app reaches it only through its index
+  {
+    files: ["src/features/calendar-map/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              regex: "^@/(?!shared/motion$)",
+              message: "The calendar map may import only react and @/shared/motion. Pass app data in through props.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: ["src/**/*.{ts,tsx}"],
+    ignores: ["src/features/calendar-map/**"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              regex: "^@/features/calendar-map/",
+              message: "Import the calendar map from @/features/calendar-map.",
+            },
+          ],
+        },
+      ],
+    },
+  },
 ];
 
 export default eslintConfig;
