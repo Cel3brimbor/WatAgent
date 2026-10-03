@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { boxesOverlap, canvasHeight, centreBounds, defaultLayout, edgeGeometry, exitPoint, MIN_CANVAS_WIDTH, NODE_SIZE, nodeAt, segmentHitsBox, toPx, toUnit } from "./geometry";
+import { BOX_ROW, boxesOverlap, canvasHeight, centreBounds, defaultLayout, edgeGeometry, exitPoint, MIN_CANVAS_WIDTH, NODE_SIZE, nodeAt, nodeSize, segmentHitsBox, toPx, toUnit } from "./geometry";
 
 const wide = { width: 800, height: 500 };
 const nodes = [
@@ -25,6 +25,28 @@ const hubRight = toPx(tight.agent, narrowest).x + NODE_SIZE.w / 2;
 const rightEdge = toPx(tight.learn, narrowest).x - NODE_SIZE.w / 2;
 assert.ok(leftEdge < hubLeft && hubRight < rightEdge, "at the narrowest canvas the three lanes still don't touch");
 assert.ok(canvasHeight(Array.from({ length: 9 }, () => ({ group: "left" as const }))) > 460, "long lanes grow the canvas");
+
+//box nodes: same width, a row taller per item
+const row = (id: string) => ({ id, label: id });
+assert.deepEqual(nodeSize({}), NODE_SIZE);
+assert.equal(nodeSize({ box: { rows: [] } }).w, NODE_SIZE.w, "boxes fit the same lanes");
+assert.equal(nodeSize({ box: { rows: [row("a"), row("b"), row("c")] } }).h - nodeSize({ box: { rows: [row("a")] } }).h, 2 * BOX_ROW);
+assert.equal(nodeSize({ box: { rows: [] } }).h, nodeSize({ box: { rows: [row("a")] } }).h, "an empty box keeps room for its hint");
+const big = { box: { rows: [row("a"), row("b"), row("c"), row("d")] } };
+const stacked = [
+  { id: "learn", group: "right" as const },
+  { id: "box", group: "right" as const, ...big },
+  { id: "portal", group: "right" as const },
+];
+const roomy = { width: 800, height: canvasHeight(stacked) };
+const placed = defaultLayout(stacked, roomy);
+const extent = (id: string, h: number) => [toPx(placed[id], roomy).y - h / 2, toPx(placed[id], roomy).y + h / 2];
+const [, learnBottom] = extent("learn", NODE_SIZE.h);
+const [boxTop, boxBottom] = extent("box", nodeSize(big).h);
+const [portalTop, portalBottom] = extent("portal", NODE_SIZE.h);
+assert.ok(learnBottom < boxTop && boxBottom < portalTop, "a tall box doesn't overlap its neighbours");
+assert.ok(portalBottom <= roomy.height - 100, "and the lane still clears the palette");
+assert.ok(canvasHeight(stacked) > canvasHeight(stacked.map(({ id, group }) => ({ id, group }))), "tall boxes grow the canvas");
 
 assert.deepEqual(toUnit(toPx({ x: 0.25, y: 0.75 }, wide), wide), { x: 0.25, y: 0.75 });
 assert.deepEqual(toUnit({ x: -40, y: 900 }, wide), { x: 0, y: 1 }, "positions clamp to the canvas");

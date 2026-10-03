@@ -25,6 +25,7 @@ import {
   exitPoint,
   MIN_CANVAS_WIDTH,
   NODE_SIZE,
+  nodeSize,
   nodeAt,
   toPx,
   toUnit,
@@ -134,7 +135,8 @@ export function CalendarMap({ label, nodes, edges, functions, nodeDrop, layoutSt
   const reflowing = useRef(new Set<string>());
   const lastDefaults = useRef<{ size: { width: number; height: number }; at: Record<string, Pt> } | null>(null);
 
-  const { w: nodeW, h: nodeH } = NODE_SIZE;
+  const sizeById = useMemo(() => new Map(nodes.map((node) => [node.id, nodeSize(node)])), [nodes]);
+  const sizeOf = useCallback((id: string) => sizeById.get(id) ?? NODE_SIZE, [sizeById]);
   const height = useMemo(() => canvasHeight(nodes), [nodes]);
   const size = useMemo(() => ({ width, height }), [width, height]);
   const defaults = useMemo(() => defaultLayout(nodes, size), [nodes, size]);
@@ -144,8 +146,8 @@ export function CalendarMap({ label, nodes, edges, functions, nodeDrop, layoutSt
     return out;
   }, [nodes, layout, defaults, size]);
   const boxes = useMemo(
-    () => nodes.map((node) => ({ id: node.id, ...centres[node.id], w: nodeW, h: nodeH })),
-    [nodes, centres, nodeW, nodeH],
+    () => nodes.map((node) => ({ id: node.id, ...centres[node.id], ...sizeOf(node.id) })),
+    [nodes, centres, sizeOf],
   );
   const boxById = useMemo(() => new Map(boxes.map((box) => [box.id, box])), [boxes]);
   const nodeById = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes]);
@@ -360,14 +362,14 @@ export function CalendarMap({ label, nodes, edges, functions, nodeDrop, layoutSt
   const nodeDrag = useNodeDrag({
     toCanvas,
     centre: (id) => centres[id] ?? { x: width / 2, y: height / 2 },
-    bounds: () => centreBounds(size, { w: nodeW, h: nodeH }),
+    bounds: (id) => centreBounds(size, sizeOf(id)),
     span: () => size,
     move: (id, point) => setLayout((current) => ({ ...current, [id]: toUnit(point, size) })),
     onPress: setPressed,
     onTap: activateNode,
     over: (id, point) => {
       if (!nodeDrop) return null;
-      const dragged: Box = { ...point, w: nodeW, h: nodeH };
+      const dragged: Box = { ...point, ...sizeOf(id) };
       for (const other of boxes) {
         if (other.id !== id && boxesOverlap(dragged, other) && nodeDrop.accepts(id, other.id) === true) return other.id;
       }
@@ -573,7 +575,7 @@ export function CalendarMap({ label, nodes, edges, functions, nodeDrop, layoutSt
     event.preventDefault();
     nodeDrag.stop(id);
     const step = event.shiftKey ? NUDGE_FAR : NUDGE;
-    const bounds = centreBounds(size, { w: nodeW, h: nodeH });
+    const bounds = centreBounds(size, sizeOf(id));
     const centre = centres[id];
     const next = {
       x: clamp(centre.x + direction.x * step, bounds.minX, bounds.maxX),
@@ -795,6 +797,9 @@ export function CalendarMap({ label, nodes, edges, functions, nodeDrop, layoutSt
                   const answer = acceptance(node.id);
                   const selected = selection?.kind === "node" && selection.id === node.id;
                   const highlighted = over === node.id || (linkOver === node.id && answer === true);
+                  const { w: nodeW, h: nodeH } = sizeOf(node.id);
+                  //the toggle sits in the header row, which is the whole node unless it's a box
+                  const headerY = centre.y - nodeH / 2 + NODE_SIZE.h / 2;
                   return (
                     <Fragment key={node.id}>
                       <button
@@ -813,6 +818,8 @@ export function CalendarMap({ label, nodes, edges, functions, nodeDrop, layoutSt
                         data-pressed={pressed === node.id || undefined}
                         data-dimmed={node.dimmed || undefined}
                         data-toggle={node.toggle ? true : undefined}
+                      data-box={node.box ? true : undefined}
+                      data-node={node.id}
                         data-accept={answer === true ? "yes" : typeof answer === "string" ? "no" : undefined}
                         data-over={highlighted || undefined}
                         aria-pressed={selected}
@@ -847,7 +854,7 @@ export function CalendarMap({ label, nodes, edges, functions, nodeDrop, layoutSt
                         <button
                           type="button"
                           className={styles.nodeToggle}
-                          style={{ transform: `translate3d(${centre.x + nodeW / 2 - TOGGLE - 8}px, ${centre.y - TOGGLE / 2}px, 0)` }}
+                          style={{ transform: `translate3d(${centre.x + nodeW / 2 - TOGGLE - 8}px, ${headerY - TOGGLE / 2}px, 0)` }}
                           aria-pressed={node.toggle.on}
                           aria-label={node.toggle.label}
                           title={node.toggle.label}
@@ -860,6 +867,66 @@ export function CalendarMap({ label, nodes, edges, functions, nodeDrop, layoutSt
                         >
                           {node.toggle.icon}
                         </button>
+                      ) : null}
+                      {node.box ? (
+                        <div
+                          className={styles.boxRows}
+                          style={{ width: nodeW, transform: `translate3d(${centre.x - nodeW / 2}px, ${centre.y - nodeH / 2 + NODE_SIZE.h}px, 0)` }}
+                          //rows have their own controls; a press here mustn't drag the box or clear the selection
+                          onPointerDown={(event) => event.stopPropagation()}
+                        >
+                          {node.box.rows.length === 0 ? (
+                            <p className={styles.boxEmpty}>{node.box.empty ?? "Empty"}</p>
+                          ) : (
+                            <ul className={styles.boxList} aria-label={`${node.label}: items`}>
+                              {node.box.rows.map((row) => (
+                                <li key={row.id} className={styles.boxRow}>
+                                  <span className={styles.swatch} style={{ background: row.color }} aria-hidden="true" />
+                                  <span className={styles.boxLabel} title={row.label}>
+                                    {row.label}
+                                  </span>
+                                  {row.choice ? (
+                                    <select
+                                      className={styles.boxChoice}
+                                      aria-label={`${row.choice.label}: ${row.label}`}
+                                      value={row.choice.value}
+                                      onChange={(event) => {
+                                        const choice = row.choice;
+                                        const value = event.target.value;
+                                        if (choice && value !== choice.value) void run(() => choice.onChange(value), node.id);
+                                      }}
+                                    >
+                                      {row.choice.options.map((option) => (
+                                        <option key={option.value} value={option.value}>
+                                          {option.label}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  ) : null}
+                                  {row.remove ? (
+                                    <button
+                                      type="button"
+                                      className={styles.boxRemove}
+                                      aria-label={`${row.remove.label}: ${row.label}`}
+                                      title={row.remove.label}
+                                      onClick={() => {
+                                        const remove = row.remove;
+                                        if (!remove) return;
+                                        //the row goes away with its button, so keep focus on the box, where Delete and ⌘Z still work
+                                        rootRef.current?.querySelector<HTMLElement>(`[data-node="${CSS.escape(node.id)}"]`)?.focus({ preventScroll: true });
+                                        void run(remove.run, node.id);
+                                      }}
+                                    >
+                                      <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+                                        <path d="M2 2l6 6M8 2l-6 6" />
+                                      </svg>
+                                    </button>
+                                  ) : null}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
                       ) : null}
                     </Fragment>
                   );

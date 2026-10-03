@@ -366,3 +366,33 @@ export function withNewCalendar(filter: CalendarSourceFilter, id: string, shown:
   if (shown || filter.mutedGoogleIds.includes(id)) return filter;
   return { ...filter, mutedGoogleIds: [...filter.mutedGoogleIds, id] };
 }
+
+const MERGE_DRAFTS_KEY = "watagent.calendar.merge-drafts.v1";
+
+/** Merge boxes with fewer than two calendars. They stay on this device until they fill. */
+export function mergeDraftsOf(raw: unknown): MergedCalendar[] {
+  if (!Array.isArray(raw)) return [];
+  const list: MergedCalendar[] = [];
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object") continue;
+    const rec = entry as Record<string, unknown>;
+    const id = typeof rec.id === "string" && /^merge-[0-9a-f-]{36}$/.test(rec.id) ? rec.id : "";
+    const name = typeof rec.name === "string" ? rec.name.trim().slice(0, 80) : "";
+    const members = Array.isArray(rec.members)
+      ? rec.members.filter((member): member is string => typeof member === "string" && member.startsWith("ics:")).slice(0, 1)
+      : [];
+    if (id && name && !list.some((box) => box.id === id)) list.push({ id, name, members });
+  }
+  return list.slice(0, 50);
+}
+
+export function readMergeDrafts(): MergedCalendar[] {
+  if (typeof window === "undefined") return [];
+  try { return mergeDraftsOf(readJson(MERGE_DRAFTS_KEY)); }
+  catch { return []; }
+}
+
+export function writeMergeDrafts(drafts: MergedCalendar[]): void {
+  try { window.localStorage.setItem(MERGE_DRAFTS_KEY, JSON.stringify(drafts)); }
+  catch { return; }
+}

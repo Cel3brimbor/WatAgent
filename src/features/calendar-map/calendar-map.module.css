@@ -300,6 +300,106 @@
   height: 0.95rem;
 }
 
+/*a box node: the header at the top, its rows drawn over the rest as a sibling (rows hold their own controls)*/
+.node[data-box] .nodeBody {
+  align-items: flex-start;
+  padding-top: calc((56px - 2.1rem) / 2);
+  border-style: dashed;
+  border-width: 1.5px;
+  background: color-mix(in srgb, var(--node-color) 6%, var(--map-panel));
+}
+
+.boxRows {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 2;
+  padding: 0 0.45rem;
+  will-change: transform;
+}
+
+.boxList {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.boxRow {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  height: 32px;
+  padding: 0 0.15rem 0 0.4rem;
+  border: 1px solid var(--map-line);
+  border-radius: 8px;
+  background: var(--map-panel);
+  font-size: 0.78rem;
+}
+
+.boxLabel {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 560;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.boxChoice {
+  flex-shrink: 0;
+  height: 24px;
+  padding: 0 0.15rem;
+  border: 1px solid var(--map-line);
+  border-radius: 6px;
+  background: var(--map-panel);
+  color: var(--map-ink);
+  font: inherit;
+  font-size: 0.74rem;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.boxRemove {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--map-ink-soft);
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .boxRemove:hover {
+    background: var(--map-hover);
+    color: var(--map-ink);
+  }
+}
+
+.boxChoice:focus-visible,
+.boxRemove:focus-visible {
+  outline: 2px solid var(--map-accent);
+  outline-offset: 1px;
+}
+
+.boxEmpty {
+  display: grid;
+  place-items: center;
+  height: 32px;
+  margin: 0;
+  border: 1px dashed var(--map-line);
+  border-radius: 8px;
+  color: var(--map-ink-soft);
+  font-size: 0.74rem;
+  pointer-events: none;
+}
+
 .node[data-pressed] {
   z-index: 3;
   cursor: grabbing;
