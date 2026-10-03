@@ -177,7 +177,7 @@ export function CalendarMapSection({
         caption: requireAiApproval ? "Approval on" : "Approval off",
         details: [
           "Reads every calendar on this map.",
-          "Adds and changes events in WatAgent calendars, and edits imported events, except in read-only calendars.",
+          "Adds and changes events in WatAgent calendars, except read-only ones. Imported calendars are always read only.",
           "New events go to Agent Main unless you name another calendar.",
           requireAiApproval ? "Its changes wait for your approval." : "Its changes apply right away.",
         ],
@@ -217,7 +217,7 @@ export function CalendarMapSection({
         label: feed.name,
         color: colorOverrides[id] ?? colors.event,
         group: "right",
-        caption: [locked ? "Read only" : null, merged ? `In ${merged.name}` : hidden ? "Hidden" : null, amount].filter(Boolean).join(" · "),
+        caption: ["Imported", merged ? `In ${merged.name}` : hidden ? "Hidden" : null, amount].filter(Boolean).join(" · "),
         locked,
         dimmed: hidden,
         busy: syncing.includes(id),
@@ -225,7 +225,7 @@ export function CalendarMapSection({
           merged
             ? `Shows on the calendar as part of ${merged.name}, which keeps one copy of each shared event.`
             : "An imported calendar. All of its events show.",
-          locked ? "Read only: you and the Agent can't change its events." : "The Agent can edit its events; new ones always go to WatAgent calendars.",
+          "Read only: its events change only when it syncs.",
           ...(hidden && !merged ? ["Hidden from the calendar."] : []),
         ],
       });
@@ -239,6 +239,7 @@ export function CalendarMapSection({
         color: colorOverrides[calendar.id] ?? colors.event,
         group: "right",
         caption: [`${plural(calendar.members.length, "calendar")} merged`, hidden ? "Hidden" : null].filter(Boolean).join(" · "),
+        locked: true,
         dimmed: hidden,
         busy: calendar.members.some((member) => syncing.includes(member)),
         actions: [
@@ -320,18 +321,15 @@ export function CalendarMapSection({
         });
         continue;
       }
-      const verb = feedSourceOf(node.id) ? "edits" : "writes";
       list.push({
         id: `agent:${node.id}`,
         from: AGENT,
         to: node.id,
-        label: pending > 0 ? `${verb} · ${pending} pending` : verb,
+        label: pending > 0 ? `writes · ${pending} pending` : "writes",
         directed: true,
         tone: "accent",
         details: [
-          feedSourceOf(node.id)
-            ? `The Agent can change or delete ${node.label} events, but adds new ones to WatAgent calendars.`
-            : `The Agent can add, change and delete events in ${node.label}.`,
+          `The Agent can add, change and delete events in ${node.label}.`,
           ...(pending > 0 ? [`${plural(pending, "change")} ${pending === 1 ? "waits" : "wait"} for your approval.`] : []),
         ],
       });
@@ -529,6 +527,7 @@ export function CalendarMapSection({
       accepts: (id) => {
         if (id === AGENT) return "The Agent isn't a calendar.";
         if (id === GOOGLE) return "Google calendars keep their own permissions.";
+        if (feedSourceOf(id) || isMerged(id)) return "Imported calendars are always read only.";
         return isCalendar(id) ? true : "Choose a calendar.";
       },
       apply: (id) => {

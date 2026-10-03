@@ -73,8 +73,13 @@ export const ALL_SOURCES: CalendarSourceFilter = {
   readOnlyCalendarIds: [],
 };
 
+/** Imported calendars and merged calendars change only when their links sync. */
+export function isImportedCalendarId(id: string): boolean {
+  return id.startsWith("ics:") || id.startsWith("merge-");
+}
+
 export function isCalendarReadOnly(filter: CalendarSourceFilter, id: string): boolean {
-  return filter.readOnlyCalendarIds.includes(id);
+  return isImportedCalendarId(id) || filter.readOnlyCalendarIds.includes(id);
 }
 
 export function setCalendarReadOnly(filter: CalendarSourceFilter, id: string, readOnly: boolean): CalendarSourceFilter {

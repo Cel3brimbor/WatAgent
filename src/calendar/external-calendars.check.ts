@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { calendarItemVisible, externalCalendarsOf } from "./external-calendars";
-import { ALL_SOURCES } from "./preferences";
+import { ALL_SOURCES, isCalendarReadOnly, setCalendarReadOnly } from "./preferences";
 import type { CalendarItemDoc } from "./types";
 const learn: CalendarItemDoc = { id: "a", title: "Assignment", createdAt: 0, updatedAt: 0, calendar: { kind: "event", startUTC: 0, endUTC: 1, allDay: false, importSource: "learn" } };
 const portal: CalendarItemDoc = { ...learn, id: "b", calendar: { ...learn.calendar, importSource: "portal" } };
@@ -25,4 +25,9 @@ assert.equal(calendarItemVisible(learn, { ...filter, groups: groupsOff }), false
 assert.equal(calendarItemVisible(manual, { ...filter, events: true, groups: { ...groupsOff, watagent: false, external: true } }), false);
 assert.equal(calendarItemVisible(learn, { ...filter, hiddenIds: ["ics:learn"], groups: { ...groupsOff, external: true } }), false);
 assert.equal(calendarItemVisible(learn, { ...filter, hiddenIds: ["ics:learn"], groups: { ...groupsOff, external: true, hidden: true } }), true, "the hidden header shows those calendars without clearing the list");
+assert.equal(isCalendarReadOnly(ALL_SOURCES, "ics:learn"), true, "imported calendars are always read only");
+assert.equal(isCalendarReadOnly(ALL_SOURCES, "ics:feed-0b5c2f8e-3a4d-4e1f-9c2b-7d6e5f4a3b2c"), true);
+assert.equal(isCalendarReadOnly(setCalendarReadOnly(ALL_SOURCES, "ics:learn", false), "ics:learn"), true, "and can't be unlocked");
+assert.equal(isCalendarReadOnly(ALL_SOURCES, "merge-0b5c2f8e-3a4d-4e1f-9c2b-7d6e5f4a3b2c"), true);
+assert.equal(isCalendarReadOnly(ALL_SOURCES, "events"), false);
 console.log("External calendar listing, names, merged visibility, independent visibility, and removal checks passed.");

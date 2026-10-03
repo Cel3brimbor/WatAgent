@@ -460,7 +460,7 @@ export function CalendarSidePanel({
           onSync={menuCanSync && !syncBusy ? () => void syncCalendarRow(shownMenu.id) : undefined}
           onDisplayOnly={() => displayOnly(shownMenu.id)}
           onHide={() => hideCalendar(shownMenu.id)}
-          onToggleReadOnly={!menuIsGoogle && !menuExternal?.merged ? () => toggleReadOnly(shownMenu.id) : undefined}
+          onToggleReadOnly={!menuIsGoogle && !menuExternal ? () => toggleReadOnly(shownMenu.id) : undefined}
           readOnly={!menuIsGoogle && isCalendarReadOnly(sources, shownMenu.id)}
           onColor={(color) => paint(shownMenu.id, color)}
           onRename={menuLocal && !isPrimaryEventCalendarId(menuLocal.id) ? () => {

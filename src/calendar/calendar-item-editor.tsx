@@ -111,7 +111,9 @@ export function CalendarItemEditor({
             Changes save to {draft.google.calendarName || "your Google calendar"} in Google Calendar.
           </p>
         ) : readOnly ? (
-          <p className="calendar-editor-source">This calendar is read-only.</p>
+          <p className="calendar-editor-source">
+            {draft.imported ? "Imported calendars are read only. This event changes when its calendar syncs." : "This calendar is read-only."}
+          </p>
         ) : null}
         <fieldset className="calendar-editor-body" disabled={readOnly}>
           <input
