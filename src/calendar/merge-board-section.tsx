@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useState, type ReactNode } from "react";
 import {
   closestCorners,
   DndContext,
@@ -18,7 +18,8 @@ import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalList
 import { CSS } from "@dnd-kit/utilities";
 import { newMergedCalendarId } from "@/calendar/imported-calendars";
 import { RenameCalendarDialog } from "@/calendar/imported-calendars-panel";
-import { boxesOf, boxOf, commitBoxes, moveInBoxes, NEW_BOX, TRAY, type Boxes } from "@/calendar/merge-board";
+import { boxesOf, boxOf, commitBoxes, moveInBoxes, newBoxName, TRAY, type Boxes, type MergeBox } from "@/calendar/merge-board";
+import { readMergeDrafts, writeMergeDrafts } from "@/calendar/preferences";
 import type { MergedCalendar } from "@/calendar/types";
 
 export type MergeBoardFeed = { id: string; name: string; color: string };
@@ -39,49 +40,62 @@ function ordinal(rank: number): string {
   return `${rank}${suffix}`;
 }
 
-/** Drag imported calendars into boxes; each box with two or more is a merged calendar, first one's copy winning. */
+/**
+ * Drag imported calendars into boxes. Add as many boxes as you like; a box with two or more calendars is a
+ * merged calendar, the top one's copy winning, and a box with fewer waits on this device until it fills.
+ */
 export function MergeBoardSection({ feeds, merged, onMerged, onCreated, newCalendarsShown }: Props) {
   const headingId = useId();
-  //the new box holds one calendar here until a second one makes it a merged calendar
-  const [draft, setDraft] = useState<string[]>([]);
+  //read after mount: the server render has no saved boxes, and both renders must match
+  const [drafts, setDrafts] = useState<MergeBox[]>([]);
+  useEffect(() => {
+    setDrafts(readMergeDrafts());
+  }, []);
   //while dragging, the board follows the pointer; it's saved only on drop
   const [live, setLive] = useState<Boxes | null>(null);
   const [active, setActive] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
-  const [undo, setUndo] = useState<{ merged: MergedCalendar[]; draft: string[] } | null>(null);
-  const [renaming, setRenaming] = useState<MergedCalendar | null>(null);
+  const [undo, setUndo] = useState<{ merged: MergedCalendar[]; drafts: MergeBox[] } | null>(null);
+  const [renaming, setRenaming] = useState<MergeBox | null>(null);
 
+  //a box filled from another tab or the Map is a merged calendar now, not a draft
+  const openDrafts = useMemo(() => drafts.filter((box) => !merged.some((calendar) => calendar.id === box.id)), [drafts, merged]);
+  const boxList = useMemo(() => [...merged, ...openDrafts], [merged, openDrafts]);
   const feedIds = useMemo(() => feeds.map((feed) => feed.id), [feeds]);
-  const saved = useMemo(() => boxesOf(feedIds, merged, draft), [feedIds, merged, draft]);
+  const saved = useMemo(() => boxesOf(feedIds, boxList), [feedIds, boxList]);
   const boxes = live ?? saved;
   const feedOf = (id: string) => feeds.find((feed) => feed.id === id);
   const nameOf = (id: string) => feedOf(id)?.name ?? "Imported calendar";
-  const boxName = (box: string) =>
-    box === TRAY ? "Not merged" : box === NEW_BOX ? "New merged calendar" : merged.find((calendar) => calendar.id === box)?.name ?? "Merged calendar";
+  const boxName = (id: string) => (id === TRAY ? "Not merged" : boxList.find((box) => box.id === id)?.name ?? "Box");
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
+  function saveDrafts(next: MergeBox[]) {
+    setDrafts(next);
+    writeMergeDrafts(next);
+  }
+
+  //every change keeps the board as it was, for Undo
+  function remember() {
+    setUndo({ merged, drafts: openDrafts });
+  }
+
   function commit(next: Boxes) {
     if (next === saved) return;
-    const result = commitBoxes(next, merged, nameOf, newMergedCalendarId);
-    const before = { merged, draft };
-    setDraft(result.draft);
-    if (result.changes.length === 0) {
-      //only the new box changed, and it still holds one calendar
-      if (result.draft.length === 1) setStatus(`${nameOf(result.draft[0])} is waiting. Drop one more calendar in to merge them.`);
-      else setStatus(null);
-      setUndo(result.draft.join() === draft.join() ? null : before);
-      return;
-    }
+    const result = commitBoxes(next, merged, openDrafts, nameOf);
+    if (result.changes.length === 0) return;
+    remember();
     onMerged(result.merged);
-    if (result.created) onCreated(result.created.id);
-    setUndo(before);
+    saveDrafts(result.drafts);
+    result.created.forEach((box) => onCreated(box.id));
+    const waiting = result.drafts.filter((box) => box.members.length === 1).map((box) => box.name);
     setStatus(
       `${result.changes.join(". ")}.` +
-        (result.created && !newCalendarsShown ? " New calendars start hidden, so show it with its eye on the Map." : ""),
+        (waiting.length ? ` Add one more calendar to ${waiting.join(" and ")} to merge it.` : "") +
+        (result.created.length && !newCalendarsShown ? " New calendars start hidden, so show it with its eye on the Map." : ""),
     );
   }
 
@@ -94,16 +108,43 @@ export function MergeBoardSection({ feeds, merged, onMerged, onCreated, newCalen
     if (index > 0) move(id, saved[box][index - 1]);
   }
 
-  function emptyBox(box: string) {
-    let next = saved;
-    for (const id of saved[box]) next = moveInBoxes(next, id, TRAY);
-    commit(next);
+  function addBox(first?: string) {
+    const box: MergeBox = {
+      id: newMergedCalendarId(),
+      name: newBoxName(boxList.map((entry) => entry.name)),
+      members: first ? [first] : [],
+    };
+    remember();
+    saveDrafts([...openDrafts, box]);
+    setStatus(first ? `${box.name} added with ${nameOf(first)}. Add one more calendar to merge it.` : `${box.name} added. Drag calendars into it.`);
+  }
+
+  //its calendars go back to Not merged
+  function deleteBox(box: MergeBox) {
+    remember();
+    if (merged.some((calendar) => calendar.id === box.id)) onMerged(merged.filter((calendar) => calendar.id !== box.id));
+    saveDrafts(openDrafts.filter((entry) => entry.id !== box.id));
+    setStatus(
+      saved[box.id]?.length
+        ? `${box.name} deleted. ${saved[box.id].map(nameOf).join(" and ")} ${saved[box.id].length === 1 ? "shows on its own" : "show on their own"} again.`
+        : `${box.name} deleted.`,
+    );
+  }
+
+  function rename(box: MergeBox, name: string) {
+    remember();
+    if (merged.some((calendar) => calendar.id === box.id)) {
+      onMerged(merged.map((calendar) => (calendar.id === box.id ? { ...calendar, name } : calendar)));
+    } else {
+      saveDrafts(openDrafts.map((entry) => (entry.id === box.id ? { ...entry, name } : entry)));
+    }
+    setStatus(`Renamed to ${name}.`);
   }
 
   function restore() {
     if (!undo) return;
     onMerged(undo.merged);
-    setDraft(undo.draft);
+    saveDrafts(undo.drafts);
     setUndo(null);
     setStatus("Undone.");
   }
@@ -135,15 +176,20 @@ export function MergeBoardSection({ feeds, merged, onMerged, onCreated, newCalen
     setLive(null);
   }
 
-  const mergedBoxes = merged.filter((calendar) => calendar.id in boxes);
   const activeFeed = active ? feedOf(active) : undefined;
 
   return (
     <section className="settings-section merge-board" aria-labelledby={headingId}>
-      <h3 id={headingId}>Merge calendars</h3>
+      <div className="merge-board-head">
+        <h3 id={headingId}>Merge calendars</h3>
+        <button type="button" className="merge-box-action is-primary" onClick={() => addBox()}>
+          + Add box
+        </button>
+      </div>
       <p className="modal-hint">
-        Drag imported calendars into a box to show them as one calendar. The order in a box is its priority: when an event is
-        in more than one calendar, the copy from the calendar at the top shows. A box with fewer than two calendars unmerges.
+        Add a box, then drag imported calendars into it to show them as one calendar. The order in a box is its priority:
+        when an event is in more than one calendar, the copy from the calendar at the top shows. A box merges once it holds
+        two calendars.
       </p>
       {feeds.length < 2 ? (
         <p className="modal-hint">Import at least two calendars in Settings to merge them.</p>
@@ -182,67 +228,63 @@ export function MergeBoardSection({ feeds, merged, onMerged, onCreated, newCalen
                     <select
                       value=""
                       onChange={(event) => {
-                        if (event.target.value) move(id, event.target.value);
+                        const target = event.target.value;
+                        if (target === "add") addBox(id);
+                        else if (target) move(id, target);
                       }}
                     >
                       <option value="">Merge into…</option>
-                      {mergedBoxes.map((calendar) => (
-                        <option key={calendar.id} value={calendar.id}>
-                          {calendar.name}
+                      {boxList.map((box) => (
+                        <option key={box.id} value={box.id}>
+                          {box.name}
                         </option>
                       ))}
-                      <option value={NEW_BOX}>New merged calendar</option>
+                      <option value="add">New box</option>
                     </select>
                   </label>
                 </Chip>
               ))}
             </Box>
 
-            {mergedBoxes.map((calendar) => (
-              <Box
-                key={calendar.id}
-                id={calendar.id}
-                title={calendar.name}
-                hint={`${boxes[calendar.id].length} calendars, first one's copy wins`}
-                items={boxes[calendar.id]}
-                kind="merged"
-                actions={
-                  <>
-                    <button type="button" className="merge-box-action" onClick={() => setRenaming(calendar)}>
-                      Rename
-                    </button>
-                    <button type="button" className="merge-box-action is-danger" onClick={() => emptyBox(calendar.id)}>
-                      Unmerge
-                    </button>
-                  </>
-                }
-              >
-                {boxes[calendar.id].map((id, index) => (
-                  <Chip key={id} id={id} feed={feedOf(id)} rank={index + 1}>
-                    <ChipButtons
-                      name={nameOf(id)}
-                      first={index === 0}
-                      onUp={() => moveUp(calendar.id, id)}
-                      onOut={() => move(id, TRAY)}
-                    />
-                  </Chip>
-                ))}
-              </Box>
-            ))}
+            {boxList.map((box) => {
+              const members = boxes[box.id] ?? [];
+              return (
+                <Box
+                  key={box.id}
+                  id={box.id}
+                  title={box.name}
+                  hint={
+                    members.length >= 2
+                      ? `Merged: ${members.length} calendars, top one's copy wins`
+                      : members.length === 1
+                        ? "Add one more calendar to merge."
+                        : "Drag two or more calendars here."
+                  }
+                  items={members}
+                  kind={members.length >= 2 ? "merged" : "draft"}
+                  actions={
+                    <>
+                      <button type="button" className="merge-box-action" onClick={() => setRenaming(box)}>
+                        Rename
+                      </button>
+                      <button type="button" className="merge-box-action is-danger" onClick={() => deleteBox(box)}>
+                        Delete
+                      </button>
+                    </>
+                  }
+                >
+                  {members.map((id, index) => (
+                    <Chip key={id} id={id} feed={feedOf(id)} rank={index + 1}>
+                      <ChipButtons name={nameOf(id)} first={index === 0} onUp={() => moveUp(box.id, id)} onOut={() => move(id, TRAY)} />
+                    </Chip>
+                  ))}
+                </Box>
+              );
+            })}
 
-            <Box
-              id={NEW_BOX}
-              title="New merged calendar"
-              hint={boxes[NEW_BOX].length ? "Drop one more to merge them." : "Drop two or more calendars here."}
-              items={boxes[NEW_BOX]}
-              kind="new"
-            >
-              {boxes[NEW_BOX].map((id, index) => (
-                <Chip key={id} id={id} feed={feedOf(id)} rank={index + 1}>
-                  <ChipButtons name={nameOf(id)} first={index === 0} onUp={() => moveUp(NEW_BOX, id)} onOut={() => move(id, TRAY)} />
-                </Chip>
-              ))}
-            </Box>
+            <button type="button" className="merge-box-add" onClick={() => addBox()}>
+              <span aria-hidden="true">+</span> Add box
+            </button>
           </div>
           <DragOverlay>{activeFeed ? <ChipFace feed={activeFeed} lifted /> : null}</DragOverlay>
         </DndContext>
@@ -260,11 +302,9 @@ export function MergeBoardSection({ feeds, merged, onMerged, onCreated, newCalen
           name={renaming.name}
           onCancel={() => setRenaming(null)}
           onSave={(name) => {
-            const id = renaming.id;
+            const box = renaming;
             setRenaming(null);
-            setUndo({ merged, draft });
-            onMerged(merged.map((calendar) => (calendar.id === id ? { ...calendar, name } : calendar)));
-            setStatus(`Renamed to ${name}.`);
+            rename(box, name);
           }}
         />
       ) : null}
@@ -277,7 +317,7 @@ function Box({ id, title, hint, items, kind, actions, children }: {
   title: string;
   hint: string;
   items: string[];
-  kind: "tray" | "merged" | "new";
+  kind: "tray" | "merged" | "draft";
   actions?: ReactNode;
   children: ReactNode;
 }) {

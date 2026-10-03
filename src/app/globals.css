@@ -6619,7 +6619,59 @@ h3 {
   transition: border-color 160ms ease, box-shadow 160ms ease;
 }
 
-.merge-box[data-kind="new"] {
+.merge-board-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.merge-box-action.is-primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--panel-solid);
+  font-weight: 600;
+}
+
+.merge-box-action.is-primary:hover {
+  border-color: var(--accent);
+  filter: brightness(1.05);
+}
+
+.merge-box-add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-height: 6rem;
+  border: 1.5px dashed var(--line-strong);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 160ms ease, color 160ms ease, background-color 160ms ease;
+}
+
+.merge-box-add:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.merge-box-add:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.merge-box-add span {
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+.merge-box[data-kind="draft"] {
   border-style: dashed;
   border-color: var(--line-strong);
 }
@@ -6822,7 +6874,8 @@ h3 {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .merge-box {
+  .merge-box,
+  .merge-box-add {
     transition: none;
   }
 }
