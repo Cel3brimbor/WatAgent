@@ -20,6 +20,7 @@ import {
   type MapFunction,
   type MapNode,
   type MapNodeDrop,
+  type MapToggle,
 } from "@/features/calendar-map";
 import { sharedEventCounts } from "@/calendar/calendar-merge";
 import { calendarIdForMeta } from "@/calendar/calendar-ownership";
@@ -32,7 +33,7 @@ import { calendarGroupsOf, isCalendarReadOnly, setCalendarReadOnly, type Calenda
 import { timelineItemOf, type OverlayEvent } from "@/calendar/timeline";
 import type { CalendarItemDoc, ImportedCalendar, MergedCalendar } from "@/calendar/types";
 import { ConfirmDialog } from "@/shared/confirm-dialog";
-import { ChatIcon, EyeOffIcon, LockIcon, MergeIcon, RouteIcon, ShieldCheckIcon, SyncIcon } from "@/shared/icons";
+import { ChatIcon, EyeIcon, EyeOffIcon, LockIcon, MergeIcon, RouteIcon, ShieldCheckIcon, SyncIcon } from "@/shared/icons";
 import { usePresence } from "@/shared/use-presence";
 
 const layoutStore = createLocalLayoutStore("watagent.calendarMap.layout.v1");
@@ -292,7 +293,8 @@ export function CalendarMapSection({
         ],
       });
     }
-    return list;
+    //members show through their merged calendar, so only it gets the switch
+    return list.map((node) => (node.id === AGENT || memberOf.has(node.id) ? node : { ...node, toggle: gridToggle(node.id, node.label) }));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- every input the helpers read is listed
   }, [localCalendars, feeds, mergedCalendars, memberOf, counts, overlayEvents.length, sources, colors, colorOverrides, requireAiApproval, syncing, showGoogle, agentHiddenIds]);
 
@@ -449,6 +451,24 @@ export function CalendarMapSection({
     });
   }
 
+  //the eye on each node: shows or hides that calendar on the calendar grid
+  function gridToggle(id: string, label: string): MapToggle {
+    const shown = shownOnGrid(id);
+    return {
+      on: shown,
+      label: shown ? `Hide ${label} on the calendar` : `Show ${label} on the calendar`,
+      icon: shown ? <EyeIcon /> : <EyeOffIcon />,
+      run: () => {
+        if (!shown && hiddenElsewhere(id)) throw new Error(`${label} is hidden from the side panel. Show it there.`);
+        setShown(id, !shown);
+        return {
+          message: shown ? `${label} hidden from the calendar` : `${label} shown on the calendar`,
+          undo: () => setShown(id, shown),
+        };
+      },
+    };
+  }
+
   function setLocked(id: string, locked: boolean) {
     onSources((current) => setCalendarReadOnly(current, id, locked));
   }
@@ -570,27 +590,6 @@ export function CalendarMapSection({
         return {
           message: was ? `${nameOf(id)} can be changed again` : `${nameOf(id)} is read only for you and the Agent`,
           undo: () => setLocked(id, was),
-        };
-      },
-    },
-    {
-      id: "hide",
-      kind: "node",
-      label: "Hide",
-      group: "Calendars",
-      icon: <EyeOffIcon />,
-      prompt: "choose a calendar to hide or show",
-      accepts: (id) => {
-        if (!isCalendar(id)) return "The Agent isn't a calendar.";
-        if (!shownOnGrid(id) && hiddenElsewhere(id)) return `${nameOf(id)} is hidden from the side panel. Show it there.`;
-        return true;
-      },
-      apply: (id) => {
-        const shown = shownOnGrid(id);
-        setShown(id, !shown);
-        return {
-          message: shown ? `${nameOf(id)} hidden from the calendar` : `${nameOf(id)} shown on the calendar`,
-          undo: () => setShown(id, shown),
         };
       },
     },
@@ -719,7 +718,7 @@ export function CalendarMapSection({
         functions={functions}
         nodeDrop={nodeDrop}
         layoutStore={layoutStore}
-        hint="Drag a function onto a calendar. Draw from an imported calendar's handle to another imported calendar to merge them, or to a WatAgent calendar to make an Agent rule. Select a link to delete it; deleting a calendar's link to the Agent hides it from the Agent."
+        hint="Use the eye on a calendar to show or hide it on the calendar. Drag a function onto a calendar. Draw from an imported calendar's handle to another imported calendar to merge them, or to a WatAgent calendar to make an Agent rule. Select a link to delete it; deleting a calendar's link to the Agent hides it from the Agent."
       />
       {renamingMerged ? (
         <RenameCalendarDialog

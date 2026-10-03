@@ -174,6 +174,15 @@ export function LockIcon(props: IconProps) {
   );
 }
 
+export function EyeIcon(props: IconProps) {
+  return (
+    <Glyph {...props} strokeWidth={1.5}>
+      <path d="M1.75 8S4 3.75 8 3.75 14.25 8 14.25 8 12 12.25 8 12.25 1.75 8 1.75 8z" />
+      <circle cx="8" cy="8" r="2" />
+    </Glyph>
+  );
+}
+
 export function EyeOffIcon(props: IconProps) {
   return (
     <Glyph {...props} strokeWidth={1.5}>
