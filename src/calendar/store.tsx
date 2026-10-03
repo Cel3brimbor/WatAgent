@@ -67,6 +67,7 @@ type CalendarContextValue = {
   reopenChat: (chatId: string) => void;
   deleteChat: (chatId: string) => void;
   reorderChats: (orderedIds: string[]) => void;
+  applyAutoTitle: (chatId: string, title: string) => void;
   setChatMessages: (messages: ChatMessage[]) => void;
   persistActiveChat: () => void;
   pruneEmptyChats: () => void;
@@ -91,13 +92,6 @@ function emptyChat(): ChatSession {
     updatedAt: now,
     open: true,
   };
-}
-
-function autoTitle(messages: ChatMessage[]): string | null {
-  const first = messages.find((message) => message.role === "user" && message.content.trim());
-  if (!first) return null;
-  const text = first.content.replace(/\s+/g, " ").trim();
-  return text.length > 40 ? `${text.slice(0, 39)}…` : text;
 }
 
 function pickActive(state: ChatState): ChatSession | null {
@@ -451,6 +445,25 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     [updateChats],
   );
 
+  const applyAutoTitle = useCallback(
+    (chatId: string, title: string) => {
+      const next = title.trim().replace(/\s+/g, " ").slice(0, 40);
+      if (next.length < 2) return;
+      updateChats((state) => {
+        let changed = false;
+        const chats = state.chats.map((chat) => {
+          if (chat.id !== chatId || chat.titleSource !== "auto" || chat.title === next) return chat;
+          changed = true;
+          return { ...chat, title: next, updatedAt: Date.now() };
+        });
+        if (!changed) return state;
+        queueMicrotask(() => persistChat(chatId));
+        return { ...state, chats };
+      });
+    },
+    [persistChat, updateChats],
+  );
+
   const setChatMessages = useCallback(
     (messages: ChatMessage[]) => {
       updateChats((state) => {
@@ -465,8 +478,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
           activeChatId: id,
           chats: chats.map((chat) => {
             if (chat.id !== id) return chat;
-            const title = chat.titleSource === "user" ? chat.title : (autoTitle(messages) ?? chat.title);
-            return { ...chat, title, messages, updatedAt: Date.now() };
+            return { ...chat, messages, updatedAt: Date.now() };
           }),
         };
       });
@@ -526,6 +538,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
       reopenChat,
       deleteChat,
       reorderChats,
+      applyAutoTitle,
       setChatMessages,
       persistActiveChat,
       pruneEmptyChats,
@@ -560,6 +573,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
       reopenChat,
       deleteChat,
       reorderChats,
+      applyAutoTitle,
       setChatMessages,
       persistActiveChat,
       pruneEmptyChats,

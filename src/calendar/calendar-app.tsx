@@ -31,6 +31,7 @@ import {
   CALENDAR_PALETTE,
   readSidePanelSections,
   readSourceFilter,
+  isCalendarReadOnly,
   isSidebarHidden,
   calendarGroupsOf,
   type CalendarColors,
@@ -45,6 +46,7 @@ import {
   type SmartTagMatcher,
   type SmartTagTarget,
 } from "@/calendar/smart-tags";
+import { calendarIdForDraft, calendarIdForMeta, timelineItemCalendarId } from "@/calendar/calendar-ownership";
 import { CalendarSidePanel } from "@/calendar/calendar-side-panel";
 import { deleteGoogleEvent, getGoogleCalendarStatus, updateGoogleEvent, type GoogleCalendarRef } from "@/calendar/google-calendar-client";
 import { ConfirmDialog } from "@/shared/confirm-dialog";
@@ -68,6 +70,8 @@ import { SettingsPanel } from "@/calendar/settings-panel";
 import { useCalendarPreferencesSync } from "@/calendar/use-calendar-preferences-sync";
 import {
   BUILTIN_CALENDARS,
+  isPrimaryEventCalendarId,
+  PRIMARY_EVENT_CALENDAR_NAME,
   calendarIdField,
   defaultEventCalendarId,
   localCalendarIdOf,
@@ -81,7 +85,9 @@ import { SideNav, type AppSection } from "@/calendar/side-nav";
 import { TodoList } from "@/calendar/todo-list";
 import { CalendarChatPanel } from "@/agent/calendar-chat-panel";
 import type { PendingAiChange } from "@/calendar/approval-client";
+import { attachedIdsOf } from "@/agent/calendar-mention";
 import type { AgentEffort } from "@/agent/agent-effort";
+import { requestChatTitle } from "@/agent/chat-title";
 import { readAgentStream } from "@/agent/stream";
 import { cloneActivity } from "@/agent/agent-activity";
 import type { ActivityPart, ChatMessage, ThoughtSegment, ToolEventRecord } from "@/agent/types";
@@ -117,7 +123,7 @@ function eventCalendarLabel(
   });
   if (!id) return undefined;
   return calendars.find((calendar) => calendar.id === id)?.name
-    ?? (id === "events" ? "WatAgent" : id === "tasks" ? "Tasks" : undefined);
+    ?? (id === "events" ? PRIMARY_EVENT_CALENDAR_NAME : id === "tasks" ? "Tasks" : undefined);
 }
 
 const VIEW_OPTIONS: SegmentOption<CalendarView>[] = [
@@ -138,6 +144,7 @@ type Range = { rangeStartUTC: number; rangeEndUTC: number };
 type SendPayload = {
   text: string;
   effort: AgentEffort;
+  calendarIds?: string[];
   branch?: { kind: "edit"; messageId: string } | { kind: "regenerate"; messageId: string };
 };
 
@@ -364,6 +371,18 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
   const closePeek = useCallback(() => setGooglePeek(null), []);
   const closeEditor = useCallback(() => setDraft(null), []);
 
+  const isTimelineItemReadOnly = useCallback(
+    (item: TimelineItem) => {
+      const id = timelineItemCalendarId(item);
+      return id ? isCalendarReadOnly(sources, id) : false;
+    },
+    [sources],
+  );
+
+  const draftReadOnly = shownDraft
+    ? isCalendarReadOnly(sources, calendarIdForDraft(shownDraft, calendar.items, localCalendars))
+    : false;
+
   useEffect(() => {
     if (draft) setGooglePeek(null);
   }, [draft]);
@@ -373,6 +392,22 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
     [calendar.displayItems, draft],
   );
   const shownCalendars = useMemo(() => shownLocalCalendars(localCalendars, calendar.items), [localCalendars, calendar.items]);
+  const mentionCalendars = useMemo(
+    () =>
+      shownCalendars.map((calendar) => ({
+        id: calendar.id,
+        name: calendar.name,
+        kind: calendar.kind,
+        color:
+          calendar.id === "events"
+            ? colors.event
+            : calendar.id === "tasks"
+              ? colors.task
+              : colorOverrides[calendar.id] || colors.event,
+        readOnly: isCalendarReadOnly(sources, calendar.id),
+      })),
+    [shownCalendars, colors, colorOverrides, sources],
+  );
   const localCalendarCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     for (const item of calendar.items) {
@@ -545,7 +580,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
           });
           const calendarName = ownedId
             ? shownCalendars.find((calendar) => calendar.id === ownedId)?.name
-              ?? (ownedId === "events" ? "WatAgent" : ownedId === "tasks" ? "Tasks" : ownedId)
+              ?? (ownedId === "events" ? PRIMARY_EVENT_CALENDAR_NAME : ownedId === "tasks" ? "Tasks" : ownedId)
             : "";
           const calendar = ownedId ? ` calendar=${ownedId} "${calendarName.replace(/"/g, "")}"` : "";
           const done = item.kind === "task" ? ` completed=${item.completed ? "true" : "false"}` : "";
@@ -658,7 +693,8 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
         (target.tagName === "INPUT" ||
           target.tagName === "TEXTAREA" ||
           target.tagName === "SELECT" ||
-          target.isContentEditable)
+          target.isContentEditable ||
+          target.closest("[data-calendar-popover]"))
       ) {
         return;
       }
@@ -687,6 +723,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
 
   function onOpenItem(item: TimelineItem, anchor?: DOMRect) {
     if (item.editorDraft) return;
+    if (item.kind === "task" && isTimelineItemReadOnly(item)) return;
     if (item.kind === "gcal_busy") return;
     if (item.pendingApproval || item.kind === "gcal_event" || item.kind === "event") {
       setDraft(null);
@@ -813,6 +850,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
   }
 
   function renameLocalCalendar(id: string, name: string) {
+    if (isPrimaryEventCalendarId(id)) return;
     setLocalCalendars((list) => {
       //a built-in that came back after deletion is shown but not stored; store it with its new name
       const base = list.some((entry) => entry.id === id)
@@ -823,6 +861,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
   }
 
   async function deleteLocalCalendar(id: string) {
+    if (isPrimaryEventCalendarId(id)) return;
     const name = shownCalendars.find((entry) => entry.id === id)?.name ?? "Calendar";
     const ids = calendar.items.filter((item) => localCalendarIdOf(item.calendar) === id).map((item) => item.id);
     const failed = await calendar.removeMany(ids);
@@ -834,6 +873,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
       ...current,
       mutedGoogleIds: current.mutedGoogleIds.filter((entry) => entry !== id),
       hiddenIds: current.hiddenIds.filter((entry) => entry !== id),
+      readOnlyCalendarIds: current.readOnlyCalendarIds.filter((entry) => entry !== id),
       ...(id === "events" ? { events: true } : id === "tasks" ? { tasks: true } : {}),
     }));
     if (id.startsWith("cal-")) {
@@ -883,6 +923,10 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
 
   function saveDraft() {
     if (!draft) return;
+    if (isCalendarReadOnly(sources, calendarIdForDraft(draft, calendar.items, localCalendars))) {
+      setNotice("This calendar is read-only.");
+      return;
+    }
     if (!draft.allDay && draft.endUTC <= draft.startUTC) {
       setNotice("End time must be after the start time.");
       return;
@@ -919,27 +963,36 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
     if (busy) return;
     const existing = currentMessages();
     let text = payload.text.trim();
+    let calendarIds = attachedIdsOf(payload.calendarIds);
     let history = existing;
     let reuseUser = false;
     if (payload.branch?.kind === "edit") {
       const index = existing.findIndex((message) => message.id === payload.branch?.messageId);
       const target = existing[index];
-      if (!target || target.role !== "user" || !text) return;
+      if (!target || target.role !== "user" || (!text && !calendarIds?.length)) return;
       history = existing.slice(0, index);
     } else if (payload.branch?.kind === "regenerate") {
       const index = existing.findIndex((message) => message.id === payload.branch?.messageId);
       const target = existing[index];
       if (!target || target.role !== "assistant") return;
       const prior = existing.slice(0, index);
-      text = [...prior].reverse().find((message) => message.role === "user")?.content.trim() ?? "";
-      if (!text) return;
+      const priorUser = [...prior].reverse().find((message) => message.role === "user");
+      text = priorUser?.content.trim() ?? "";
+      calendarIds = attachedIdsOf(priorUser?.calendarIds);
+      if (!text && !calendarIds?.length) return;
       history = prior;
       reuseUser = true;
-    } else if (!text) {
+    } else if (!text && !calendarIds?.length) {
       return;
     }
 
-    const userMessage: ChatMessage = { id: uid("msg"), role: "user", content: text.slice(0, 20_000), createdAt: Date.now() };
+    const userMessage: ChatMessage = {
+      id: uid("msg"),
+      role: "user",
+      content: text.slice(0, 20_000),
+      createdAt: Date.now(),
+      calendarIds,
+    };
     const assistantId = uid("msg");
     const visible = reuseUser ? history : [...history, userMessage];
     const parts: ActivityPart[] = [
@@ -949,6 +1002,10 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
       ...visible,
       { id: assistantId, role: "assistant", content: "", createdAt: Date.now(), activity: cloneActivity(parts) },
     ]);
+    const chatId = calendar.activeChatRef()?.id ?? null;
+    const nameAfterReply =
+      calendar.activeChatRef()?.titleSource !== "user" &&
+      !history.some((message) => message.role === "assistant" && message.content.trim());
     setStreamingAssistantId(assistantId);
     setBusy(true);
     setError(null);
@@ -959,6 +1016,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
 
     let assistantText = "";
     let announcedTool = "";
+    let nameThisChat = false;
     const THOUGHT_CAP = 16_000;
 
     function thoughtTextLength(): number {
@@ -1025,10 +1083,14 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
           timeZone: timeZone(),
           timelineDigest,
           effort: payload.effort,
+          attachedCalendarIds: [...visible].reverse().find((message) => message.role === "user")?.calendarIds,
           messages: visible
-            .filter((message) => message.content.trim())
+            .filter((message) => message.content.trim() || (message.role === "user" && (message.calendarIds?.length ?? 0) > 0))
             .slice(-80)
-            .map((message) => ({ role: message.role, content: message.content })),
+            .map((message) => ({
+              role: message.role,
+              content: message.content.trim() || "Use the attached calendar.",
+            })),
         }),
       });
       if (!res.ok) {
@@ -1049,6 +1111,19 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
       await readAgentStream(
         res,
         (event) => {
+          if (event.type === "reasoning-reset") {
+            for (let index = parts.length - 1; index >= 0; index -= 1) {
+              const part = parts[index];
+              if (part.kind === "thought" && part.thought.seconds == null) parts.splice(index, 1);
+            }
+            schedule();
+            return;
+          }
+          if (event.type === "content-reset") {
+            assistantText = "";
+            schedule();
+            return;
+          }
           if (event.type === "content") {
             closeThought();
             assistantText += event.content;
@@ -1102,7 +1177,10 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
         controller.signal,
       );
       if (rafId) cancelAnimationFrame(rafId);
-      if (!controller.signal.aborted) writeAssistant();
+      if (!controller.signal.aborted) {
+        writeAssistant();
+        if (assistantText.trim()) nameThisChat = true;
+      }
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") return;
       setError(err instanceof Error ? err.message : "An unexpected error occurred");
@@ -1112,6 +1190,12 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
       setBusy(false);
       setStreamingAssistantId(null);
       calendar.persistActiveChat();
+      if (nameThisChat && nameAfterReply && chatId) {
+        const userText = text.trim() || "Attached calendar";
+        void requestChatTitle(userText, assistantText).then((title) => {
+          if (title) calendar.applyAutoTitle(chatId, title);
+        });
+      }
     }
   }
 
@@ -1264,6 +1348,8 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
                     setNotice("Approve or undo this Agent change in the chat.");
                     return;
                   }
+                  const calId = calendarIdForMeta(item.calendar);
+                  if (calId && isCalendarReadOnly(sources, calId)) return;
                   setDraft(draftFromMeta(item.id, item.title, item.calendar));
                 }}
                 onComplete={calendar.completeTask}
@@ -1378,6 +1464,8 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
           onReorderChats={calendar.reorderChats}
           onResizingChange={setChatResizing}
           onClose={() => setChatOpen(false)}
+          calendars={mentionCalendars}
+          items={calendar.displayItems}
           pendingChanges={calendar.pendingChanges}
           approvalBusy={calendar.approvalBusy}
           onApprove={(id) =>
@@ -1393,6 +1481,12 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
             void calendar.rejectPendingChanges({ all: true }).catch(() => setNotice("Unable to undo changes."))
           }
           onInspectPending={revealPending}
+          onEditCalendarItem={(item) => {
+            const calId = calendarIdForMeta(item.calendar);
+            if (calId && isCalendarReadOnly(sources, calId)) return;
+            setSection("calendar");
+            setDraft(draftFromMeta(item.id, item.title, item.calendar));
+          }}
         />
       </div>
 
@@ -1405,7 +1499,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
           calendarLabel={eventCalendarLabel(shownPeek.item, shownCalendars, calendarNames)}
           onClose={closePeek}
           onEdit={
-            shownPeek.item.pendingApproval
+            shownPeek.item.pendingApproval || isTimelineItemReadOnly(shownPeek.item)
               ? undefined
               : shownPeek.item.kind === "event"
               ? () => {
@@ -1422,7 +1516,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
                 : undefined
           }
           onDelete={
-            shownPeek.item.pendingApproval
+            shownPeek.item.pendingApproval || isTimelineItemReadOnly(shownPeek.item)
               ? undefined
               : shownPeek.item.kind === "event"
               ? () => {
@@ -1475,13 +1569,17 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
         <CalendarItemEditor
           draft={shownDraft}
           open={editor.open}
+          readOnly={draftReadOnly}
           onChange={setDraft}
           onSave={saveDraft}
           onCancel={closeEditor}
           calendars={shownCalendars}
+          readOnlyCalendarIds={sources.readOnlyCalendarIds}
           defaultCalendarId={defaultEventCalendarId(localCalendars)}
           onDelete={
-            shownDraft.google
+            draftReadOnly
+              ? undefined
+              : shownDraft.google
               ? shownDraft.google.deletable
                 ? () =>
                     setGoogleDelete({

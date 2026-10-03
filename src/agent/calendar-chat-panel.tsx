@@ -5,6 +5,8 @@ import type { AgentEffort } from "@/agent/agent-effort";
 import { useAgentEffort } from "@/agent/use-agent-effort";
 import { AgentActivity } from "@/agent/agent-activity";
 import { ChatBubbleTools } from "@/agent/bubble-tools";
+import { CalendarBadge } from "@/agent/calendar-badge";
+import type { MentionCalendar } from "@/agent/calendar-mention";
 import { ChatComposer } from "@/agent/chat-composer";
 import { ChatTabStrip } from "@/agent/chat-tab-strip";
 import { MessageContent } from "@/agent/message-content";
@@ -13,6 +15,7 @@ import { CHAT_WIDTH_MAX, CHAT_WIDTH_MIN, useChatResize } from "@/agent/use-chat-
 import { useSheetDismiss } from "@/agent/use-sheet-dismiss";
 import { AiApprovalPanel } from "@/calendar/ai-approval-panel";
 import type { PendingAiChange } from "@/calendar/approval-client";
+import type { CalendarItemDoc } from "@/calendar/types";
 import { usePresence } from "@/shared/use-presence";
 
 //matches the panel's width/sheet transition in globals.css
@@ -21,6 +24,7 @@ const PANEL_EXIT_MS = 320;
 type SendPayload = {
   text: string;
   effort: AgentEffort;
+  calendarIds?: string[];
   branch?: { kind: "edit"; messageId: string } | { kind: "regenerate"; messageId: string };
 };
 
@@ -44,6 +48,8 @@ type Props = {
   onReorderChats: (orderedIds: string[]) => void;
   onResizingChange: (resizing: boolean) => void;
   onClose: () => void;
+  calendars: MentionCalendar[];
+  items: CalendarItemDoc[];
   pendingChanges: PendingAiChange[];
   approvalBusy: boolean;
   onApprove: (id: string) => void;
@@ -51,6 +57,7 @@ type Props = {
   onApproveAll: () => void;
   onRejectAll: () => void;
   onInspectPending: (change: PendingAiChange) => void;
+  onEditCalendarItem?: (item: CalendarItemDoc) => void;
 };
 
 export function CalendarChatPanel({
@@ -73,6 +80,8 @@ export function CalendarChatPanel({
   onReorderChats,
   onResizingChange,
   onClose,
+  calendars,
+  items,
   pendingChanges,
   approvalBusy,
   onApprove,
@@ -80,6 +89,7 @@ export function CalendarChatPanel({
   onApproveAll,
   onRejectAll,
   onInspectPending,
+  onEditCalendarItem,
 }: Props) {
   const panelRef = useRef<HTMLElement>(null);
   const chatResize = useChatResize(panelRef);
@@ -90,6 +100,8 @@ export function CalendarChatPanel({
   const pinnedRef = useRef(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState("");
+  const [editCalendars, setEditCalendars] = useState<string[]>([]);
+  const [openBadge, setOpenBadge] = useState<string | null>(null);
   const { effort, setEffort } = useAgentEffort();
 
   useEffect(() => {
@@ -112,11 +124,22 @@ export function CalendarChatPanel({
     onSend({ ...payload, effort });
   }
 
+  function calendarOf(id: string): MentionCalendar {
+    return (
+      calendars.find((calendar) => calendar.id === id) ?? {
+        id,
+        name: id === "tasks" ? "Tasks" : id === "events" ? "Agent Main" : "Calendar",
+        kind: id === "tasks" ? "task" : "event",
+        color: "#5b8a72",
+      }
+    );
+  }
+
   function submitEdit(messageId: string) {
     const next = editDraft.trim();
-    if (!next || busy) return;
+    if (busy || (!next && editCalendars.length === 0)) return;
     setEditingId(null);
-    send({ text: next, branch: { kind: "edit", messageId } });
+    send({ text: next, calendarIds: editCalendars, branch: { kind: "edit", messageId } });
   }
 
   return (
@@ -199,6 +222,28 @@ export function CalendarChatPanel({
                       <span className="bubble-role">{m.role === "user" ? "You" : "WatAgent"}</span>
                       <div className="bubble-body">
                         <AgentActivity parts={m.activity} streaming={streaming && !m.content.trim()} />
+                        {m.role === "user" && (editing ? editCalendars : m.calendarIds)?.length ? (
+                          <div className="bubble-badges">
+                            {(editing ? editCalendars : (m.calendarIds ?? [])).map((id) => (
+                              <CalendarBadge
+                                key={id}
+                                calendar={calendarOf(id)}
+                                items={items}
+                                open={openBadge === `${m.id}:${id}`}
+                                onOpenChange={(next) => setOpenBadge(next ? `${m.id}:${id}` : null)}
+                                onRemove={
+                                  editing
+                                    ? () => {
+                                        setEditCalendars((list) => list.filter((row) => row !== id));
+                                        setOpenBadge(null);
+                                      }
+                                    : undefined
+                                }
+                                onEditItem={editing ? undefined : onEditCalendarItem}
+                              />
+                            ))}
+                          </div>
+                        ) : null}
                         {editing ? (
                           <>
                             <textarea
@@ -223,7 +268,7 @@ export function CalendarChatPanel({
                               <button
                                 type="button"
                                 className="primary-btn"
-                                disabled={busy || !editDraft.trim()}
+                                disabled={busy || (!editDraft.trim() && editCalendars.length === 0)}
                                 onClick={() => submitEdit(m.id)}
                               >
                                 Update
@@ -245,6 +290,7 @@ export function CalendarChatPanel({
                         onStartEdit={() => {
                           setEditingId(m.id);
                           setEditDraft(m.content);
+                          setEditCalendars(m.calendarIds ?? []);
                         }}
                       />
                     </div>
@@ -267,10 +313,15 @@ export function CalendarChatPanel({
           busy={busy}
           error={error}
           effort={effort}
+          calendars={calendars}
+          items={items}
+          openBadge={openBadge}
+          onOpenBadge={setOpenBadge}
           onEffort={setEffort}
           onSend={send}
           onStop={onStop}
           onError={onError}
+          onEditCalendarItem={onEditCalendarItem}
         />
       </div>
     </aside>

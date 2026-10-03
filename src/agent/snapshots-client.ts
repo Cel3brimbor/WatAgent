@@ -1,5 +1,6 @@
-import { apiJson } from "@/shared/api-base";
+import { attachedIdsOf } from "@/agent/calendar-mention";
 import type { ActivityPart, ChatMessage, ChatSession, ThoughtSegment, ToolEventRecord } from "@/agent/types";
+import { apiJson } from "@/shared/api-base";
 
 const SAFE_ID = /^[A-Za-z0-9._:-]{1,128}$/;
 const TOOL_NAME = /^[A-Za-z0-9_]{1,64}$/;
@@ -83,11 +84,16 @@ function messageOf(raw: unknown): ChatMessage | null {
   if (rec.role !== "user" && rec.role !== "assistant") return null;
   if (typeof rec.content !== "string") return null;
   const createdAt = Number(rec.createdAt) || undefined;
+  const calendarIds =
+    rec.role === "user" && Array.isArray(rec.calendarIds)
+      ? attachedIdsOf(rec.calendarIds.filter((id): id is string => typeof id === "string"))
+      : undefined;
   return {
     id: rec.id,
     role: rec.role,
     content: rec.content.slice(0, 20_000),
     createdAt,
+    calendarIds,
     activity:
       rec.role === "assistant"
         ? activityOf(rec.activity, rec.id) ?? legacyActivity(rec.id, rec.reasoning, rec.toolEvents, createdAt)
@@ -123,6 +129,7 @@ export async function saveChatSession(chat: ChatSession): Promise<void> {
     .filter(
       (message) =>
         message.content.trim().length > 0 ||
+        (message.calendarIds?.length ?? 0) > 0 ||
         (message.activity?.length ?? 0) > 0,
     )
     .slice(-200)
@@ -161,6 +168,7 @@ export async function saveChatSession(chat: ChatSession): Promise<void> {
         role: message.role,
         content: message.content.slice(0, 20_000),
         createdAt: message.createdAt,
+        calendarIds: message.role === "user" ? attachedIdsOf(message.calendarIds) : undefined,
         activity: message.role === "assistant" && activity?.length ? activity : undefined,
         toolEvents: message.role === "assistant" && toolEvents?.length ? toolEvents : undefined,
       };

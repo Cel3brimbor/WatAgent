@@ -13,6 +13,8 @@ export type CalendarChange = {
 export type AgentStreamEvent =
   | { type: "content"; content: string }
   | { type: "reasoning"; content: string }
+  | { type: "reasoning-reset" }
+  | { type: "content-reset" }
   | { type: "status"; label: string }
   | {
       type: "tool";
@@ -49,6 +51,8 @@ function eventOf(raw: unknown): AgentStreamEvent | null {
   if (rec.type === "reasoning" && typeof rec.content === "string" && rec.content) {
     return { type: "reasoning", content: rec.content.slice(0, 8_000) };
   }
+  if (rec.type === "reasoning-reset") return { type: "reasoning-reset" };
+  if (rec.type === "content-reset") return { type: "content-reset" };
   if (rec.type === "status" && typeof rec.label === "string") {
     return { type: "status", label: rec.label.slice(0, 120) };
   }

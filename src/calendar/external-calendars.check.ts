@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import { calendarItemVisible, externalCalendarsOf } from "./external-calendars";
+import { ALL_SOURCES } from "./preferences";
 import type { CalendarItemDoc } from "./types";
 const learn: CalendarItemDoc = { id: "a", title: "Assignment", createdAt: 0, updatedAt: 0, calendar: { kind: "event", startUTC: 0, endUTC: 1, allDay: false, importSource: "learn" } };
 const portal: CalendarItemDoc = { ...learn, id: "b", calendar: { ...learn.calendar, importSource: "portal" } };
 const manual: CalendarItemDoc = { ...learn, id: "c", calendar: { ...learn.calendar, importSource: undefined } };
-const filter = { events: false, tasks: false, google: false, mutedGoogleIds: [], hiddenIds: [] };
+const filter = { ...ALL_SOURCES, events: false, tasks: false, google: false };
 assert.equal(calendarItemVisible(learn, filter), true, "imports are independent of WatAgent/Google visibility");
 assert.equal(calendarItemVisible(manual, filter), false);
 assert.equal(calendarItemVisible(learn, { ...filter, mutedGoogleIds: ["ics:learn"] }), false);

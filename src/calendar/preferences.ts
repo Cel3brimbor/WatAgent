@@ -47,6 +47,8 @@ export type CalendarSourceFilter = {
   mutedGoogleIds: string[];
   /** Calendars moved to the Hidden calendars section. */
   hiddenIds: string[];
+  /** Non-Google calendars the user marked read-only (no structural edits; tasks can still be checked off). */
+  readOnlyCalendarIds: string[];
   /** False hides a whole sidebar group without rewriting each calendar's own check. */
   groups?: CalendarGroups;
 };
@@ -68,7 +70,19 @@ export const ALL_SOURCES: CalendarSourceFilter = {
   google: true,
   mutedGoogleIds: [],
   hiddenIds: [],
+  readOnlyCalendarIds: [],
 };
+
+export function isCalendarReadOnly(filter: CalendarSourceFilter, id: string): boolean {
+  return filter.readOnlyCalendarIds.includes(id);
+}
+
+export function setCalendarReadOnly(filter: CalendarSourceFilter, id: string, readOnly: boolean): CalendarSourceFilter {
+  const ids = new Set(filter.readOnlyCalendarIds);
+  if (readOnly) ids.add(id);
+  else ids.delete(id);
+  return { ...filter, readOnlyCalendarIds: [...ids] };
+}
 
 export function isSidebarHidden(filter: CalendarSourceFilter, id: string): boolean {
   return filter.hiddenIds.includes(id);
@@ -92,6 +106,7 @@ export function readSourceFilter(): CalendarSourceFilter {
       hiddenGoogleIds?: unknown;
       mutedGoogleIds?: unknown;
       hiddenIds?: unknown;
+      readOnlyCalendarIds?: unknown;
       groups?: unknown;
     };
     const legacyApp = parsed.app !== false;
@@ -102,6 +117,7 @@ export function readSourceFilter(): CalendarSourceFilter {
       google: parsed.google !== false,
       mutedGoogleIds: idList(parsed.mutedGoogleIds).length > 0 ? idList(parsed.mutedGoogleIds) : legacyMuted,
       hiddenIds: idList(parsed.hiddenIds),
+      readOnlyCalendarIds: idList(parsed.readOnlyCalendarIds),
       ...(parsed.groups && typeof parsed.groups === "object" ? { groups: calendarGroupsOf(parsed.groups) } : {}),
     };
   } catch {

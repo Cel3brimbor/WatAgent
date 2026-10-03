@@ -12,6 +12,8 @@ import { isExcludedGoogleCalendarName } from "@/calendar/calendar-lists";
 import {
   CALENDAR_PALETTE,
   calendarGroupsOf,
+  isCalendarReadOnly,
+  setCalendarReadOnly,
   isSidebarHidden,
   type CalendarColors,
   type CalendarGroups,
@@ -21,7 +23,7 @@ import {
 import type { SmartTag, SmartTagTarget } from "@/calendar/smart-tags";
 import { SmartTagsPanel } from "@/calendar/smart-tags-panel";
 import { CheckIcon, ChevronIcon, DotsIcon, GoogleCalendarIcon, PlusIcon } from "@/calendar/sidebar-icons";
-import type { LocalCalendar } from "@/calendar/local-calendars";
+import { isPrimaryEventCalendarId, type LocalCalendar } from "@/calendar/local-calendars";
 import { ChevronLeftIcon, ChevronRightIcon } from "@/shared/icons";
 import { Disclosure } from "@/shared/disclosure";
 import { usePresence } from "@/shared/use-presence";
@@ -285,6 +287,12 @@ export function CalendarSidePanel({
     setMenu(null);
   }
 
+  function toggleReadOnly(id: string) {
+    const next = !isCalendarReadOnly(sources, id);
+    onSources(setCalendarReadOnly(sources, id, next));
+    setMenu(null);
+  }
+
   function paint(id: string, color: string) {
     const next = color.toLowerCase();
     if (id === "events") onColors({ ...colors, event: next });
@@ -454,13 +462,15 @@ export function CalendarSidePanel({
           onSync={menuCanSync && !syncBusy ? () => void syncCalendarRow(shownMenu.id) : undefined}
           onDisplayOnly={() => displayOnly(shownMenu.id)}
           onHide={() => hideCalendar(shownMenu.id)}
+          onToggleReadOnly={!menuIsGoogle ? () => toggleReadOnly(shownMenu.id) : undefined}
+          readOnly={!menuIsGoogle && isCalendarReadOnly(sources, shownMenu.id)}
           onColor={(color) => paint(shownMenu.id, color)}
-          onRename={menuLocal ? () => {
+          onRename={menuLocal && !isPrimaryEventCalendarId(menuLocal.id) ? () => {
             setRenamingLocal(menuLocal); setMenu(null);
           } : menuExternal?.source !== "other" && menuExternal ? () => {
             setRenaming(menuExternal); setMenu(null);
           } : undefined}
-          onRemove={menuLocal ? (deleteBusy ? undefined : () => {
+          onRemove={menuLocal && !isPrimaryEventCalendarId(menuLocal.id) ? (deleteBusy ? undefined : () => {
             setDeleting(menuLocal); setMenu(null);
           }) : !removeBusy && menuExternal?.source !== "other" && menuExternal ? () => {
             setRemoving(menuExternal); setMenu(null);
@@ -628,6 +638,8 @@ function CalendarOptionsMenu({
   onSync,
   onDisplayOnly,
   onHide,
+  onToggleReadOnly,
+  readOnly = false,
   onColor,
   onRename,
   onRemove,
@@ -639,6 +651,8 @@ function CalendarOptionsMenu({
   onSync?: () => void;
   onDisplayOnly: () => void;
   onHide: () => void;
+  onToggleReadOnly?: () => void;
+  readOnly?: boolean;
   onColor: (color: string) => void;
   onRename?: () => void;
   onRemove?: () => void;
@@ -677,6 +691,11 @@ function CalendarOptionsMenu({
       <button type="button" role="menuitem" onClick={onHide}>
         Hide calendar
       </button>
+      {onToggleReadOnly ? (
+        <button type="button" role="menuitem" onClick={onToggleReadOnly}>
+          {readOnly ? "Allow edits" : "Make read-only"}
+        </button>
+      ) : null}
       {onRename ? <button type="button" role="menuitem" onClick={onRename}>Rename calendar</button> : null}
       {onRemove ? <button type="button" role="menuitem" className="side-cal-menu-danger" onClick={onRemove}>{removeLabel}</button> : null}
       <div className="side-cal-swatches" role="group" aria-label="Color">

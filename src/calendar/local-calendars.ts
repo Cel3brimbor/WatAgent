@@ -3,8 +3,24 @@ import type { CalendarItemMeta } from "@/calendar/types";
 //calendars under "WatAgent calendars". events/tasks are the built-ins; user-made ones are cal-<uuid> and hold events
 export type LocalCalendar = { id: string; name: string; kind: "event" | "task" };
 
+export const PRIMARY_EVENT_CALENDAR_ID = "events";
+export const PRIMARY_EVENT_CALENDAR_NAME = "Agent Main";
+
+export function primaryEventCalendar(): LocalCalendar {
+  return { id: PRIMARY_EVENT_CALENDAR_ID, name: PRIMARY_EVENT_CALENDAR_NAME, kind: "event" };
+}
+
+export function isPrimaryEventCalendarId(id: string): boolean {
+  return id === PRIMARY_EVENT_CALENDAR_ID;
+}
+
+function withPrimaryEventCalendar(list: LocalCalendar[]): LocalCalendar[] {
+  const rest = list.filter((calendar) => calendar.id !== PRIMARY_EVENT_CALENDAR_ID);
+  return [primaryEventCalendar(), ...rest];
+}
+
 export const BUILTIN_CALENDARS: LocalCalendar[] = [
-  { id: "events", name: "WatAgent", kind: "event" },
+  primaryEventCalendar(),
   { id: "tasks", name: "Tasks", kind: "task" },
 ];
 
@@ -35,23 +51,26 @@ export function localCalendarsOf(raw: unknown): LocalCalendar[] {
     seen.add(id);
     list.push({ id, name, kind: id === "tasks" ? "task" : "event" });
   }
-  return list.slice(0, 50);
+  return withPrimaryEventCalendar(list).slice(0, 50);
 }
 
-/** A deleted built-in comes back as soon as something lands in it again, so new items always have a home. */
+/** A deleted Tasks built-in comes back as soon as something lands in it again. Agent Main is always listed. */
 export function shownLocalCalendars(list: LocalCalendar[], items: { calendar: CalendarItemMeta }[]): LocalCalendar[] {
+  const base = withPrimaryEventCalendar(list);
   const used = new Set(items.map((item) => localCalendarIdOf(item.calendar)));
-  const restored = BUILTIN_CALENDARS.filter((builtin) => used.has(builtin.id) && !list.some((calendar) => calendar.id === builtin.id));
-  return restored.length ? [...restored, ...list] : list;
+  const restored = BUILTIN_CALENDARS.filter(
+    (builtin) => builtin.id !== PRIMARY_EVENT_CALENDAR_ID && used.has(builtin.id) && !base.some((calendar) => calendar.id === builtin.id),
+  );
+  return restored.length ? [...restored, ...base] : base;
 }
 
 export function newLocalCalendar(name: string): LocalCalendar {
   return { id: `cal-${crypto.randomUUID()}`, name: name.trim().slice(0, 60), kind: "event" };
 }
 
-/** Where new events go: the first event calendar still listed, else the built-in WatAgent calendar. */
-export function defaultEventCalendarId(list: LocalCalendar[]): string {
-  return list.find((calendar) => calendar.kind === "event")?.id ?? "events";
+/** Where new events go when no calendar is chosen (always Agent Main). */
+export function defaultEventCalendarId(_list: LocalCalendar[]): string {
+  return PRIMARY_EVENT_CALENDAR_ID;
 }
 
 /** Item meta field for a chosen calendar; the built-in is stored as no calendarId. */
@@ -72,7 +91,7 @@ export function readLocalCalendars(): LocalCalendar[] {
 export function writeLocalCalendars(list: LocalCalendar[]): void {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(withPrimaryEventCalendar(list)));
   } catch {
     return;
   }

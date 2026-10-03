@@ -4877,6 +4877,7 @@ select {
 }
 
 .composer {
+  position: relative;
   display: grid;
   gap: 0.35rem;
   padding: 0.6rem 0.75rem calc(0.6rem + var(--safe-bottom));
@@ -5044,6 +5045,346 @@ select {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.composer-badges,
+.bubble-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.composer-badges {
+  padding: 0.15rem 0.15rem 0.05rem 0;
+}
+
+.cal-badge-wrap {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--cal, var(--accent)) 14%, transparent);
+}
+
+.cal-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.32rem;
+  min-width: 0;
+  max-width: 14rem;
+  height: 1.45rem;
+  padding: 0 0.45rem 0 0.4rem;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.cal-badge-read-only {
+  color: var(--ink-soft);
+  font-weight: 400;
+}
+
+.cal-badge-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cal-badge-dot {
+  width: 0.45rem;
+  height: 0.45rem;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--cal, var(--accent));
+}
+
+.cal-badge:active,
+.cal-badge-remove:active,
+.mention-option:active,
+.cal-pop-icon:active,
+.cal-pop-view:active,
+.cal-pop-today:active {
+  transform: scale(0.97);
+}
+
+.cal-badge.is-open,
+.cal-badge:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--cal, var(--accent)) 55%, transparent);
+  outline-offset: 1px;
+}
+
+.cal-badge-remove {
+  display: grid;
+  place-items: center;
+  width: 1.15rem;
+  height: 1.15rem;
+  margin-right: 0.15rem;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-soft);
+}
+
+.cal-badge-remove .glyph {
+  width: 0.7rem;
+  height: 0.7rem;
+}
+
+.cal-badge-remove:focus-visible,
+.mention-option:focus-visible,
+.cal-pop-icon:focus-visible,
+.cal-pop-view:focus-visible,
+.cal-pop-today:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.mention-menu {
+  position: absolute;
+  right: 0.75rem;
+  bottom: calc(100% - 0.25rem);
+  left: 0.75rem;
+  z-index: 6;
+  max-height: 14rem;
+  overflow: auto;
+  padding: 0.3rem;
+  border-radius: 14px;
+  background: var(--material-popover);
+  -webkit-backdrop-filter: var(--material-filter);
+  backdrop-filter: var(--material-filter);
+  box-shadow: var(--shadow-popover);
+}
+
+.mention-empty {
+  margin: 0;
+  padding: 0.45rem 0.55rem;
+  color: var(--ink-soft);
+  font-size: 0.8rem;
+}
+
+.mention-option {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  width: 100%;
+  min-height: 1.85rem;
+  padding: 0.25rem 0.5rem;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 0.84rem;
+  text-align: left;
+}
+
+.mention-option.is-read-only {
+  opacity: 0.72;
+}
+
+.mention-option.is-read-only .mention-read-only {
+  color: var(--ink-soft);
+  font-size: 0.78em;
+}
+
+.mention-option.is-active,
+.mention-option[aria-selected="true"] {
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+}
+
+.mention-option mark {
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font-weight: 700;
+}
+
+.cal-pop {
+  position: fixed;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 0.55rem 0.55rem 0.4rem;
+  border-radius: 16px;
+  background: var(--material-popover);
+  -webkit-backdrop-filter: var(--material-filter);
+  backdrop-filter: var(--material-filter);
+  box-shadow: var(--shadow-popover);
+  outline: none;
+}
+
+.cal-pop-head {
+  display: grid;
+  gap: 0.4rem;
+  padding: 0.1rem 0.15rem 0.45rem;
+}
+
+.cal-pop-title {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0;
+  font-size: 0.86rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.cal-pop-nav {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.2rem;
+}
+
+.cal-pop-label {
+  margin: 0;
+  overflow: hidden;
+  color: var(--ink-soft);
+  font-size: 0.75rem;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cal-pop-icon,
+.cal-pop-today,
+.cal-pop-view {
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+}
+
+.cal-pop-icon {
+  display: grid;
+  place-items: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 999px;
+}
+
+.cal-pop-icon .glyph {
+  width: 0.9rem;
+  height: 0.9rem;
+}
+
+.cal-pop-views {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+}
+
+.cal-pop-view,
+.cal-pop-today {
+  height: 1.45rem;
+  padding: 0 0.5rem;
+  border-radius: 999px;
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.cal-pop-view.is-on {
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  color: var(--ink);
+}
+
+.cal-pop-today {
+  margin-left: auto;
+}
+
+.cal-pop-list {
+  min-height: 0;
+  overflow: auto;
+  padding: 0.1rem 0.1rem 0.2rem;
+}
+
+.cal-pop-empty {
+  margin: 0;
+  padding: 0.8rem 0.35rem 0.6rem;
+  color: var(--ink-soft);
+  font-size: 0.8rem;
+}
+
+.cal-pop-day h3 {
+  margin: 0.35rem 0 0.15rem;
+  color: var(--ink-soft);
+  font-size: 0.68rem;
+  font-weight: 650;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.cal-pop-day ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cal-pop-event {
+  display: grid;
+  grid-template-columns: 7.2rem minmax(0, 1fr) auto;
+  gap: 0.35rem;
+  align-items: center;
+  padding: 0.28rem 0.35rem;
+  border-radius: 8px;
+}
+
+.cal-pop-edit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.65rem;
+  height: 1.65rem;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
+.cal-pop-edit .glyph {
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
+.cal-pop-event.is-active {
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+}
+
+.cal-pop-event.is-done .cal-pop-name {
+  opacity: 0.55;
+  text-decoration: line-through;
+}
+
+.cal-pop-when {
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.cal-pop-name {
+  overflow: hidden;
+  font-size: 0.8rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (hover: hover) {
+  .cal-badge-remove:hover,
+  .mention-option:hover,
+  .cal-pop-icon:hover,
+  .cal-pop-view:hover,
+  .cal-pop-today:hover,
+  .cal-pop-edit:hover {
+    background: color-mix(in srgb, var(--ink) 8%, transparent);
+  }
 }
 
 /*segmented control: one thumb slides between options so the change reads as motion, not a repaint*/

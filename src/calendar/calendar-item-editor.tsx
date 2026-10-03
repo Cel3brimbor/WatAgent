@@ -7,7 +7,7 @@ import { SegmentedControl, type SegmentOption } from "@/shared/segmented-control
 import { Switch } from "@/shared/switch";
 import { useDialog } from "@/shared/use-dialog";
 import { LocationField } from "@/calendar/location-field";
-import type { LocalCalendar } from "@/calendar/local-calendars";
+import { PRIMARY_EVENT_CALENDAR_NAME, type LocalCalendar } from "@/calendar/local-calendars";
 
 export type GoogleDraftTarget = {
   calendarId: string;
@@ -44,6 +44,8 @@ type Props = {
   /** Event calendars the picker offers. */
   calendars?: LocalCalendar[];
   defaultCalendarId?: string;
+  readOnly?: boolean;
+  readOnlyCalendarIds?: string[];
 };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -67,7 +69,18 @@ const KIND_OPTIONS: SegmentOption<CalendarItemKind>[] = [
   { value: "task", label: "Task" },
 ];
 
-export function CalendarItemEditor({ draft, open = true, onChange, onSave, onCancel, onDelete, calendars = [], defaultCalendarId = "events" }: Props) {
+export function CalendarItemEditor({
+  draft,
+  open = true,
+  readOnly = false,
+  onChange,
+  onSave,
+  onCancel,
+  onDelete,
+  calendars = [],
+  defaultCalendarId = "events",
+  readOnlyCalendarIds = [],
+}: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const allDayId = useId();
   const eventCalendars = calendars.filter((calendar) => calendar.kind === "event");
@@ -86,6 +99,7 @@ export function CalendarItemEditor({ draft, open = true, onChange, onSave, onCan
         aria-modal="true"
         aria-label={draft.id || draft.google ? "Edit item" : "New item"}
         onKeyDown={(event) => {
+          if (readOnly) return;
           if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
             event.preventDefault();
             onSave();
@@ -96,13 +110,16 @@ export function CalendarItemEditor({ draft, open = true, onChange, onSave, onCan
           <p className="calendar-editor-source">
             Changes save to {draft.google.calendarName || "your Google calendar"} in Google Calendar.
           </p>
+        ) : readOnly ? (
+          <p className="calendar-editor-source">This calendar is read-only.</p>
         ) : null}
-        <div className="calendar-editor-body">
+        <fieldset className="calendar-editor-body" disabled={readOnly}>
           <input
             className="calendar-editor-title"
             value={draft.title}
             maxLength={200}
             aria-label="Title"
+            readOnly={readOnly}
             onChange={(event) => onChange({ ...draft, title: event.target.value })}
             onKeyDown={(event) => {
               if (event.key === "Enter" && !event.metaKey && !event.ctrlKey && !event.nativeEvent.isComposing) {
@@ -196,13 +213,22 @@ export function CalendarItemEditor({ draft, open = true, onChange, onSave, onCan
                       onChange={(event) => onChange({ ...draft, calendarId: event.target.value })}
                     >
                       {eventCalendars.some((calendar) => calendar.id === chosenCalendar) ? null : (
-                        <option value={chosenCalendar}>WatAgent</option>
-                      )}
-                      {eventCalendars.map((calendar) => (
-                        <option key={calendar.id} value={calendar.id}>
-                          {calendar.name}
+                        <option
+                          value={chosenCalendar}
+                          disabled={readOnlyCalendarIds.includes(chosenCalendar)}
+                        >
+                          {PRIMARY_EVENT_CALENDAR_NAME}
+                          {readOnlyCalendarIds.includes(chosenCalendar) ? " (read only)" : ""}
                         </option>
-                      ))}
+                      )}
+                      {eventCalendars.map((calendar) => {
+                        const locked = readOnlyCalendarIds.includes(calendar.id);
+                        return (
+                          <option key={calendar.id} value={calendar.id} disabled={locked}>
+                            {locked ? `${calendar.name} (read only)` : calendar.name}
+                          </option>
+                        );
+                      })}
                     </select>
                   </label>
                 ) : null}
@@ -225,7 +251,7 @@ export function CalendarItemEditor({ draft, open = true, onChange, onSave, onCan
               </div>
             </section>
           ) : null}
-        </div>
+        </fieldset>
         <footer className="calendar-editor-actions">
           {onDelete ? (
             <button type="button" className="ghost-btn calendar-editor-danger" onClick={onDelete}>
@@ -238,9 +264,11 @@ export function CalendarItemEditor({ draft, open = true, onChange, onSave, onCan
             <button type="button" className="ghost-btn" onClick={onCancel}>
               Cancel
             </button>
-            <button type="button" className="primary-btn" onClick={onSave}>
-              Save
-            </button>
+            {readOnly ? null : (
+              <button type="button" className="primary-btn" onClick={onSave}>
+                Save
+              </button>
+            )}
           </div>
         </footer>
       </div>

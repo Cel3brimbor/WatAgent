@@ -25,6 +25,8 @@ export type ChatMessage = {
   role: "user" | "assistant";
   content: string;
   createdAt?: number;
+  /**watagent calendars attached with @ on this user message*/
+  calendarIds?: string[];
   activity?: ActivityPart[];
   toolEvents?: ToolEventRecord[];
 };

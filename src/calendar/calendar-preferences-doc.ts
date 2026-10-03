@@ -58,6 +58,7 @@ function sourcesOf(raw: unknown): CalendarSourceFilter | null {
     google: rec.google !== false,
     mutedGoogleIds: idList(rec.mutedGoogleIds),
     hiddenIds: idList(rec.hiddenIds),
+    readOnlyCalendarIds: idList(rec.readOnlyCalendarIds),
     ...(rec.groups && typeof rec.groups === "object" ? { groups: calendarGroupsOf(rec.groups) } : {}),
   };
 }
