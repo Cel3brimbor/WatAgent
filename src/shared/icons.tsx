@@ -218,15 +218,6 @@ export function ShieldCheckIcon(props: IconProps) {
   );
 }
 
-//two lines joining into one
-export function MergeIcon(props: IconProps) {
-  return (
-    <Glyph {...props} strokeWidth={1.6}>
-      <path d="M4 2.75v1a4 4 0 0 0 4 4 4 4 0 0 0 4-4v-1M8 7.75v5.5M6 11.25l2 2 2-2" />
-    </Glyph>
-  );
-}
-
 export function RouteIcon(props: IconProps) {
   return (
     <Glyph {...props} strokeWidth={1.6}>
