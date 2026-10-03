@@ -26,6 +26,7 @@ import {
   readCalendarView,
   readImportedCalendars,
   readMergedCalendars,
+  readAgentHiddenIds,
   readColorOverrides,
   CALENDAR_PALETTE,
   readSidePanelSections,
@@ -309,6 +310,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
   const [view, setView] = useState<CalendarView>(() => readCalendarView());
   const [importedCalendars, setImportedCalendars] = useState<ImportedCalendar[]>(() => readImportedCalendars());
   const [mergedCalendars, setMergedCalendars] = useState<MergedCalendar[]>(() => readMergedCalendars(readImportedCalendars()));
+  const [agentHiddenCalendarIds, setAgentHiddenCalendarIds] = useState<string[]>(() => readAgentHiddenIds());
   const [googleConnected, setGoogleConnected] = useState<boolean | null>(null);
   const [section, setSection] = useState<AppSection>("calendar");
   const [navCollapsed, setNavCollapsed] = useState(() => {
@@ -417,7 +419,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
   const shownCalendars = useMemo(() => shownLocalCalendars(localCalendars, calendar.items), [localCalendars, calendar.items]);
   const mentionCalendars = useMemo(
     () =>
-      shownCalendars.map((calendar) => ({
+      shownCalendars.filter((calendar) => !agentHiddenCalendarIds.includes(calendar.id)).map((calendar) => ({
         id: calendar.id,
         name: calendar.name,
         kind: calendar.kind,
@@ -429,7 +431,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
               : colorOverrides[calendar.id] || colors.event,
         readOnly: isCalendarReadOnly(sources, calendar.id),
       })),
-    [shownCalendars, colors, colorOverrides, sources],
+    [shownCalendars, colors, colorOverrides, sources, agentHiddenCalendarIds],
   );
   const localCalendarCounts = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -458,11 +460,12 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
 
   useCalendarPreferencesSync(
     calendar.hydrated,
-    { view, importedCalendars, mergedCalendars, localCalendars, sources, colors, colorOverrides, smartTags, navCollapsed, sidePanelSections },
+    { view, importedCalendars, mergedCalendars, agentHiddenCalendarIds, localCalendars, sources, colors, colorOverrides, smartTags, navCollapsed, sidePanelSections },
     {
       setView,
       setImportedCalendars,
       setMergedCalendars,
+      setAgentHiddenCalendarIds,
       setLocalCalendars,
       setSources,
       setColors,
@@ -613,6 +616,12 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
   const timelineDigest = useMemo(
     () =>
       timelineFor(focus, ALL_SOURCES)
+        //calendars whose Map link to the Agent was deleted stay out of what the Agent is sent
+        .filter((item) => {
+          if (item.kind === "gcal_event" || item.kind === "gcal_busy") return !agentHiddenCalendarIds.includes("google");
+          const id = timelineItemCalendarId(item);
+          return !id || !agentHiddenCalendarIds.includes(id);
+        })
         .slice(0, 80)
         .map((item) => {
           const when = item.allDay ? "all-day" : `${formatTime(item.startUTC)}–${formatTime(item.endUTC)}`;
@@ -641,7 +650,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
         })
         .join("\n")
         .slice(0, 12_000),
-    [timelineFor, focus, shownCalendars],
+    [timelineFor, focus, shownCalendars, agentHiddenCalendarIds],
   );
 
   const googlePullRef = useRef<() => Promise<number | null>>(async () => null);
@@ -1403,6 +1412,8 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
                 overlayEvents={overlayEvents}
                 mergedCalendars={mergedCalendars}
                 onMergedCalendars={setMergedCalendars}
+                agentHiddenIds={agentHiddenCalendarIds}
+                onAgentHiddenIds={setAgentHiddenCalendarIds}
                 sources={sources}
                 onSources={setSources}
                 importedCalendars={importedCalendars}

@@ -327,3 +327,22 @@ export function writeMergedCalendars(calendars: MergedCalendar[]): void {
   try { window.localStorage.setItem(MERGED_CALENDARS_KEY, JSON.stringify(calendars)); }
   catch { return; }
 }
+
+const AGENT_HIDDEN_KEY = "watagent.calendar.agent-hidden.v1";
+
+/** Calendars whose link to the Agent was deleted on the Map. */
+export function agentHiddenIdsOf(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return [...new Set(raw.filter((id): id is string => typeof id === "string" && id.length > 0 && id.length <= 1024))].slice(0, 200);
+}
+
+export function readAgentHiddenIds(): string[] {
+  if (typeof window === "undefined") return [];
+  try { return agentHiddenIdsOf(readJson(AGENT_HIDDEN_KEY)); }
+  catch { return []; }
+}
+
+export function writeAgentHiddenIds(ids: string[]): void {
+  try { window.localStorage.setItem(AGENT_HIDDEN_KEY, JSON.stringify(ids)); }
+  catch { return; }
+}
