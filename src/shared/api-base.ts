@@ -15,7 +15,10 @@ function send(path: string, init: RequestInit, token: string | null): Promise<Re
   headers.set("X-WF-CSRF", "1");
   if (token) headers.set("Authorization", `Bearer ${token}`);
   else headers.delete("Authorization");
-  return fetch(`${API_BASE_URL}${path}`, { ...init, headers, credentials: "include" });
+  return fetch(`${API_BASE_URL}${path}`, { ...init, headers, credentials: "include" }).catch((err: unknown) => {
+    if (err instanceof DOMException && err.name === "AbortError") throw err;
+    throw new ApiError("Can't reach the WatAgent server. Check that it's running, then try again.", 0);
+  });
 }
 
 export async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
