@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 
-export type AppSection = "calendar" | "tasks" | "settings";
+export type AppSection = "calendar" | "tasks" | "map" | "settings";
 
 type Props = {
   section: AppSection;
@@ -15,6 +15,7 @@ type Props = {
 const BARS: Array<{ id: AppSection; label: string }> = [
   { id: "calendar", label: "Calendar" },
   { id: "tasks", label: "To-do list" },
+  { id: "map", label: "Map" },
 ];
 
 export function SideNav({ section, collapsed, onSection, onToggle, children }: Props) {
@@ -78,6 +79,16 @@ function BarIcon({ id }: { id: AppSection }) {
       <svg viewBox="0 0 16 16" aria-hidden="true">
         <rect x="2.25" y="3.25" width="11.5" height="10.5" rx="1.5" />
         <path d="M2.25 6.25h11.5M5.25 2.25v2.25M10.75 2.25v2.25" />
+      </svg>
+    );
+  }
+  if (id === "map") {
+    return (
+      <svg viewBox="0 0 16 16" aria-hidden="true">
+        <circle cx="3.75" cy="4" r="1.75" />
+        <circle cx="12.25" cy="4" r="1.75" />
+        <circle cx="8" cy="12" r="1.75" />
+        <path d="M5.5 4h5M4.6 5.6l2.5 4.8M11.4 5.6l-2.5 4.8" />
       </svg>
     );
   }

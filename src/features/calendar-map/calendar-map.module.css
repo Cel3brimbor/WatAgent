@@ -1,0 +1,738 @@
+/*the map reads the host's tokens; the fallbacks keep it legible anywhere else it's dropped in*/
+.map {
+  --map-ink: var(--ink, #1d1b18);
+  --map-ink-soft: var(--ink-soft, #6b665e);
+  --map-paper: var(--paper, #faf7f2);
+  --map-panel: var(--panel-solid, #fffdf9);
+  --map-line: var(--line, rgba(29, 27, 24, 0.12));
+  --map-line-strong: var(--line-strong, rgba(29, 27, 24, 0.24));
+  --map-hover: var(--hover, rgba(29, 27, 24, 0.045));
+  --map-press: var(--press, rgba(29, 27, 24, 0.09));
+  --map-accent: var(--accent, #c2593b);
+  --map-accent-deep: var(--accent-deep, #8f3b22);
+  --map-accent-soft: var(--accent-soft, rgba(194, 89, 59, 0.06));
+  --map-glow: var(--glow, rgba(194, 89, 59, 0.16));
+  --map-material: var(--material-bar, rgba(250, 247, 242, 0.85));
+  --map-material-filter: var(--material-filter, saturate(140%) blur(18px));
+  --map-shadow: var(--shadow-popover, 0 0 0 1px rgba(29, 27, 24, 0.08), 0 12px 32px rgba(29, 27, 24, 0.1));
+  --map-ease: var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1));
+  --map-fast: var(--dur-fast, 160ms);
+  --map-press-dur: var(--dur-press, 90ms);
+
+  position: relative;
+  display: grid;
+  gap: 0.75rem;
+  width: min(72rem, 100%);
+  margin: 0 auto;
+  color: var(--map-ink);
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.toolbarSlot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 2rem;
+  padding: 0.3rem 0.8rem;
+  border: 1px solid var(--map-line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--map-ink);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 560;
+  cursor: pointer;
+  transition:
+    background-color var(--map-fast) var(--map-ease),
+    transform var(--map-fast) var(--map-ease);
+}
+
+@media (hover: hover) {
+  .button:hover {
+    background: var(--map-hover);
+  }
+}
+
+.button:active {
+  transform: scale(0.97);
+  transition-duration: var(--map-press-dur);
+}
+
+/*the stage frames the map; the palette and toast float over it while the canvas pans beneath*/
+.stage {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--map-line);
+  border-radius: 16px;
+  background-color: var(--map-paper);
+}
+
+.frame {
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+.frame::-webkit-scrollbar {
+  display: none;
+}
+
+.canvas {
+  position: relative;
+  min-width: 100%;
+  background-image: radial-gradient(var(--map-line) 1px, transparent 1px);
+  background-size: 22px 22px;
+  background-position: 11px 11px;
+}
+
+.edges {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.edge {
+  fill: none;
+  stroke: var(--map-ink-soft);
+  stroke-linecap: round;
+  opacity: 0.75;
+}
+
+.edge[data-tone="accent"] {
+  stroke: var(--map-accent);
+  opacity: 0.9;
+}
+
+.edge[data-dash="dashed"] {
+  stroke-dasharray: 6 5;
+}
+
+.edge[data-dash="dotted"] {
+  stroke-dasharray: 0.5 5;
+}
+
+.edge[data-faint] {
+  opacity: 0.3;
+}
+
+.edge[data-selected] {
+  opacity: 1;
+}
+
+.arrowNeutral {
+  fill: var(--map-ink-soft);
+}
+
+.arrowAccent {
+  fill: var(--map-accent);
+}
+
+.liveLine {
+  fill: none;
+  stroke: var(--map-accent);
+  stroke-width: 1.75;
+  stroke-dasharray: 4 4;
+  stroke-linecap: round;
+}
+
+.edgeLabel,
+.via {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1;
+  border: 0;
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.edgeLabel {
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--map-paper) 88%, transparent);
+  color: var(--map-ink-soft);
+  font-size: 0.74rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.edgeLabel[data-selected] {
+  background: var(--map-ink);
+  color: var(--map-paper);
+}
+
+.via {
+  max-width: 13rem;
+  overflow: hidden;
+  padding: 0.25rem 0.7rem;
+  border: 1px dashed var(--map-accent);
+  border-radius: 999px;
+  background: var(--map-panel);
+  color: var(--map-accent-deep);
+  font-size: 0.76rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+}
+
+.via[data-selected] {
+  border-style: solid;
+  box-shadow: 0 0 0 3px var(--map-glow);
+}
+
+.edgeDot {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1;
+  width: 0.7rem;
+  height: 0.7rem;
+  padding: 0;
+  border: 1.5px solid var(--map-ink-soft);
+  border-radius: 999px;
+  background: var(--map-paper);
+  cursor: pointer;
+}
+
+.edgeDot[data-tone="accent"] {
+  border-color: var(--map-accent);
+}
+
+.edgeDot[data-selected] {
+  background: var(--map-ink);
+}
+
+/*a bigger target than the dot itself*/
+.edgeDot::after {
+  content: "";
+  position: absolute;
+  inset: -0.6rem;
+}
+
+.edgeLabel:focus-visible,
+.edgeDot:focus-visible,
+.via:focus-visible {
+  outline: 2px solid var(--map-accent);
+  outline-offset: 2px;
+}
+
+.node {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 2;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: grab;
+  touch-action: none;
+  outline: none;
+  will-change: transform;
+}
+
+.node[data-pressed] {
+  z-index: 3;
+  cursor: grabbing;
+}
+
+.nodeBody {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  height: 100%;
+  padding: 0 0.8rem;
+  border: 1px solid var(--map-line);
+  border-radius: 14px;
+  background: var(--map-panel);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  transition:
+    transform var(--map-fast) var(--map-ease),
+    box-shadow var(--map-fast) var(--map-ease),
+    border-color var(--map-fast) var(--map-ease),
+    opacity var(--map-fast) var(--map-ease);
+}
+
+/*lift on press, not on release*/
+.node[data-pressed] .nodeBody {
+  transform: scale(1.03);
+  box-shadow: var(--map-shadow);
+  transition-duration: var(--map-press-dur);
+}
+
+.node[data-hub] .nodeBody {
+  border-color: color-mix(in srgb, var(--map-accent) 45%, var(--map-line));
+  background: color-mix(in srgb, var(--map-accent) 7%, var(--map-panel));
+}
+
+.node[data-selected] .nodeBody,
+.node:focus-visible .nodeBody {
+  border-color: var(--map-accent);
+  box-shadow: 0 0 0 3px var(--map-glow);
+}
+
+.node[data-dimmed] .nodeBody {
+  border-style: dashed;
+  opacity: 0.6;
+}
+
+.node[data-accept="yes"] .nodeBody {
+  border-style: dashed;
+  border-color: var(--map-accent);
+}
+
+.node[data-accept="no"] .nodeBody {
+  opacity: 0.4;
+}
+
+.node[data-over] .nodeBody {
+  transform: scale(1.05);
+  border-style: solid;
+  border-color: var(--map-accent);
+  box-shadow: 0 0 0 4px var(--map-glow);
+}
+
+.node[data-pulse] .nodeBody {
+  animation: pulse 360ms var(--map-ease);
+}
+
+@keyframes pulse {
+  40% {
+    transform: scale(1.06);
+    box-shadow: 0 0 0 6px var(--map-glow);
+  }
+}
+
+.swatch {
+  flex-shrink: 0;
+  width: 0.65rem;
+  height: 0.65rem;
+  border-radius: 999px;
+  background: var(--node-color, var(--map-ink-soft));
+}
+
+.nodeText {
+  display: grid;
+  gap: 0.05rem;
+  min-width: 0;
+}
+
+.nodeLabel {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 0.86rem;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  white-space: nowrap;
+}
+
+.nodeLabel > span:not(.badge) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.badge {
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  min-width: 1.1rem;
+  height: 1.1rem;
+  padding: 0 0.25rem;
+  border-radius: 999px;
+  background: var(--map-ink);
+  color: var(--map-paper);
+  font-size: 0.66rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.lock {
+  flex-shrink: 0;
+  width: 0.8rem;
+  height: 0.8rem;
+  color: var(--map-ink-soft);
+}
+
+.caption {
+  overflow: hidden;
+  color: var(--map-ink-soft);
+  font-size: 0.74rem;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.spinner {
+  flex-shrink: 0;
+  width: 0.85rem;
+  height: 0.85rem;
+  margin-left: auto;
+  border: 2px solid var(--map-line-strong);
+  border-top-color: var(--map-accent);
+  border-radius: 999px;
+  animation: spin 800ms linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+.handle {
+  position: absolute;
+  top: 50%;
+  right: -0.45rem;
+  width: 0.9rem;
+  height: 0.9rem;
+  border: 1.5px solid var(--map-accent);
+  border-radius: 999px;
+  background: var(--map-panel);
+  cursor: crosshair;
+  opacity: 0;
+  touch-action: none;
+  transform: translateY(-50%);
+  transition: opacity var(--map-fast) var(--map-ease);
+}
+
+.node:hover .handle,
+.node:focus-visible .handle,
+.node[data-selected] .handle {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .handle {
+    opacity: 0.7;
+  }
+}
+
+/*floating material over the canvas, so the map keeps its full height beneath*/
+.palette {
+  position: absolute;
+  bottom: 0.85rem;
+  left: 50%;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  max-width: calc(100% - 1.5rem);
+  padding: 0.45rem 0.6rem;
+  overflow-x: auto;
+  border: 1px solid var(--map-line);
+  border-radius: 16px;
+  background: var(--map-material);
+  box-shadow: var(--map-shadow);
+  transform: translateX(-50%);
+  -webkit-backdrop-filter: var(--map-material-filter);
+  backdrop-filter: var(--map-material-filter);
+  scrollbar-width: none;
+}
+
+.palette::-webkit-scrollbar {
+  display: none;
+}
+
+.paletteGroup {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.paletteHeading {
+  padding-right: 0.15rem;
+  color: var(--map-ink-soft);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 2rem;
+  padding: 0.25rem 0.7rem;
+  border: 1px solid var(--map-line);
+  border-radius: 999px;
+  background: var(--map-panel);
+  color: var(--map-ink);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: grab;
+  touch-action: none;
+  transition:
+    background-color var(--map-fast) var(--map-ease),
+    border-color var(--map-fast) var(--map-ease),
+    transform var(--map-fast) var(--map-ease);
+}
+
+.chip:active {
+  transform: scale(0.96);
+  transition-duration: var(--map-press-dur);
+}
+
+.chip[aria-pressed="true"] {
+  border-color: var(--map-accent);
+  background: var(--map-accent-soft);
+  color: var(--map-accent-deep);
+}
+
+.chip:focus-visible,
+.button:focus-visible {
+  outline: 2px solid var(--map-accent);
+  outline-offset: 2px;
+}
+
+.chip svg,
+.button svg {
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
+.ghost {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 6;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.8rem;
+  border: 1px solid var(--map-accent);
+  border-radius: 999px;
+  background: var(--map-panel);
+  box-shadow: var(--map-shadow);
+  color: var(--map-ink);
+  font-size: 0.8rem;
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+  translate: -50% -50%;
+  transition:
+    scale var(--map-fast) var(--map-ease),
+    opacity var(--map-fast) var(--map-ease);
+}
+
+.ghost svg {
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
+.ghost[data-absorbing] {
+  opacity: 0;
+  scale: 0.4;
+}
+
+.toast {
+  position: absolute;
+  bottom: 4.5rem;
+  left: 50%;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  max-width: calc(100% - 2rem);
+  padding: 0.45rem 0.5rem 0.45rem 0.9rem;
+  border-radius: 999px;
+  background: var(--map-ink);
+  box-shadow: var(--map-shadow);
+  color: var(--map-paper);
+  font-size: 0.82rem;
+  transform: translateX(-50%);
+  animation: rise 220ms var(--map-ease);
+}
+
+.toast span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    translate: 0 0.5rem;
+  }
+}
+
+.toastButton {
+  flex-shrink: 0;
+  padding: 0.2rem 0.6rem;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--map-paper) 16%, transparent);
+  color: var(--map-paper);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 2rem 2rem 6rem;
+  color: var(--map-ink-soft);
+  text-align: center;
+}
+
+.inspector {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.6rem 1rem;
+  min-height: 3.25rem;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid var(--map-line);
+  border-radius: 12px;
+  background: var(--map-panel);
+  font-size: 0.84rem;
+}
+
+.inspectorText {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.inspectorTitle {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.inspectorLines {
+  display: grid;
+  gap: 0.15rem;
+  margin: 0;
+  padding: 0;
+  color: var(--map-ink-soft);
+  list-style: none;
+}
+
+.hint {
+  margin: 0;
+  color: var(--map-ink-soft);
+}
+
+.inspectorActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+@media (max-width: 760px) {
+  .palette {
+    right: 0.6rem;
+    left: 0.6rem;
+    max-width: none;
+    transform: none;
+  }
+
+  .toast {
+    bottom: 4.25rem;
+  }
+}
+
+/*springs and momentum already land instantly; here press, hover and pulse become plain color changes*/
+@media (prefers-reduced-motion: reduce) {
+  .nodeBody,
+  .chip,
+  .button,
+  .ghost,
+  .handle {
+    transition-property: background-color, border-color, opacity, box-shadow;
+  }
+
+  .node[data-pressed] .nodeBody,
+  .node[data-over] .nodeBody,
+  .chip:active,
+  .button:active {
+    transform: none;
+  }
+
+  .node[data-pulse] .nodeBody {
+    animation: none;
+    background: var(--map-accent-soft);
+  }
+
+  .ghost[data-absorbing] {
+    scale: 1;
+  }
+
+  .toast {
+    animation-name: fade;
+  }
+
+  .spinner {
+    animation: none;
+    border-color: var(--map-accent);
+  }
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .palette {
+    background: var(--map-panel);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+@media (prefers-contrast: more) {
+  .nodeBody,
+  .chip,
+  .palette,
+  .inspector,
+  .stage {
+    border-color: var(--map-line-strong);
+  }
+
+  .edge {
+    opacity: 1;
+  }
+}

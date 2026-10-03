@@ -66,6 +66,20 @@ export function reorderCalendarPriority(order: CalendarPriorityOrder, active: st
   return next;
 }
 
+//the winner moves to just above the loser; an order where it already wins comes back unchanged
+export function outrankCalendarPriority(
+  order: CalendarPriorityOrder,
+  winner: CalendarPrioritySource,
+  loser: CalendarPrioritySource,
+): CalendarPriorityOrder {
+  const from = order.indexOf(winner);
+  const to = order.indexOf(loser);
+  if (from === -1 || to === -1 || from < to) return order;
+  const next = order.filter((source) => source !== winner);
+  next.splice(next.indexOf(loser), 0, winner);
+  return next;
+}
+
 export function calendarNamesOf(raw: unknown): CalendarNames {
   if (!raw || typeof raw !== "object") return {};
   const record = raw as Record<string, unknown>;

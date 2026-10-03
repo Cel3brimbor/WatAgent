@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { dedupeCalendarTitles, normalizedCalendarTitle } from "./calendar-duplicates";
-import { activeCalendarPriority, calendarLinksOf, calendarNamesOf, calendarPriorityOrderOf, detectCalendarLink, reorderCalendarPriority, showDuplicateEventsOf } from "./calendar-priority";
+import { dedupeCalendarTitles, duplicateOverlaps, normalizedCalendarTitle } from "./calendar-duplicates";
+import { activeCalendarPriority, calendarLinksOf, calendarNamesOf, calendarPriorityOrderOf, detectCalendarLink, outrankCalendarPriority, reorderCalendarPriority, showDuplicateEventsOf } from "./calendar-priority";
 import type { TimelineItem } from "./types";
 
 const start = new Date(2026, 9, 1, 12).getTime();
@@ -47,6 +47,23 @@ assert.deepEqual(dedupeCalendarTitles([formDue, formLater], ["learn", "portal"])
 const googleForm = { ...form, id: "g-form", kind: "gcal_event" as const, importSource: undefined, google: { calendarName: "LEARN" } };
 const googleFormDue = { ...formDue, id: "g-due", kind: "gcal_event" as const, importSource: undefined, google: { calendarName: "UWaterloo Portal" } };
 assert.deepEqual(dedupeCalendarTitles([googleFormDue, googleForm], ["google"]).map((item) => item.id), ["g-form"]);
+const googleCopy: TimelineItem = { ...learn, id: "g-copy", kind: "gcal_event", importSource: undefined, google: { calendarName: "Personal" } };
+assert.deepEqual(duplicateOverlaps([learn, portal, googleCopy], ["learn", "portal", "google"]), [
+  { a: "learn", b: "portal", count: 1 },
+  { a: "learn", b: "google", count: 1 },
+  { a: "portal", b: "google", count: 1 },
+]);
+assert.deepEqual(duplicateOverlaps([learn, portal], ["portal", "learn"]), [{ a: "portal", b: "learn", count: 1 }], "pairs follow priority order");
+assert.deepEqual(duplicateOverlaps([learn, nextDay], ["learn", "portal"]), [{ a: "learn", b: "portal", count: 0 }], "different days share nothing");
+assert.deepEqual(duplicateOverlaps([learn, { ...learn, id: "copy" }, portal], ["learn", "portal"]), [{ a: "learn", b: "portal", count: 1 }], "two copies in one feed count once");
+assert.deepEqual(duplicateOverlaps([learn, { ...portal, id: "nested", title: "CS 246 Assignment 1 due" }], ["learn", "portal"]), [{ a: "learn", b: "portal", count: 1 }], "a nested title at the same times is a copy");
+assert.deepEqual(duplicateOverlaps([learn, { ...portal, kind: "task" }, { ...portal, id: "d", editorDraft: true }, { ...portal, id: "p", pendingApproval: true }], ["learn", "portal"]), [{ a: "learn", b: "portal", count: 0 }], "tasks, drafts and pending changes never compete");
+assert.deepEqual(duplicateOverlaps([learn, portal], ["learn"]), [], "one source has no pairs");
+assert.deepEqual(outrankCalendarPriority(["learn", "portal", "google"], "google", "learn"), ["google", "learn", "portal"]);
+assert.deepEqual(outrankCalendarPriority(["learn", "portal", "google"], "google", "portal"), ["learn", "google", "portal"]);
+const settled: ("learn" | "portal")[] = ["learn", "portal"];
+assert.equal(outrankCalendarPriority(settled, "learn", "portal"), settled, "an order where it already wins comes back unchanged");
+assert.equal(outrankCalendarPriority(settled, "google", "learn"), settled, "a source outside the order changes nothing");
 console.log("Title normalization, day boundaries, LEARN/Portal/Google priority, show-both, and record preservation passed.");
 
 const order = calendarPriorityOrderOf(["learn", "portal"]);

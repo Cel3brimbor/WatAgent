@@ -35,6 +35,51 @@ export type OverlayEvent = {
   reminder?: string;
 };
 
+export function timelineItemOf(event: CalendarItemDoc): TimelineItem {
+  const meta = event.calendar;
+  return {
+    id: event.id,
+    kind: meta.kind,
+    title: event.title,
+    startUTC: meta.startUTC,
+    endUTC: drawnEnd(meta.kind, meta.allDay, meta.startUTC, meta.endUTC),
+    allDay: meta.allDay,
+    completed: meta.completed,
+    importSource: meta.importSource,
+    calendarId: meta.calendarId,
+    pendingApproval: event.pendingApproval,
+    pendingVerb: event.pendingVerb,
+    editorDraft: event.editorDraft,
+    location: meta.location,
+    description: meta.description,
+  };
+}
+
+export function overlayTimelineItemOf(event: OverlayEvent): TimelineItem {
+  return {
+    id: `gcal:${event.id}`,
+    kind: "gcal_event",
+    title: event.title,
+    startUTC: event.startUTC,
+    endUTC: drawnEnd("gcal_event", event.allDay, event.startUTC, event.endUTC),
+    allDay: event.allDay,
+    google: {
+      calendarId: event.calendarId,
+      eventId: event.eventId,
+      editable: event.editable,
+      deletable: event.deletable,
+      location: event.location,
+      description: event.description,
+      calendarName: event.calendarName,
+      calendarColor: event.calendarColor,
+      htmlLink: event.htmlLink,
+      meetLink: event.meetLink,
+      guests: event.guests,
+      reminder: event.reminder,
+    },
+  };
+}
+
 export function aggregateTimeline(input: {
   focus: Date;
   events: CalendarItemDoc[];
@@ -54,48 +99,12 @@ export function aggregateTimeline(input: {
   for (const event of input.events) {
     const meta = event.calendar;
     if (!rangesOverlap(meta.startUTC, meta.endUTC, startDateUTC, endDateUTC)) continue;
-    push({
-      id: event.id,
-      kind: meta.kind,
-      title: event.title,
-      startUTC: meta.startUTC,
-      endUTC: drawnEnd(meta.kind, meta.allDay, meta.startUTC, meta.endUTC),
-      allDay: meta.allDay,
-      completed: meta.completed,
-      importSource: meta.importSource,
-      calendarId: meta.calendarId,
-      pendingApproval: event.pendingApproval,
-      pendingVerb: event.pendingVerb,
-      editorDraft: event.editorDraft,
-      location: meta.location,
-      description: meta.description,
-    });
+    push(timelineItemOf(event));
   }
 
   for (const event of input.overlayEvents ?? []) {
     if (!rangesOverlap(event.startUTC, event.endUTC, startDateUTC, endDateUTC)) continue;
-    push({
-      id: `gcal:${event.id}`,
-      kind: "gcal_event",
-      title: event.title,
-      startUTC: event.startUTC,
-      endUTC: drawnEnd("gcal_event", event.allDay, event.startUTC, event.endUTC),
-      allDay: event.allDay,
-      google: {
-        calendarId: event.calendarId,
-        eventId: event.eventId,
-        editable: event.editable,
-        deletable: event.deletable,
-        location: event.location,
-        description: event.description,
-        calendarName: event.calendarName,
-        calendarColor: event.calendarColor,
-        htmlLink: event.htmlLink,
-        meetLink: event.meetLink,
-        guests: event.guests,
-        reminder: event.reminder,
-      },
-    });
+    push(overlayTimelineItemOf(event));
   }
 
   for (const block of input.busyBlocks ?? []) {
