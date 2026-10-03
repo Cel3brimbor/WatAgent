@@ -2,10 +2,9 @@
 
 import { useEffect, useId, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { ConfirmDialog } from "@/shared/confirm-dialog";
-import { RenameCalendarDialog } from "@/calendar/calendar-priority-panel";
-import type { ExternalCalendarRef } from "@/calendar/external-calendars";
+import { RenameCalendarDialog } from "@/calendar/imported-calendars-panel";
 import { formatFeedSyncSummary, syncImportedFeed } from "@/calendar/calendar-sync";
-import type { CalendarFeedSource, CalendarLinks, CalendarView, ImportedCalendarSource } from "@/calendar/types";
+import type { CalendarView, ImportedCalendar, ImportedCalendarSource } from "@/calendar/types";
 import { addDays, addMonths, isToday, monthCells, startOfLocalDay, startOfWeek, startOfWorkWeek } from "@/calendar/date-utils";
 import type { GoogleCalendarRef } from "@/calendar/google-calendar-client";
 import { isExcludedGoogleCalendarName } from "@/calendar/calendar-lists";
@@ -53,10 +52,10 @@ type Props = {
   onSources: (next: CalendarSourceFilter) => void;
   colors: CalendarColors;
   onColors: (next: CalendarColors) => void;
-  externalCalendars: ExternalCalendarRef[];
-  calendarLinks: CalendarLinks;
-  onRenameExternal: (source: CalendarFeedSource, name: string) => void;
-  onRemoveExternal: (source: CalendarFeedSource) => Promise<void>;
+  externalCalendars: SideExternalCalendar[];
+  /** id is the row's: ics:<feed> or a merged calendar's id. */
+  onRenameExternal: (id: string, name: string) => void;
+  onRemoveExternal: (source: ImportedCalendarSource) => Promise<void>;
   onRefreshCalendars: () => Promise<void>;
   onSyncGoogle: () => Promise<number | null>;
   onNotice: (message: string) => void;
@@ -94,7 +93,6 @@ export function CalendarSidePanel({
   colors,
   onColors,
   externalCalendars,
-  calendarLinks,
   onRenameExternal,
   onRemoveExternal,
   onRefreshCalendars,
@@ -115,8 +113,8 @@ export function CalendarSidePanel({
   onDeleteCalendar,
 }: Props) {
   const [externalOpen, setExternalOpen] = useState(true);
-  const [renaming, setRenaming] = useState<ExternalCalendarRef | null>(null);
-  const [removing, setRemoving] = useState<ExternalCalendarRef | null>(null);
+  const [renaming, setRenaming] = useState<SideExternalCalendar | null>(null);
+  const [removing, setRemoving] = useState<SideExternalCalendar | null>(null);
   const [removeBusy, setRemoveBusy] = useState(false);
   const [removeError, setRemoveError] = useState<string | null>(null);
   const [syncBusy, setSyncBusy] = useState(false);
@@ -327,15 +325,15 @@ export function CalendarSidePanel({
     setMenu(null);
     try {
       if (external) {
-        const source = external.source as ImportedCalendarSource;
-        const url = calendarLinks[source];
-        if (!url) {
+        if (external.feeds.length === 0) {
           onNotice("No calendar link saved for this feed. Import it again in Settings.");
           return;
         }
-        const result = await syncImportedFeed(source, url);
+        //a merged calendar syncs each of its links in turn
+        const lines: string[] = [];
+        for (const feed of external.feeds) lines.push(formatFeedSyncSummary(feed.name, await syncImportedFeed(feed)));
         await onRefreshCalendars();
-        onNotice(formatFeedSyncSummary(external.name, result));
+        onNotice(lines.join(" "));
         return;
       }
       await onSyncGoogle();
@@ -462,24 +460,24 @@ export function CalendarSidePanel({
           onSync={menuCanSync && !syncBusy ? () => void syncCalendarRow(shownMenu.id) : undefined}
           onDisplayOnly={() => displayOnly(shownMenu.id)}
           onHide={() => hideCalendar(shownMenu.id)}
-          onToggleReadOnly={!menuIsGoogle ? () => toggleReadOnly(shownMenu.id) : undefined}
+          onToggleReadOnly={!menuIsGoogle && !menuExternal ? () => toggleReadOnly(shownMenu.id) : undefined}
           readOnly={!menuIsGoogle && isCalendarReadOnly(sources, shownMenu.id)}
           onColor={(color) => paint(shownMenu.id, color)}
           onRename={menuLocal && !isPrimaryEventCalendarId(menuLocal.id) ? () => {
             setRenamingLocal(menuLocal); setMenu(null);
-          } : menuExternal?.source !== "other" && menuExternal ? () => {
+          } : menuExternal && (menuExternal.merged || menuExternal.feeds.length > 0) ? () => {
             setRenaming(menuExternal); setMenu(null);
           } : undefined}
           onRemove={menuLocal && !isPrimaryEventCalendarId(menuLocal.id) ? (deleteBusy ? undefined : () => {
             setDeleting(menuLocal); setMenu(null);
-          }) : !removeBusy && menuExternal?.source !== "other" && menuExternal ? () => {
+          }) : !removeBusy && menuExternal?.source && menuExternal.feeds.length > 0 ? () => {
             setRemoving(menuExternal); setMenu(null);
           } : undefined}
           removeLabel={menuLocal ? "Delete calendar" : undefined}
         />
       ) : null}
       {renaming ? <RenameCalendarDialog name={renaming.name} onCancel={() => setRenaming(null)} onSave={(name) => {
-        if (renaming.source !== "other") onRenameExternal(renaming.source, name);
+        onRenameExternal(renaming.id, name);
         setRenaming(null);
       }} /> : null}
       {creating ? <RenameCalendarDialog name="" title="New calendar" submitLabel="Create calendar"
@@ -504,13 +502,24 @@ export function CalendarSidePanel({
         message="Archive this calendar’s imported events and remove it from the list? Import its link again to restore it."
         confirmLabel="Remove calendar" onCancel={() => setRemoving(null)} onConfirm={() => {
           const source = removing.source; setRemoving(null);
-          if (source === "other") return;
+          if (!source) return;
           setRemoveBusy(true); setRemoveError(null);
           void onRemoveExternal(source).catch(() => setRemoveError("Unable to remove this calendar. Please try again.")).finally(() => setRemoveBusy(false));
         }} /> : null}
     </div>
   );
 }
+
+/** A row under External calendars: one imported calendar, or a merged calendar standing in for its members. */
+export type SideExternalCalendar = {
+  id: string;
+  name: string;
+  /** The feed, for an imported calendar's row. */
+  source?: ImportedCalendarSource;
+  /** The links a sync covers: the calendar's own, or each member's. */
+  feeds: ImportedCalendar[];
+  merged?: true;
+};
 
 function deleteMessage(calendar: LocalCalendar, count: number): string {
   const noun = calendar.kind === "task" ? (count === 1 ? "task" : "tasks") : count === 1 ? "event" : "events";

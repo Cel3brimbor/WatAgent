@@ -9,6 +9,7 @@
   --map-hover: var(--hover, rgba(29, 27, 24, 0.045));
   --map-press: var(--press, rgba(29, 27, 24, 0.09));
   --map-accent: var(--accent, #c2593b);
+  --map-danger: var(--danger, #b3261e);
   --map-accent-deep: var(--accent-deep, #8f3b22);
   --map-accent-soft: var(--accent-soft, rgba(194, 89, 59, 0.06));
   --map-glow: var(--glow, rgba(194, 89, 59, 0.16));
@@ -66,6 +67,10 @@
   .button:hover {
     background: var(--map-hover);
   }
+}
+
+.button[data-tone="danger"] {
+  color: var(--map-danger);
 }
 
 .button:active {
@@ -248,6 +253,51 @@
   touch-action: none;
   outline: none;
   will-change: transform;
+}
+
+.node[data-toggle] .nodeBody {
+  padding-right: 2.3rem;
+}
+
+/*sits over its node's right side; a sibling, because a button can't hold another*/
+.nodeToggle {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--map-ink-soft);
+  cursor: pointer;
+  will-change: transform;
+  transition: background-color var(--map-fast) var(--map-ease), color var(--map-fast) var(--map-ease);
+}
+
+.nodeToggle[aria-pressed="true"] {
+  color: var(--map-ink);
+}
+
+@media (hover: hover) {
+  .nodeToggle:hover {
+    background: var(--map-hover);
+    color: var(--map-ink);
+  }
+}
+
+.nodeToggle:focus-visible {
+  outline: 2px solid var(--map-accent);
+  outline-offset: 1px;
+}
+
+.nodeToggle svg {
+  width: 0.95rem;
+  height: 0.95rem;
 }
 
 .node[data-pressed] {
@@ -437,11 +487,13 @@
   left: 50%;
   z-index: 4;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 1rem;
+  justify-content: center;
+  gap: 0.4rem 1rem;
+  width: max-content;
   max-width: calc(100% - 1.5rem);
   padding: 0.45rem 0.6rem;
-  overflow-x: auto;
   border: 1px solid var(--map-line);
   border-radius: 16px;
   background: var(--map-material);
@@ -660,11 +712,16 @@
   white-space: nowrap;
 }
 
-@media (max-width: 760px) {
+/*phones scroll one row instead of stacking over the map*/
+@media (max-width: 560px) {
   .palette {
     right: 0.6rem;
     left: 0.6rem;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    width: auto;
     max-width: none;
+    overflow-x: auto;
     transform: none;
   }
 

@@ -5682,6 +5682,92 @@ select {
   margin-top: 1rem;
 }
 
+/*Agent rule editor: a roomier dialog with the preview inline*/
+.rule-editor {
+  width: min(34rem, 100%);
+  max-height: min(90dvh, 48rem);
+  overflow-y: auto;
+}
+
+.rule-editor-form {
+  display: grid;
+  gap: 0.1rem;
+  margin-top: 0.4rem;
+}
+
+.rule-editor-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 0.75rem;
+}
+
+.rule-editor-toggle {
+  justify-content: space-between;
+  margin: 0.6rem 0 0;
+}
+
+.rule-editor-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.rule-preview {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0.7rem 0 0;
+  padding: 0.7rem 0.8rem;
+  border: 1px dashed var(--line-strong);
+  border-radius: 12px;
+  background: var(--surface-sunken);
+}
+
+.rule-preview-headline {
+  margin: 0;
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.rule-preview-list {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rule-preview-list li {
+  display: grid;
+  gap: 0.05rem;
+  padding-left: 0.7rem;
+  border-left: 2px solid var(--accent);
+}
+
+.rule-preview-title {
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+
+.rule-preview-meta {
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.ai-approval-rule {
+  display: block;
+  color: var(--accent-deep);
+  font-size: 0.74rem;
+  font-weight: 600;
+}
+
+@media (max-width: 480px) {
+  .rule-editor-pair {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ───────────────────────── editorial layer ─────────────────────────
    paper-and-ink restyle: serif display type, hairline surfaces, terracotta for chrome.
    sits after the component rules and before the phone breakpoint so mobile overrides still win */

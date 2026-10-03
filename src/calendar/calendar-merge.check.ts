@@ -1,0 +1,92 @@
+import assert from "node:assert/strict";
+import { mergeTimeline, normalizedCalendarTitle, sharedEventCounts } from "./calendar-merge";
+import {
+  defaultImportedName,
+  detectCalendarLink,
+  feedOfCalendarId,
+  importedCalendarsOf,
+  legacyMergedCalendars,
+  LEGACY_MERGED_ID,
+  mergedCalendarsOf,
+} from "./imported-calendars";
+import type { MergedCalendar, TimelineItem } from "./types";
+
+const start = new Date(2026, 9, 1, 12).getTime();
+const learn: TimelineItem = { id: "learn", kind: "event", title: " CS 246   Assignment 1 ", startUTC: start, endUTC: start + 3600000, allDay: false, importSource: "learn", description: "Full assignment details" };
+const portal: TimelineItem = { ...learn, id: "portal", title: "cs 246 assignment 1", importSource: "portal", description: undefined };
+const nextDay: TimelineItem = { ...portal, id: "tomorrow", startUTC: new Date(2026, 9, 2, 12).getTime() };
+const school: MergedCalendar = { id: "merge-0b5c2f8e-3a4d-4e1f-9c2b-7d6e5f4a3b2c", name: "School", members: ["ics:learn", "ics:portal"] };
+const ids = (items: TimelineItem[]) => items.map((item) => item.id);
+
+assert.equal(normalizedCalendarTitle("Ａssignment   1"), "assignment 1");
+
+//merging
+assert.deepEqual(ids(mergeTimeline([portal, learn], [school])), ["learn"], "the first member's copy shows");
+assert.deepEqual(ids(mergeTimeline([portal, learn], [{ ...school, members: ["ics:portal", "ics:learn"] }])), ["portal"]);
+assert.deepEqual(ids(mergeTimeline([portal, learn], [])), ["portal", "learn"], "without a merge both copies show");
+assert.deepEqual(ids(mergeTimeline([learn, nextDay], [school])), ["learn", "tomorrow"], "events only in one member still show");
+assert.equal(mergeTimeline([learn], [school])[0].mergedCalendarId, school.id, "members' events show under the merged calendar");
+assert.equal(mergeTimeline([learn], [])[0].mergedCalendarId, undefined);
+assert.equal(portal.description, undefined, "records are not overwritten");
+
+const other: TimelineItem = { ...portal, id: "other", importSource: "other" };
+const manual: TimelineItem = { ...portal, id: "manual", importSource: undefined };
+assert.deepEqual(ids(mergeTimeline([learn, other, manual], [school])), ["learn", "other", "manual"], "calendars outside the merge are untouched");
+
+const task = { ...portal, id: "task", kind: "task" as const };
+const draft = { ...portal, id: "draft", editorDraft: true };
+const pending = { ...portal, id: "pending", pendingApproval: true };
+assert.deepEqual(ids(mergeTimeline([learn, task, draft, pending], [school])), ["learn", "task", "draft", "pending"], "tasks, drafts and pending changes never hide");
+
+const feed = "feed-0b5c2f8e-3a4d-4e1f-9c2b-7d6e5f4a3b2c" as const;
+const club: TimelineItem = { ...portal, id: "club", importSource: feed };
+const three: MergedCalendar = { ...school, members: [`ics:${feed}`, "ics:learn", "ics:portal"] };
+assert.deepEqual(ids(mergeTimeline([portal, learn, club], [three])), ["club"], "any number of members");
+
+//same-feed copies
+assert.deepEqual(ids(mergeTimeline([learn, { ...learn, id: "copy" }], [])), ["learn"], "identical copies from one feed show once");
+assert.deepEqual(ids(mergeTimeline([portal, { ...portal, id: "room", location: "MC 2038" }], [])), ["portal", "room"], "same time in another room is a different event");
+assert.deepEqual(ids(mergeTimeline([manual, { ...manual, id: "manual-copy" }], [])), ["manual", "manual-copy"], "hand-made events are never hidden");
+
+//nested titles at the same times are copies
+const formStart = new Date(2026, 8, 29, 11, 30).getTime();
+const form = { ...learn, id: "form", title: "Video Release Form", startUTC: formStart, endUTC: formStart };
+const formDue = { ...portal, id: "form-due", title: "Video Release Form - Due", startUTC: formStart, endUTC: formStart };
+assert.deepEqual(ids(mergeTimeline([formDue, form], [school])), ["form"]);
+assert.deepEqual(ids(mergeTimeline([formDue, { ...form, id: "form-later", endUTC: formStart + 60000 }], [school])), ["form-due", "form-later"]);
+
+//Google stays separate, apart from its own LEARN and Portal subscriptions
+const googleLearn: TimelineItem = { ...learn, id: "g-learn", kind: "gcal_event", importSource: undefined, google: { calendarName: "LEARN calendar" } };
+const googlePortal: TimelineItem = { ...portal, id: "g-portal", kind: "gcal_event", importSource: undefined, google: { calendarName: "UWaterloo Portal" } };
+assert.deepEqual(ids(mergeTimeline([googlePortal, googleLearn], [])), ["g-learn"]);
+assert.deepEqual(ids(mergeTimeline([googleLearn, learn, portal], [school])), ["g-learn", "learn"], "Google never hides imported copies");
+
+//shared counts
+assert.deepEqual(sharedEventCounts([learn, portal, nextDay], [school]), new Map([["ics:learn", 1], ["ics:portal", 1]]));
+assert.deepEqual(sharedEventCounts([learn, { ...learn, id: "copy" }, portal], [school]), new Map([["ics:learn", 1], ["ics:portal", 1]]), "two copies in one feed count once");
+assert.deepEqual(sharedEventCounts([learn, nextDay], [school]), new Map([["ics:learn", 0], ["ics:portal", 0]]), "different days share nothing");
+
+//saved lists
+const learnUrl = "https://learn.uwaterloo.ca/d2l/le/calendar/feed/user/feed.ics";
+assert.deepEqual(importedCalendarsOf(undefined, { learn: learnUrl, portal: "" }, { learn: "Courses" }), [{ id: "learn", name: "Courses", url: learnUrl }], "old slots become list entries");
+assert.deepEqual(importedCalendarsOf([], { learn: learnUrl }), [], "a saved list wins over old slots");
+assert.deepEqual(importedCalendarsOf([{ id: feed, name: "Club", url: "webcal://x.example/c.ics" }, { id: feed, name: "Again", url: learnUrl }, { id: "feed-x", name: "Bad", url: learnUrl }]).map((calendar) => calendar.name), ["Club"]);
+assert.deepEqual(mergedCalendarsOf([school, { ...school, id: "merge-1b5c2f8e-3a4d-4e1f-9c2b-7d6e5f4a3b2c", members: ["ics:portal", `ics:${feed}`] }]).map((calendar) => calendar.members), [["ics:learn", "ics:portal"]], "each calendar joins one merge");
+assert.deepEqual(mergedCalendarsOf([{ ...school, members: ["ics:learn"] }]), [], "a merge needs two members");
+assert.equal(feedOfCalendarId(`ics:${feed}`), feed);
+assert.equal(feedOfCalendarId("events"), null);
+
+//the old priority order becomes one merged calendar
+const both = [{ id: "learn" as const, name: "LEARN", url: learnUrl }, { id: "portal" as const, name: "Portal", url: "https://portal.example/a.ics" }];
+assert.deepEqual(legacyMergedCalendars(["portal", "learn", "google"], false, null, both), [{ id: LEGACY_MERGED_ID, name: "Portal + LEARN", members: ["ics:portal", "ics:learn"] }]);
+assert.deepEqual(legacyMergedCalendars(undefined, undefined, null, both)[0].members, ["ics:learn", "ics:portal"], "LEARN won by default");
+assert.deepEqual(legacyMergedCalendars(undefined, undefined, "portal", both)[0].members, ["ics:portal", "ics:learn"]);
+assert.deepEqual(legacyMergedCalendars(["learn", "portal"], true, null, both), [], "showing both copies meant no merge");
+assert.deepEqual(legacyMergedCalendars(["learn", "portal"], false, null, both.slice(0, 1)), [], "one feed has nothing to merge");
+
+assert.equal(detectCalendarLink(learnUrl), "learn");
+assert.equal(defaultImportedName(learnUrl, []), "LEARN / Brightspace");
+assert.equal(defaultImportedName(learnUrl, [{ name: "LEARN / Brightspace" }, { name: "LEARN / Brightspace 2" }]), "LEARN / Brightspace 3");
+assert.equal(defaultImportedName("https://example.com/a.ics", []), "Imported calendar");
+
+console.log("Merged calendar, shared count, imported list and migration checks passed.");

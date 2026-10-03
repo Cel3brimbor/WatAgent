@@ -9,8 +9,8 @@ import {
   startWebGoogleConnect,
   type GoogleCalendarStatus,
 } from "@/calendar/google-calendar-client";
-import type { CalendarFeedSource, CalendarLinks, CalendarNames, CalendarPriorityOrder } from "@/calendar/types";
-import { CalendarPriorityPanel } from "@/calendar/calendar-priority-panel";
+import type { ImportedCalendar, ImportedCalendarSource, MergedCalendar } from "@/calendar/types";
+import { ImportedCalendarsPanel } from "@/calendar/imported-calendars-panel";
 import { CalendarImportPanel } from "@/calendar/calendar-import-panel";
 import { isNativeShell } from "@/shared/platform";
 import { Switch } from "@/shared/switch";
@@ -18,19 +18,15 @@ import { MoonIcon, SunIcon, SystemIcon } from "@/shared/icons";
 import { TEA_THEMES, useColorScheme, useTeaTheme, type ColorSchemePreference } from "@/shared/tea-theme";
 
 type Props = {
-  calendarNames: CalendarNames;
-  calendarLinks: CalendarLinks;
-  onRenameCalendar: (source: CalendarFeedSource, name: string) => void;
-  calendarPriorityOrder: CalendarPriorityOrder;
-  onCalendarPriorityOrderChange: (order: CalendarPriorityOrder) => void;
-  showDuplicateEvents: boolean;
-  onShowDuplicateEventsChange: (show: boolean) => void;
+  importedCalendars: ImportedCalendar[];
+  mergedCalendars: MergedCalendar[];
+  onRenameCalendar: (id: ImportedCalendarSource, name: string) => void;
   accountEmail: string | null;
   syncedAt: number | null;
   onChanged: () => void;
-  onImported: (source: "learn" | "portal" | "other", url: string) => Promise<void>;
+  onImported: (calendar: ImportedCalendar) => Promise<void>;
   onRefresh: () => Promise<void>;
-  onRemoveCalendar: (source: CalendarFeedSource) => Promise<void>;
+  onRemoveCalendar: (id: ImportedCalendarSource) => Promise<void>;
   onSyncGoogle: () => Promise<number | null>;
   onNotice: (message: string) => void;
   requireAiApproval: boolean;
@@ -70,13 +66,9 @@ function formatSynced(ms: number | null): string {
 }
 
 export function SettingsPanel({
-  calendarNames,
-  calendarLinks,
+  importedCalendars,
+  mergedCalendars,
   onRenameCalendar,
-  calendarPriorityOrder,
-  onCalendarPriorityOrderChange,
-  showDuplicateEvents,
-  onShowDuplicateEventsChange,
   accountEmail,
   syncedAt,
   onChanged,
@@ -184,17 +176,13 @@ export function SettingsPanel({
         )}
       </section>
 
-      <CalendarImportPanel onImported={onImported} />
+      <CalendarImportPanel importedCalendars={importedCalendars} onImported={onImported} />
 
-      <CalendarPriorityPanel
-        names={calendarNames}
-        calendarLinks={calendarLinks}
+      <ImportedCalendarsPanel
+        calendars={importedCalendars}
+        mergedCalendars={mergedCalendars}
         googleConnected={connected}
         onRename={onRenameCalendar}
-        order={calendarPriorityOrder}
-        onReorder={onCalendarPriorityOrderChange}
-        showDuplicates={showDuplicateEvents}
-        onShowDuplicatesChange={onShowDuplicateEventsChange}
         onRemove={onRemoveCalendar}
         onRefresh={onRefresh}
         onSyncGoogle={onSyncGoogle}

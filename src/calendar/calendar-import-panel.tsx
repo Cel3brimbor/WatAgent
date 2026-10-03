@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import { runRulesAfterSync } from "@/agent/rules/rules-client";
 import { importCalendarLink, type CalendarImportProgress } from "@/calendar/client";
-import { detectCalendarLink, isCalendarLink } from "@/calendar/calendar-priority";
-import type { CalendarFeedSource } from "@/calendar/types";
+import { defaultImportedName, detectCalendarLink, isCalendarLink, newFeedId } from "@/calendar/imported-calendars";
+import type { ImportedCalendar } from "@/calendar/types";
 
 function dateValue(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -18,13 +19,16 @@ export function academicImportRange(today: Date): { from: string; to: string } {
   };
 }
 
-const DETECTED: Record<CalendarFeedSource, string> = {
+const DETECTED = {
   learn: "Detected as LEARN / Brightspace",
   portal: "Detected as Portal",
-};
+  other: "Not recognized as LEARN or Portal. It imports as its own calendar.",
+} as const;
 
-export function CalendarImportPanel({ onImported }: {
-  onImported: (source: "learn" | "portal" | "other", url: string) => Promise<void>;
+/** A link that's already saved syncs that calendar again; a new one adds a calendar. */
+export function CalendarImportPanel({ importedCalendars, onImported }: {
+  importedCalendars: ImportedCalendar[];
+  onImported: (calendar: ImportedCalendar) => Promise<void>;
 }) {
   const [url, setUrl] = useState("");
   const [showLink, setShowLink] = useState(false);
@@ -57,16 +61,18 @@ export function CalendarImportPanel({ onImported }: {
       setError("Enter an https or webcal calendar link.");
       return;
     }
-    const source = detectCalendarLink(link);
+    const existing = importedCalendars.find((calendar) => calendar.url === link);
+    const calendar: ImportedCalendar = existing ?? { id: newFeedId(), name: defaultImportedName(link, importedCalendars), url: link };
     setUrl("");
     setWorking(true);
     setProgress({ done: 0, total: null });
     try {
       const imported = await importCalendarLink(
-        { url: link, source, rangeStartUTC: +start, rangeEndUTC: +end },
+        { url: link, feedId: calendar.id, rangeStartUTC: +start, rangeEndUTC: +end },
         setProgress,
       );
-      await onImported(imported.source, link);
+      await onImported(calendar);
+      runRulesAfterSync(imported.source);
       const noun = (value: number) => `event${value === 1 ? "" : "s"}`;
       setResult(imported.imported === 0 && imported.removed === 0
         ? "No events found in this date range."
@@ -90,14 +96,14 @@ export function CalendarImportPanel({ onImported }: {
 
   const trimmed = url.trim();
   const detected = isCalendarLink(trimmed) ? detectCalendarLink(trimmed) : null;
-  const detectedFeed = detected === "learn" || detected === "portal" ? detected : null;
+  const saved = importedCalendars.find((calendar) => calendar.url === trimmed);
 
   return (
     <section className="settings-section" aria-labelledby="settings-ics">
       <h3 id="settings-ics">Calendar link</h3>
       <p id="ics-hint" className="modal-hint">
-        Paste a LEARN (Brightspace) or Portal calendar link. WatAgent detects which one it is and clears the field once you import.
-        The calendar shows in the priority list after its events finish importing. Remove it from that list to take it off.
+        Paste any calendar link, such as LEARN (Brightspace) or Portal. Each new link adds a calendar, and you can add as many as you like.
+        It shows under Imported calendars below. Imported calendars are read only. To show two as one, merge them on the Map.
       </p>
       <form className="calendar-import-form" onSubmit={(event) => void submit(event)} aria-busy={working}>
         <label className="calendar-editor-field" htmlFor="ics-url">
@@ -108,7 +114,7 @@ export function CalendarImportPanel({ onImported }: {
             aria-describedby="ics-hint ics-detected" autoComplete="off" spellCheck={false} />
         </label>
         <p id="ics-detected" className="modal-hint">
-          {detectedFeed ? DETECTED[detectedFeed] : detected === "other" ? "This link is not recognized as LEARN or Portal." : "LEARN and Portal links are detected from the address."}
+          {saved ? `Already imported as ${saved.name}. Importing syncs it again.` : detected ? DETECTED[detected] : "LEARN and Portal links are detected from the address."}
         </p>
         <div className="calendar-import-link-actions">
           <button type="button" className="ghost-btn" onClick={() => setShowLink((current) => !current)}

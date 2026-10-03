@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Fragment,
   useCallback,
   useEffect,
   useId,
@@ -75,6 +76,8 @@ type Toast = { key: number; message: string; change?: MapChange };
 type Outcome = MapChange | void | Promise<MapChange | void>;
 
 const MAGNET = 28;
+//a node's toggle button, in px; matches .nodeToggle
+const TOGGLE = 24;
 const MAGNET_PULL = 0.35;
 const TOAST_MS = 6000;
 const UNDO_DEPTH = 10;
@@ -579,6 +582,12 @@ export function CalendarMap({ label, nodes, edges, functions, nodeDrop, layoutSt
     setLayout((current) => ({ ...current, [id]: toUnit(next, size) }));
   }
 
+  function removeEdge(edge: MapEdge) {
+    if (!edge.remove) return;
+    setSelection(null);
+    void run(edge.remove.run, edge.from);
+  }
+
   function onRootKeyDown(event: ReactKeyboardEvent<HTMLElement>) {
     if (event.key === "Escape") {
       if (gesture.kind !== "idle") {
@@ -587,6 +596,14 @@ export function CalendarMap({ label, nodes, edges, functions, nodeDrop, layoutSt
       } else if (selection) {
         setSelection(null);
       }
+      return;
+    }
+    if ((event.key === "Delete" || event.key === "Backspace") && selection?.kind === "edge" && gesture.kind === "idle") {
+      if ((event.target as HTMLElement).closest("input, textarea, select, [contenteditable='true']")) return;
+      const edge = edges.find((entry) => entry.id === selection.id);
+      if (!edge?.remove) return;
+      event.preventDefault();
+      removeEdge(edge);
       return;
     }
     if ((event.metaKey || event.ctrlKey) && !event.shiftKey && event.key.toLowerCase() === "z") {
@@ -779,52 +796,72 @@ export function CalendarMap({ label, nodes, edges, functions, nodeDrop, layoutSt
                   const selected = selection?.kind === "node" && selection.id === node.id;
                   const highlighted = over === node.id || (linkOver === node.id && answer === true);
                   return (
-                    <button
-                      key={node.id}
-                      type="button"
-                      className={styles.node}
-                      style={
-                        {
-                          width: nodeW,
-                          height: nodeH,
-                          transform: `translate3d(${centre.x - nodeW / 2}px, ${centre.y - nodeH / 2}px, 0)`,
-                          "--node-color": node.color,
-                        } as CSSProperties
-                      }
-                      data-hub={node.group === "hub" || undefined}
-                      data-selected={selected || undefined}
-                      data-pressed={pressed === node.id || undefined}
-                      data-dimmed={node.dimmed || undefined}
-                      data-accept={answer === true ? "yes" : typeof answer === "string" ? "no" : undefined}
-                      data-over={highlighted || undefined}
-                      aria-pressed={selected}
-                      aria-disabled={typeof answer === "string" || undefined}
-                      aria-label={spokenNode(node)}
-                      title={typeof answer === "string" ? answer : undefined}
-                      {...nodeDrag.bind(node.id)}
-                      onClick={(event) => {
-                        if (event.detail === 0) activateNode(node.id);
-                      }}
-                      onKeyDown={(event) => onNodeKeyDown(event, node.id)}
-                    >
-                      <span key={pulse?.id === node.id ? pulse.key : "body"} className={styles.nodeBody} data-pulse={pulse?.id === node.id || undefined}>
-                        <span className={styles.swatch} aria-hidden="true" />
-                        <span className={styles.nodeText}>
-                          <span className={styles.nodeLabel}>
-                            {node.badge ? <span className={styles.badge}>{node.badge}</span> : null}
-                            <span>{node.label}</span>
-                            {node.locked ? <LockGlyph /> : null}
+                    <Fragment key={node.id}>
+                      <button
+                        type="button"
+                        className={styles.node}
+                        style={
+                          {
+                            width: nodeW,
+                            height: nodeH,
+                            transform: `translate3d(${centre.x - nodeW / 2}px, ${centre.y - nodeH / 2}px, 0)`,
+                            "--node-color": node.color,
+                          } as CSSProperties
+                        }
+                        data-hub={node.group === "hub" || undefined}
+                        data-selected={selected || undefined}
+                        data-pressed={pressed === node.id || undefined}
+                        data-dimmed={node.dimmed || undefined}
+                        data-toggle={node.toggle ? true : undefined}
+                        data-accept={answer === true ? "yes" : typeof answer === "string" ? "no" : undefined}
+                        data-over={highlighted || undefined}
+                        aria-pressed={selected}
+                        aria-disabled={typeof answer === "string" || undefined}
+                        aria-label={spokenNode(node)}
+                        title={typeof answer === "string" ? answer : node.label}
+                        {...nodeDrag.bind(node.id)}
+                        onClick={(event) => {
+                          if (event.detail === 0) activateNode(node.id);
+                        }}
+                        onKeyDown={(event) => onNodeKeyDown(event, node.id)}
+                      >
+                        <span key={pulse?.id === node.id ? pulse.key : "body"} className={styles.nodeBody} data-pulse={pulse?.id === node.id || undefined}>
+                          <span className={styles.swatch} aria-hidden="true" />
+                          <span className={styles.nodeText}>
+                            <span className={styles.nodeLabel}>
+                              {node.badge ? <span className={styles.badge}>{node.badge}</span> : null}
+                              <span>{node.label}</span>
+                              {node.locked ? <LockGlyph /> : null}
+                            </span>
+                            {node.caption ? <span className={styles.caption}>{node.caption}</span> : null}
                           </span>
-                          {node.caption ? <span className={styles.caption}>{node.caption}</span> : null}
+                          {node.busy ? <span className={styles.spinner} aria-hidden="true" /> : null}
                         </span>
-                        {node.busy ? <span className={styles.spinner} aria-hidden="true" /> : null}
-                      </span>
-                      {/*the handle that's drawing must stay mounted, or its pointer capture goes with it*/}
-                      {(gesture.kind === "idle" || (gesture.kind === "linking" && gesture.held && gesture.from === node.id)) &&
-                      canDrawFrom(node.id) ? (
-                        <span className={styles.handle} aria-hidden="true" {...bindHandle(node.id)} />
+                        {/*the handle that's drawing must stay mounted, or its pointer capture goes with it*/}
+                        {(gesture.kind === "idle" || (gesture.kind === "linking" && gesture.held && gesture.from === node.id)) &&
+                        canDrawFrom(node.id) ? (
+                          <span className={styles.handle} aria-hidden="true" {...bindHandle(node.id)} />
+                        ) : null}
+                      </button>
+                      {node.toggle ? (
+                        <button
+                          type="button"
+                          className={styles.nodeToggle}
+                          style={{ transform: `translate3d(${centre.x + nodeW / 2 - TOGGLE - 8}px, ${centre.y - TOGGLE / 2}px, 0)` }}
+                          aria-pressed={node.toggle.on}
+                          aria-label={node.toggle.label}
+                          title={node.toggle.label}
+                          //keep the press from reaching the canvas, which would clear the selection
+                          onPointerDown={(event) => event.stopPropagation()}
+                          onClick={() => {
+                            const toggle = node.toggle;
+                            if (toggle) void run(toggle.run, node.id);
+                          }}
+                        >
+                          {node.toggle.icon}
+                        </button>
                       ) : null}
-                    </button>
+                    </Fragment>
                   );
                 })
               : null}
@@ -889,9 +926,16 @@ export function CalendarMap({ label, nodes, edges, functions, nodeDrop, layoutSt
                 </ul>
               ) : null}
             </div>
-            <button type="button" className={styles.button} onClick={() => setSelection(null)}>
-              Done
-            </button>
+            <div className={styles.inspectorActions}>
+              {selectedNode.actions?.map((action) => (
+                <button key={action.id} type="button" className={styles.button} onClick={() => void run(action.run, selectedNode.id)}>
+                  {action.label}
+                </button>
+              ))}
+              <button type="button" className={styles.button} onClick={() => setSelection(null)}>
+                Done
+              </button>
+            </div>
           </>
         ) : selectedEdge ? (
           <>
@@ -913,6 +957,17 @@ export function CalendarMap({ label, nodes, edges, functions, nodeDrop, layoutSt
                   {action.label}
                 </button>
               ))}
+              {selectedEdge.remove ? (
+                <button
+                  type="button"
+                  className={styles.button}
+                  data-tone="danger"
+                  aria-keyshortcuts="Delete Backspace"
+                  onClick={() => removeEdge(selectedEdge)}
+                >
+                  {selectedEdge.remove.label ?? "Delete link"}
+                </button>
+              ) : null}
               <button type="button" className={styles.button} onClick={() => setSelection(null)}>
                 Done
               </button>

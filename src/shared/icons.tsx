@@ -174,6 +174,15 @@ export function LockIcon(props: IconProps) {
   );
 }
 
+export function EyeIcon(props: IconProps) {
+  return (
+    <Glyph {...props} strokeWidth={1.5}>
+      <path d="M1.75 8S4 3.75 8 3.75 14.25 8 14.25 8 12 12.25 8 12.25 1.75 8 1.75 8z" />
+      <circle cx="8" cy="8" r="2" />
+    </Glyph>
+  );
+}
+
 export function EyeOffIcon(props: IconProps) {
   return (
     <Glyph {...props} strokeWidth={1.5}>
@@ -209,10 +218,12 @@ export function ShieldCheckIcon(props: IconProps) {
   );
 }
 
-export function TrophyIcon(props: IconProps) {
+export function RouteIcon(props: IconProps) {
   return (
     <Glyph {...props} strokeWidth={1.6}>
-      <path d="M5 2.75h6v3.5a3 3 0 0 1-6 0zM5 4H2.75a2 2 0 0 0 2.4 2.6M11 4h2.25a2 2 0 0 1-2.4 2.6M8 9.25v2.5M5.5 13.25h5" />
+      <circle cx="4" cy="12" r="1.75" />
+      <circle cx="12" cy="4" r="1.75" />
+      <path d="M5.75 12H9a2.25 2.25 0 0 0 0-4.5H7A2.25 2.25 0 0 1 7 3h3.25" />
     </Glyph>
   );
 }
