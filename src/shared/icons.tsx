@@ -216,3 +216,13 @@ export function TrophyIcon(props: IconProps) {
     </Glyph>
   );
 }
+
+export function RouteIcon(props: IconProps) {
+  return (
+    <Glyph {...props} strokeWidth={1.6}>
+      <circle cx="4" cy="12" r="1.75" />
+      <circle cx="12" cy="4" r="1.75" />
+      <path d="M5.75 12H9a2.25 2.25 0 0 0 0-4.5H7A2.25 2.25 0 0 1 7 3h3.25" />
+    </Glyph>
+  );
+}
