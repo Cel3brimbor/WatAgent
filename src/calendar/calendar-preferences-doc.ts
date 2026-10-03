@@ -8,6 +8,7 @@ import {
   readImportedCalendars,
   readMergedCalendars,
   readAgentHiddenIds,
+  readNewCalendarsShown,
   agentHiddenIdsOf,
   readColorOverrides,
   readSidePanelSections,
@@ -28,6 +29,7 @@ export type UserCalendarPreferencesV1 = {
   importedCalendars: ImportedCalendar[];
   mergedCalendars: MergedCalendar[];
   agentHiddenCalendarIds: string[];
+  newCalendarsShown: boolean;
   localCalendars: LocalCalendar[];
   sources: CalendarSourceFilter;
   colors: CalendarColors;
@@ -108,6 +110,7 @@ export function readLocalCalendarPreferences(): UserCalendarPreferencesV1 {
     importedCalendars,
     mergedCalendars: readMergedCalendars(importedCalendars),
     agentHiddenCalendarIds: readAgentHiddenIds(),
+    newCalendarsShown: readNewCalendarsShown(),
     localCalendars: readLocalCalendars(),
     sources: readSourceFilter(),
     colors: readCalendarColors(),
@@ -146,6 +149,7 @@ export function parseUserCalendarPreferencesDoc(
     mergedCalendars,
     agentHiddenCalendarIds:
       rec.agentHiddenCalendarIds !== undefined ? agentHiddenIdsOf(rec.agentHiddenCalendarIds) : fallbacks.agentHiddenCalendarIds,
+    newCalendarsShown: typeof rec.newCalendarsShown === "boolean" ? rec.newCalendarsShown : fallbacks.newCalendarsShown,
     localCalendars: rec.localCalendars !== undefined ? localCalendarsOf(rec.localCalendars) : fallbacks.localCalendars,
     sources,
     colors,
@@ -161,6 +165,7 @@ export function parseUserCalendarPreferencesDoc(
 
 export function preferencesDocHasContent(doc: UserCalendarPreferencesV1): boolean {
   if (doc.importedCalendars.length > 0 || doc.mergedCalendars.length > 0 || doc.agentHiddenCalendarIds.length > 0) return true;
+  if (!doc.newCalendarsShown) return true;
   if (doc.smartTags.length > 0) return true;
   if (JSON.stringify(doc.localCalendars) !== JSON.stringify(BUILTIN_CALENDARS)) return true;
   if (doc.navCollapsed) return true;

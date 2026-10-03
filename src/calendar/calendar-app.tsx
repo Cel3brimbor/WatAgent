@@ -27,6 +27,8 @@ import {
   readImportedCalendars,
   readMergedCalendars,
   readAgentHiddenIds,
+  readNewCalendarsShown,
+  withNewCalendar,
   readColorOverrides,
   CALENDAR_PALETTE,
   readSidePanelSections,
@@ -311,6 +313,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
   const [importedCalendars, setImportedCalendars] = useState<ImportedCalendar[]>(() => readImportedCalendars());
   const [mergedCalendars, setMergedCalendars] = useState<MergedCalendar[]>(() => readMergedCalendars(readImportedCalendars()));
   const [agentHiddenCalendarIds, setAgentHiddenCalendarIds] = useState<string[]>(() => readAgentHiddenIds());
+  const [newCalendarsShown, setNewCalendarsShown] = useState(() => readNewCalendarsShown());
   const [googleConnected, setGoogleConnected] = useState<boolean | null>(null);
   const [section, setSection] = useState<AppSection>("calendar");
   const [navCollapsed, setNavCollapsed] = useState(() => {
@@ -460,12 +463,13 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
 
   useCalendarPreferencesSync(
     calendar.hydrated,
-    { view, importedCalendars, mergedCalendars, agentHiddenCalendarIds, localCalendars, sources, colors, colorOverrides, smartTags, navCollapsed, sidePanelSections },
+    { view, importedCalendars, mergedCalendars, agentHiddenCalendarIds, newCalendarsShown, localCalendars, sources, colors, colorOverrides, smartTags, navCollapsed, sidePanelSections },
     {
       setView,
       setImportedCalendars,
       setMergedCalendars,
       setAgentHiddenCalendarIds,
+      setNewCalendarsShown,
       setLocalCalendars,
       setSources,
       setColors,
@@ -515,11 +519,13 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
   }, [calendar]);
 
   const addImported = useCallback(async (added: ImportedCalendar) => {
+    const isNew = !importedCalendars.some((entry) => entry.id === added.id);
     setImportedCalendars((current) =>
       current.some((entry) => entry.id === added.id) ? current : [...current, added],
     );
+    if (isNew) setSources((current) => withNewCalendar(current, externalCalendarId(added.id), newCalendarsShown));
     await calendar.refresh();
-  }, [calendar]);
+  }, [calendar, importedCalendars, newCalendarsShown]);
 
   useEffect(() => {
     let cancelled = false;
@@ -906,7 +912,8 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
       ?? CALENDAR_PALETTE[localCalendars.length % CALENDAR_PALETTE.length];
     setColorOverrides((overrides) => ({ ...overrides, [created.id]: color }));
     setLocalCalendars((list) => [...list, created]);
-    setNotice(`Created ${created.name}.`);
+    setSources((current) => withNewCalendar(current, created.id, newCalendarsShown));
+    setNotice(newCalendarsShown ? `Created ${created.name}.` : `Created ${created.name}. It starts hidden; show it from the side panel or the Map.`);
   }
 
   function renameLocalCalendar(id: string, name: string) {
@@ -1414,6 +1421,8 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
                 onMergedCalendars={setMergedCalendars}
                 agentHiddenIds={agentHiddenCalendarIds}
                 onAgentHiddenIds={setAgentHiddenCalendarIds}
+                newCalendarsShown={newCalendarsShown}
+                onNewCalendarsShown={setNewCalendarsShown}
                 sources={sources}
                 onSources={setSources}
                 importedCalendars={importedCalendars}

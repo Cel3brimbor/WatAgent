@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type Dispatch, type SetStateAction } from "react";
+import { useId, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import { RuleEditor } from "@/agent/rules/rule-editor";
 import {
   deleteAgentRule,
@@ -29,11 +29,12 @@ import { RenameCalendarDialog } from "@/calendar/imported-calendars-panel";
 import { formatFeedSyncSummary, syncImportedFeed } from "@/calendar/calendar-sync";
 import { calendarItemVisible, externalCalendarId, externalCalendarShown, externalCalendarsOf } from "@/calendar/external-calendars";
 import { calendarIdField, isPrimaryEventCalendarId, type LocalCalendar } from "@/calendar/local-calendars";
-import { calendarGroupsOf, isCalendarReadOnly, setCalendarReadOnly, type CalendarColors, type CalendarSourceFilter } from "@/calendar/preferences";
+import { calendarGroupsOf, isCalendarReadOnly, setCalendarReadOnly, withNewCalendar, type CalendarColors, type CalendarSourceFilter } from "@/calendar/preferences";
 import { timelineItemOf, type OverlayEvent } from "@/calendar/timeline";
 import type { CalendarItemDoc, ImportedCalendar, MergedCalendar } from "@/calendar/types";
 import { ConfirmDialog } from "@/shared/confirm-dialog";
 import { ChatIcon, EyeIcon, EyeOffIcon, LockIcon, MergeIcon, RouteIcon, ShieldCheckIcon, SyncIcon } from "@/shared/icons";
+import { Switch } from "@/shared/switch";
 import { usePresence } from "@/shared/use-presence";
 
 const layoutStore = createLocalLayoutStore("watagent.calendarMap.layout.v1");
@@ -48,6 +49,9 @@ type Props = {
   /** Calendars whose link to the Agent was deleted, so the Agent can't see them. */
   agentHiddenIds: string[];
   onAgentHiddenIds: Dispatch<SetStateAction<string[]>>;
+  /** Whether a calendar you add, including a new merged calendar, starts shown on the calendar. */
+  newCalendarsShown: boolean;
+  onNewCalendarsShown: (shown: boolean) => void;
   sources: CalendarSourceFilter;
   onSources: Dispatch<SetStateAction<CalendarSourceFilter>>;
   importedCalendars: ImportedCalendar[];
@@ -91,6 +95,8 @@ export function CalendarMapSection({
   onMergedCalendars,
   agentHiddenIds,
   onAgentHiddenIds,
+  newCalendarsShown,
+  onNewCalendarsShown,
   sources,
   onSources,
   importedCalendars,
@@ -112,6 +118,7 @@ export function CalendarMapSection({
   const [syncing, setSyncing] = useState<string[]>([]);
   const [editor, setEditor] = useState<{ rule?: AgentRule; initial?: Partial<AgentRuleDraft> } | null>(null);
   const [deleting, setDeleting] = useState<AgentRule | null>(null);
+  const newShownId = useId();
   const [renamingMerged, setRenamingMerged] = useState<MergedCalendar | null>(null);
   const editorPresence = usePresence(editor);
   const deletePresence = usePresence(deleting);
@@ -405,7 +412,13 @@ export function CalendarMapSection({
     if (!target) {
       const name = `${nameOf(from)} + ${nameOf(to)}`.slice(0, 80);
       const created: MergedCalendar = { id: newMergedCalendarId(), name, members: [from, to] };
-      return changeMerges([...mergedCalendars, created], `${name} made. Each shared event shows once, ${nameOf(from)}'s copy first`);
+      onSources((current) => withNewCalendar(current, created.id, newCalendarsShown));
+      return changeMerges(
+        [...mergedCalendars, created],
+        newCalendarsShown
+          ? `${name} made. Each shared event shows once, ${nameOf(from)}'s copy first`
+          : `${name} made, hidden as new calendars start hidden. Use its eye to show it`,
+      );
     }
     const joining = [from, to].filter((id) => feedSourceOf(id) && !target.members.includes(id));
     const next = mergedCalendars.map((calendar) =>
@@ -713,6 +726,12 @@ export function CalendarMapSection({
     <>
       <CalendarMap
         label="Calendar map"
+        toolbar={
+          <div className="settings-toggle calendar-map-toggle">
+            <label htmlFor={newShownId}>New calendars start shown</label>
+            <Switch id={newShownId} checked={newCalendarsShown} onChange={onNewCalendarsShown} />
+          </div>
+        }
         nodes={nodes}
         edges={edges}
         functions={functions}

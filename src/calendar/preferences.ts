@@ -346,3 +346,23 @@ export function writeAgentHiddenIds(ids: string[]): void {
   try { window.localStorage.setItem(AGENT_HIDDEN_KEY, JSON.stringify(ids)); }
   catch { return; }
 }
+
+const NEW_CALENDARS_SHOWN_KEY = "watagent.calendar.new-shown.v1";
+
+/** Whether a calendar you add starts shown on the calendar. Shown unless you've said otherwise. */
+export function readNewCalendarsShown(): boolean {
+  if (typeof window === "undefined") return true;
+  try { return window.localStorage.getItem(NEW_CALENDARS_SHOWN_KEY) !== "0"; }
+  catch { return true; }
+}
+
+export function writeNewCalendarsShown(shown: boolean): void {
+  try { window.localStorage.setItem(NEW_CALENDARS_SHOWN_KEY, shown ? "1" : "0"); }
+  catch { return; }
+}
+
+/** Hides a just-added calendar when new calendars start hidden. Imported, merged and user-made calendars share the mute list. */
+export function withNewCalendar(filter: CalendarSourceFilter, id: string, shown: boolean): CalendarSourceFilter {
+  if (shown || filter.mutedGoogleIds.includes(id)) return filter;
+  return { ...filter, mutedGoogleIds: [...filter.mutedGoogleIds, id] };
+}

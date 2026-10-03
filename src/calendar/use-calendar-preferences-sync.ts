@@ -15,6 +15,7 @@ import {
   writeImportedCalendars,
   writeMergedCalendars,
   writeAgentHiddenIds,
+  writeNewCalendarsShown,
   writeColorOverrides,
   writeSidePanelSections,
   writeSourceFilter,
@@ -33,6 +34,7 @@ export type CalendarPreferencesState = {
   importedCalendars: ImportedCalendar[];
   mergedCalendars: MergedCalendar[];
   agentHiddenCalendarIds: string[];
+  newCalendarsShown: boolean;
   localCalendars: LocalCalendar[];
   sources: CalendarSourceFilter;
   colors: CalendarColors;
@@ -47,6 +49,7 @@ function writeLocalCache(doc: UserCalendarPreferencesV1): void {
   writeImportedCalendars(doc.importedCalendars);
   writeMergedCalendars(doc.mergedCalendars);
   writeAgentHiddenIds(doc.agentHiddenCalendarIds);
+  writeNewCalendarsShown(doc.newCalendarsShown);
   writeLocalCalendars(doc.localCalendars);
   writeSourceFilter(doc.sources);
   writeCalendarColors(doc.colors);
@@ -69,6 +72,7 @@ type ApplyPatch = {
   setImportedCalendars: (calendars: ImportedCalendar[]) => void;
   setMergedCalendars: (calendars: MergedCalendar[]) => void;
   setAgentHiddenCalendarIds: (ids: string[]) => void;
+  setNewCalendarsShown: (shown: boolean) => void;
   setLocalCalendars: (calendars: LocalCalendar[]) => void;
   setSources: (sources: CalendarSourceFilter) => void;
   setColors: (colors: CalendarColors) => void;
@@ -83,6 +87,7 @@ function applyDoc(doc: UserCalendarPreferencesV1, apply: ApplyPatch): void {
   apply.setImportedCalendars(doc.importedCalendars);
   apply.setMergedCalendars(doc.mergedCalendars);
   apply.setAgentHiddenCalendarIds(doc.agentHiddenCalendarIds);
+  apply.setNewCalendarsShown(doc.newCalendarsShown);
   apply.setLocalCalendars(doc.localCalendars);
   apply.setSources(doc.sources);
   apply.setColors(doc.colors);
@@ -129,16 +134,16 @@ export function useCalendarPreferencesSync(ready: boolean, state: CalendarPrefer
     };
   }, [ready]);
 
-  const { view, importedCalendars, mergedCalendars, agentHiddenCalendarIds, localCalendars, sources, colors, colorOverrides, smartTags, navCollapsed, sidePanelSections } = state;
+  const { view, importedCalendars, mergedCalendars, agentHiddenCalendarIds, newCalendarsShown, localCalendars, sources, colors, colorOverrides, smartTags, navCollapsed, sidePanelSections } = state;
 
   useEffect(() => {
     if (!ready || skipSaveRef.current) return;
-    const doc = toDoc({ view, importedCalendars, mergedCalendars, agentHiddenCalendarIds, localCalendars, sources, colors, colorOverrides, smartTags, navCollapsed, sidePanelSections });
+    const doc = toDoc({ view, importedCalendars, mergedCalendars, agentHiddenCalendarIds, newCalendarsShown, localCalendars, sources, colors, colorOverrides, smartTags, navCollapsed, sidePanelSections });
     writeLocalCache(doc);
     window.clearTimeout(saveTimerRef.current);
     saveTimerRef.current = window.setTimeout(() => {
       void saveCalendarPreferences(doc).catch(() => undefined);
     }, SAVE_DEBOUNCE_MS);
     return () => window.clearTimeout(saveTimerRef.current);
-  }, [ready, view, importedCalendars, mergedCalendars, agentHiddenCalendarIds, localCalendars, sources, colors, colorOverrides, smartTags, navCollapsed, sidePanelSections]);
+  }, [ready, view, importedCalendars, mergedCalendars, agentHiddenCalendarIds, newCalendarsShown, localCalendars, sources, colors, colorOverrides, smartTags, navCollapsed, sidePanelSections]);
 }
