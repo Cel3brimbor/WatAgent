@@ -83,7 +83,8 @@ import { CalendarChatPanel } from "@/agent/calendar-chat-panel";
 import type { PendingAiChange } from "@/calendar/approval-client";
 import type { AgentEffort } from "@/agent/agent-effort";
 import { readAgentStream } from "@/agent/stream";
-import type { ChatMessage, ToolEventRecord } from "@/agent/types";
+import { cloneActivity } from "@/agent/agent-activity";
+import type { ActivityPart, ChatMessage, ThoughtSegment, ToolEventRecord } from "@/agent/types";
 import { apiFetch } from "@/shared/api-base";
 import { uid } from "@/shared/ids";
 import { ChevronLeftIcon, ChevronRightIcon, CloseIcon } from "@/shared/icons";
@@ -907,9 +908,12 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
     const userMessage: ChatMessage = { id: uid("msg"), role: "user", content: text.slice(0, 20_000), createdAt: Date.now() };
     const assistantId = uid("msg");
     const visible = reuseUser ? history : [...history, userMessage];
+    const parts: ActivityPart[] = [
+      { kind: "thought", thought: { id: uid("thought"), text: "", startedAt: Date.now() } },
+    ];
     calendar.setChatMessages([
       ...visible,
-      { id: assistantId, role: "assistant", content: "", createdAt: Date.now() },
+      { id: assistantId, role: "assistant", content: "", createdAt: Date.now(), activity: cloneActivity(parts) },
     ]);
     setStreamingAssistantId(assistantId);
     setBusy(true);
@@ -920,16 +924,56 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
     const bounds = localDayBounds(focus);
 
     let assistantText = "";
-    const toolEvents: ToolEventRecord[] = [];
     let announcedTool = "";
+    const THOUGHT_CAP = 16_000;
+
+    function thoughtTextLength(): number {
+      return parts.reduce((sum, part) => sum + (part.kind === "thought" ? part.thought.text.length : 0), 0);
+    }
+
+    function closeThought() {
+      const last = parts[parts.length - 1];
+      if (!last || last.kind !== "thought" || last.thought.seconds != null) return;
+      const elapsed = Date.now() - last.thought.startedAt;
+      last.thought.seconds = Math.max(1, Math.round(elapsed / 1000));
+      if (!last.thought.text.trim()) parts.pop();
+    }
+
+    function appendThought(chunk: string) {
+      if (!chunk || thoughtTextLength() >= THOUGHT_CAP) return;
+      let last = parts[parts.length - 1];
+      if (!last || last.kind !== "thought" || last.thought.seconds != null) {
+        const thought: ThoughtSegment = { id: uid("thought"), text: "", startedAt: Date.now() };
+        parts.push({ kind: "thought", thought });
+        last = parts[parts.length - 1];
+      }
+      if (!last || last.kind !== "thought") return;
+      const room = THOUGHT_CAP - thoughtTextLength();
+      last.thought.text += chunk.slice(0, room);
+    }
+
+    function toolEvents(): ToolEventRecord[] {
+      return parts.flatMap((part) => (part.kind === "tools" ? part.events : []));
+    }
+
+    function toolGroup(): Extract<ActivityPart, { kind: "tools" }> {
+      closeThought();
+      const last = parts[parts.length - 1];
+      if (last?.kind === "tools") return last;
+      const group: Extract<ActivityPart, { kind: "tools" }> = { kind: "tools", events: [] };
+      parts.push(group);
+      return group;
+    }
+
     const writeAssistant = () => {
+      const activity = cloneActivity(parts);
       calendar.setChatMessages(
         currentMessages().map((message) =>
           message.id === assistantId
             ? {
                 ...message,
                 content: assistantText,
-                toolEvents: toolEvents.length > 0 ? toolEvents.map((event) => ({ ...event })) : undefined,
+                activity: activity.length > 0 ? activity : undefined,
               }
             : message,
         ),
@@ -972,7 +1016,18 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
         res,
         (event) => {
           if (event.type === "content") {
+            closeThought();
             assistantText += event.content;
+            schedule();
+            return;
+          }
+          if (event.type === "reasoning") {
+            const chunk = event.content;
+            const open = [...parts].reverse().find((part) => part.kind === "thought" && part.thought.seconds == null);
+            const current = open?.kind === "thought" ? open.thought.text : "";
+            if (current && chunk.startsWith(current)) {
+              if (open?.kind === "thought") open.thought.text = chunk.slice(0, THOUGHT_CAP);
+            } else appendThought(chunk);
             schedule();
             return;
           }
@@ -983,11 +1038,12 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
           if (event.state === "calling") {
             const callLabel = event.callLabel || announcedTool;
             announcedTool = "";
+            const events = toolEvents();
             const duplicate =
               event.name === "list_calendar_items" &&
-              toolEvents.some((entry) => entry.tool === event.name && entry.callLabel === callLabel);
+              events.some((entry) => entry.tool === event.name && entry.callLabel === callLabel);
             if (!duplicate) {
-              toolEvents.push({
+              toolGroup().events.push({
                 id: uid("tool"),
                 tool: event.name,
                 state: "calling",
@@ -995,7 +1051,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
               });
             }
           } else {
-            const pending = [...toolEvents]
+            const pending = [...toolEvents()]
               .reverse()
               .find((entry) => entry.tool === event.name && entry.state === "calling");
             if (pending) {
@@ -1017,6 +1073,8 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
       if (err instanceof DOMException && err.name === "AbortError") return;
       setError(err instanceof Error ? err.message : "An unexpected error occurred");
     } finally {
+      closeThought();
+      writeAssistant();
       setBusy(false);
       setStreamingAssistantId(null);
       calendar.persistActiveChat();

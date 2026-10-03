@@ -98,6 +98,7 @@ export function TimelineStrip({ item, compact, layout = "inline", onOpen, onComp
       type="button"
       data-calendar-item={item.id}
       className={`calendar-strip is-${item.kind}${item.completed ? " is-done" : ""}${item.pendingApproval ? " is-pending" : ""}${verb ? ` is-pending-${verb}` : ""}${item.editorDraft ? " is-editor-draft" : ""}${compact ? " is-compact" : ""}${layoutClass}`}
+      aria-label={verb ? `${VERB_LABEL[verb]}, pending: ${item.title}` : undefined}
       title={item.smartTag ? `${item.title} · ${item.smartTag.name}` : undefined}
       style={stripColorStyle(item.smartTag?.color ?? item.calendarColor)}
       onClick={(event) => {
@@ -105,11 +106,6 @@ export function TimelineStrip({ item, compact, layout = "inline", onOpen, onComp
           onOpen(item, event.currentTarget.getBoundingClientRect());
         }}
     >
-      {verb ? (
-        <span className={`calendar-strip-mark is-${verb}`}>
-          <span className="calendar-strip-mark-label">{VERB_LABEL[verb]}</span>
-        </span>
-      ) : null}
       {item.kind === "task" ? (
         <span
           className={`calendar-strip-check${item.completed ? " is-checked" : ""}`}

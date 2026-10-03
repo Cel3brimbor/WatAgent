@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import type { PendingAiChange } from "@/calendar/approval-client";
 import { formatDayHeading, formatTime } from "@/calendar/date-utils";
 import type { CalendarItemKind, CalendarItemMeta } from "@/calendar/types";
-import { ChevronRightIcon, RedoIcon } from "@/shared/icons";
+import { ChevronRightIcon } from "@/shared/icons";
 import { Disclosure } from "@/shared/disclosure";
 import { usePresence } from "@/shared/use-presence";
 import { useFlip } from "@/shared/use-flip";
@@ -76,28 +76,6 @@ function editDiffs(change: PendingAiChange): DiffLine[] {
 }
 
 const VERB_NAME: Record<ChangeVerb, string> = { add: "Added", delete: "Removed", edit: "Updated" };
-
-function Sign({ verb }: { verb: ChangeVerb }) {
-  if (verb === "add") {
-    return (
-      <span className="ai-approval-sign is-add" title="Addition">
-        +
-      </span>
-    );
-  }
-  if (verb === "delete") {
-    return (
-      <span className="ai-approval-sign is-delete" title="Removal">
-        −
-      </span>
-    );
-  }
-  return (
-    <span className="ai-approval-sign is-edit" title="Update">
-      <RedoIcon />
-    </span>
-  );
-}
 
 export function AiApprovalPanel({
   items,
@@ -182,7 +160,6 @@ export function AiApprovalPanel({
                   aria-label={`${VERB_NAME[verb]}: ${change.title}. Show on calendar`}
                   onClick={() => onInspect(change)}
                 >
-                  <Sign verb={verb} />
                   <span className="ai-approval-title">{change.title}</span>
                   <span className="ai-approval-when">{whenLabel(change)}</span>
                 </button>

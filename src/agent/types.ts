@@ -8,11 +8,24 @@ export type ToolEventRecord = {
   resultSummary?: string;
 };
 
+export type ThoughtSegment = {
+  id: string;
+  text: string;
+  startedAt: number;
+  /**set once this thought stops, before a tool call or the answer*/
+  seconds?: number;
+};
+
+export type ActivityPart =
+  | { kind: "thought"; thought: ThoughtSegment }
+  | { kind: "tools"; events: ToolEventRecord[] };
+
 export type ChatMessage = {
   id: string;
   role: "user" | "assistant";
   content: string;
   createdAt?: number;
+  activity?: ActivityPart[];
   toolEvents?: ToolEventRecord[];
 };
 

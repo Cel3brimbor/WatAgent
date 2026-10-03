@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { ToolEventRecord } from "@/agent/types";
 import { AlertIcon, CheckIcon, ChevronRightIcon, ToolIcon } from "@/shared/icons";
 import { Disclosure } from "@/shared/disclosure";
@@ -37,15 +37,18 @@ function StateGlyph({ state }: { state: ToolEventRecord["state"] }) {
   return <ToolIcon />;
 }
 
-export function AgentThinkingBlock({ events }: { events?: ToolEventRecord[] }) {
+export function AgentThinkingBlock({ events, active = true }: { events?: ToolEventRecord[]; active?: boolean }) {
   const steps = events ?? [];
   const toolBusy = steps.some((event) => event.state === "calling");
   const [open, setOpen] = useState(true);
   const panelId = useId();
+  const activeRef = useRef(active);
 
   useEffect(() => {
     if (toolBusy) setOpen(true);
-  }, [toolBusy]);
+    else if (activeRef.current && !active) setOpen(false);
+    activeRef.current = active;
+  }, [toolBusy, active]);
 
   if (steps.length === 0) return null;
 

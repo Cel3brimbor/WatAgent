@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import type { AgentEffort } from "@/agent/agent-effort";
 import { useAgentEffort } from "@/agent/use-agent-effort";
-import { AgentThinkingBlock } from "@/agent/agent-thinking-block";
+import { AgentActivity } from "@/agent/agent-activity";
 import { ChatBubbleTools } from "@/agent/bubble-tools";
 import { ChatComposer } from "@/agent/chat-composer";
 import { ChatTabStrip } from "@/agent/chat-tab-strip";
@@ -198,7 +198,7 @@ export function CalendarChatPanel({
                     >
                       <span className="bubble-role">{m.role === "user" ? "You" : "WatAgent"}</span>
                       <div className="bubble-body">
-                        <AgentThinkingBlock events={m.toolEvents} />
+                        <AgentActivity parts={m.activity} streaming={streaming && !m.content.trim()} />
                         {editing ? (
                           <>
                             <textarea

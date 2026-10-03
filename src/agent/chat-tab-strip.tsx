@@ -16,9 +16,9 @@ import {
   useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { ChatHistoryPanel } from "@/agent/chat-history-panel";
 import {
   ContextMenu,
-  menuStateFromElement,
   type ContextMenuItem,
   type ContextMenuState,
 } from "@/shared/context-menu";
@@ -30,6 +30,7 @@ export type ChatTabSession = {
   id: string;
   title: string;
   open: boolean;
+  updatedAt?: number;
 };
 
 type Props = {
@@ -57,8 +58,10 @@ export function ChatTabStrip({
   onReorderChats,
   onStop,
 }: Props) {
-  const [historyMenu, setHistoryMenu] = useState<ContextMenuState>(null);
+  const historyBtnRef = useRef<HTMLButtonElement>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [tabMenu, setTabMenu] = useState<(ContextMenuState & { chatId: string }) | null>(null);
+  const [historyRowMenu, setHistoryRowMenu] = useState<(ContextMenuState & { chatId: string }) | null>(null);
   const [pendingDelete, setPendingDelete] = useState<ChatTabSession | null>(null);
   const deletePresence = usePresence(pendingDelete);
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -67,12 +70,14 @@ export function ChatTabStrip({
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
   const openChats = chats.filter((chat) => chat.open);
-  const closedChats = chats.filter((chat) => !chat.open);
+  const closedChats = chats
+    .filter((chat) => !chat.open)
+    .sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
   const openIds = openChats.map((chat) => chat.id);
 
   const closeMenus = useCallback(() => {
-    setHistoryMenu(null);
     setTabMenu(null);
+    setHistoryRowMenu(null);
   }, []);
 
   function startRename(chat: ChatTabSession) {
@@ -91,6 +96,11 @@ export function ChatTabStrip({
     if (title) onRenameChat(chatId, title);
   }
 
+  function cancelRename() {
+    skipRenameCommit.current = true;
+    setRenamingId(null);
+  }
+
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
@@ -100,27 +110,17 @@ export function ChatTabStrip({
     onReorderChats(arrayMove(openIds, from, to));
   }
 
-  const tabMenuItems: ContextMenuItem[] = (() => {
-    if (!tabMenu) return [];
-    const chat = chats.find((item) => item.id === tabMenu.chatId);
+  function menuItemsForChat(chatId: string): ContextMenuItem[] {
+    const chat = chats.find((item) => item.id === chatId);
     if (!chat) return [];
     return [
       { id: "rename", label: "Rename", onSelect: () => startRename(chat) },
       { id: "delete", label: "Delete", danger: true, onSelect: () => setPendingDelete(chat) },
     ];
-  })();
+  }
 
-  const historyItems: ContextMenuItem[] =
-    closedChats.length === 0
-      ? [{ id: "empty", label: "No closed chats", disabled: true, onSelect: () => undefined }]
-      : closedChats.map((chat) => ({
-          id: chat.id,
-          label: chat.title,
-          onSelect: () => {
-            onStop();
-            onReopenChat(chat.id);
-          },
-        }));
+  const tabMenuItems = tabMenu ? menuItemsForChat(tabMenu.chatId) : [];
+  const historyRowMenuItems = historyRowMenu ? menuItemsForChat(historyRowMenu.chatId) : [];
 
   return (
     <>
@@ -137,10 +137,7 @@ export function ChatTabStrip({
                   renameDraft={renameDraft}
                   onRenameDraft={setRenameDraft}
                   onCommitRename={() => commitRename(chat.id)}
-                  onCancelRename={() => {
-                    skipRenameCommit.current = true;
-                    setRenamingId(null);
-                  }}
+                  onCancelRename={cancelRename}
                   onSelect={() => {
                     if (chat.id === activeChatId) return;
                     onStop();
@@ -154,6 +151,7 @@ export function ChatTabStrip({
                     event.preventDefault();
                     event.stopPropagation();
                     closeMenus();
+                    setHistoryOpen(false);
                     setTabMenu({ x: event.clientX, y: event.clientY, chatId: chat.id });
                   }}
                 />
@@ -167,6 +165,7 @@ export function ChatTabStrip({
             title="New chat"
             onClick={() => {
               closeMenus();
+              setHistoryOpen(false);
               onStop();
               onNewChat();
             }}
@@ -175,13 +174,16 @@ export function ChatTabStrip({
           </button>
         </div>
         <button
+          ref={historyBtnRef}
           type="button"
           className="chat-history"
           aria-label="Closed chats"
           title="Closed chats"
-          onClick={(event) => {
+          aria-expanded={historyOpen}
+          aria-haspopup="dialog"
+          onClick={() => {
             closeMenus();
-            setHistoryMenu(menuStateFromElement(event.currentTarget));
+            setHistoryOpen((open) => !open);
           }}
         >
           <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden>
@@ -197,7 +199,29 @@ export function ChatTabStrip({
           </svg>
         </button>
       </div>
-      <ContextMenu state={historyMenu} onClose={closeMenus} items={historyItems} />
+      <ChatHistoryPanel
+        open={historyOpen}
+        anchorRef={historyBtnRef}
+        chats={closedChats}
+        renamingId={renamingId}
+        renameDraft={renameDraft}
+        rowMenu={historyRowMenu}
+        onClose={() => {
+          setHistoryOpen(false);
+          setHistoryRowMenu(null);
+        }}
+        onRenameDraft={setRenameDraft}
+        onCommitRename={commitRename}
+        onCancelRename={cancelRename}
+        onReopen={(chatId) => {
+          onStop();
+          onReopenChat(chatId);
+          setHistoryOpen(false);
+          setHistoryRowMenu(null);
+        }}
+        onRowMenu={setHistoryRowMenu}
+        rowMenuItems={historyRowMenuItems}
+      />
       <ContextMenu state={tabMenu} onClose={closeMenus} items={tabMenuItems} />
       {deletePresence.value ? (
         <ConfirmDialog

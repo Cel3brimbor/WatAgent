@@ -146,3 +146,21 @@ export function SystemIcon(props: IconProps) {
     </Glyph>
   );
 }
+
+export function DotsVerticalIcon({ className }: IconProps) {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      width="16"
+      height="16"
+      aria-hidden="true"
+      focusable="false"
+      fill="currentColor"
+      className={className ? `glyph ${className}` : "glyph"}
+    >
+      <circle cx="8" cy="3.2" r="1.15" />
+      <circle cx="8" cy="8" r="1.15" />
+      <circle cx="8" cy="12.8" r="1.15" />
+    </svg>
+  );
+}

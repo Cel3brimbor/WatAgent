@@ -12,6 +12,7 @@ export type CalendarChange = {
 
 export type AgentStreamEvent =
   | { type: "content"; content: string }
+  | { type: "reasoning"; content: string }
   | { type: "status"; label: string }
   | {
       type: "tool";
@@ -44,6 +45,9 @@ function eventOf(raw: unknown): AgentStreamEvent | null {
   const rec = raw as Record<string, unknown>;
   if (rec.type === "content" && typeof rec.content === "string") {
     return { type: "content", content: rec.content };
+  }
+  if (rec.type === "reasoning" && typeof rec.content === "string" && rec.content) {
+    return { type: "reasoning", content: rec.content.slice(0, 8_000) };
   }
   if (rec.type === "status" && typeof rec.label === "string") {
     return { type: "status", label: rec.label.slice(0, 120) };
