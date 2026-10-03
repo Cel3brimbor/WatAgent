@@ -800,7 +800,7 @@ export function CalendarMap({ label, nodes, edges, functions, nodeDrop, layoutSt
                       aria-pressed={selected}
                       aria-disabled={typeof answer === "string" || undefined}
                       aria-label={spokenNode(node)}
-                      title={typeof answer === "string" ? answer : undefined}
+                      title={typeof answer === "string" ? answer : node.label}
                       {...nodeDrag.bind(node.id)}
                       onClick={(event) => {
                         if (event.detail === 0) activateNode(node.id);

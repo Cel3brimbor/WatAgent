@@ -17,6 +17,8 @@ type Props = {
   onApproveAll: () => void;
   onRejectAll: () => void;
   onInspect: (change: PendingAiChange) => void;
+  /** Agent rule names by id, to say which rule proposed a change. */
+  ruleNames?: Record<string, string>;
 };
 
 type ChangeVerb = "add" | "delete" | "edit";
@@ -85,6 +87,7 @@ export function AiApprovalPanel({
   onApproveAll,
   onRejectAll,
   onInspect,
+  ruleNames,
 }: Props) {
   //keep the last batch on screen while the panel slides away
   const presence = usePresence(items.length > 0 ? items : null);
@@ -162,6 +165,9 @@ export function AiApprovalPanel({
                 >
                   <span className="ai-approval-title">{change.title}</span>
                   <span className="ai-approval-when">{whenLabel(change)}</span>
+                  {change.ruleId ? (
+                    <span className="ai-approval-rule">From your rule {ruleNames?.[change.ruleId] ?? "for an imported calendar"}</span>
+                  ) : null}
                 </button>
                 <div className="ai-approval-row-actions">
                   <button type="button" className="ghost-btn" disabled={busy} onClick={() => onReject(change.id)}>

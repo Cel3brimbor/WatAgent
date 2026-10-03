@@ -1,6 +1,17 @@
 "use client";
 
 import { useId, useMemo, useState, type Dispatch, type SetStateAction } from "react";
+import { RuleEditor } from "@/agent/rules/rule-editor";
+import {
+  deleteAgentRule,
+  runAgentRules,
+  ruleRunSummary,
+  updateAgentRule,
+  type AgentRule,
+  type AgentRuleDraft,
+  type RuleFeed,
+} from "@/agent/rules/rules-client";
+import type { AgentRulesState } from "@/agent/rules/use-agent-rules";
 import {
   CalendarMap,
   createLocalLayoutStore,
@@ -26,8 +37,10 @@ import type {
   CalendarPrioritySource,
   ImportedCalendarSource,
 } from "@/calendar/types";
-import { ChatIcon, EyeOffIcon, LockIcon, ShieldCheckIcon, SyncIcon, TrophyIcon } from "@/shared/icons";
+import { ConfirmDialog } from "@/shared/confirm-dialog";
+import { ChatIcon, EyeOffIcon, LockIcon, RouteIcon, ShieldCheckIcon, SyncIcon, TrophyIcon } from "@/shared/icons";
 import { Switch } from "@/shared/switch";
+import { usePresence } from "@/shared/use-presence";
 
 const layoutStore = createLocalLayoutStore("watagent.calendarMap.layout.v1");
 const AGENT = "agent";
@@ -54,6 +67,11 @@ type Props = {
   onRefresh: () => Promise<void>;
   onSyncGoogle: () => Promise<number | null>;
   onAskAgent: (calendarId: string) => void;
+  rules: AgentRule[];
+  rulesStatus: AgentRulesState["status"];
+  onRulesChanged: () => Promise<void>;
+  onRefreshPending: () => Promise<void>;
+  onNotice: (message: string) => void;
 };
 
 //map nodes use the app's calendar ids: events, tasks, cal-<uuid>, ics:<feed>, plus the Google aggregate
@@ -76,6 +94,16 @@ function plural(count: number, noun: string): string {
   return `${count} ${noun}${count === 1 ? "" : "s"}`;
 }
 
+const RELATIVE = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
+
+function ago(at: number): string {
+  const minutes = Math.round((at - Date.now()) / 60000);
+  if (Math.abs(minutes) < 60) return RELATIVE.format(minutes, "minute");
+  const hours = Math.round(minutes / 60);
+  if (Math.abs(hours) < 24) return RELATIVE.format(hours, "hour");
+  return RELATIVE.format(Math.round(hours / 24), "day");
+}
+
 export function CalendarMapSection({
   items,
   overlayEvents,
@@ -96,9 +124,18 @@ export function CalendarMapSection({
   onRefresh,
   onSyncGoogle,
   onAskAgent,
+  rules,
+  rulesStatus,
+  onRulesChanged,
+  onRefreshPending,
+  onNotice,
 }: Props) {
   const toggleId = useId();
   const [syncing, setSyncing] = useState<string[]>([]);
+  const [editor, setEditor] = useState<{ rule?: AgentRule; initial?: Partial<AgentRuleDraft> } | null>(null);
+  const [deleting, setDeleting] = useState<AgentRule | null>(null);
+  const editorPresence = usePresence(editor);
+  const deletePresence = usePresence(deleting);
   const groups = calendarGroupsOf(sources.groups);
 
   const feeds = useMemo(
@@ -306,9 +343,27 @@ export function CalendarMapSection({
         ],
       });
     }
+    //an Agent rule: from the feed it watches to the calendar it adds to, with its name on the line
+    for (const rule of rules) {
+      const from = externalCalendarId(rule.sourceFeed);
+      const to = rule.targetCalendarId;
+      if (!nodes.some((node) => node.id === from) || !nodes.some((node) => node.id === to)) continue;
+      list.push({
+        id: `rule:${rule.id}`,
+        from,
+        to,
+        via: { label: rule.name },
+        directed: true,
+        dash: "dotted",
+        tone: "accent",
+        faint: !rule.enabled,
+        details: ruleDetails(rule),
+        actions: ruleActions(rule),
+      });
+    }
     return list;
     // eslint-disable-next-line react-hooks/exhaustive-deps -- every input the helpers read is listed
-  }, [nodes, priorityOrder, overlaps, showDuplicateEvents, counts, sources]);
+  }, [nodes, priorityOrder, overlaps, showDuplicateEvents, counts, sources, rules]);
 
   function outrank(winner: CalendarPrioritySource, loser: CalendarPrioritySource): MapChange {
     const [winnerName, loserName] = [nameOf(nodeIdOf(winner)), nameOf(nodeIdOf(loser))];
@@ -351,6 +406,61 @@ export function CalendarMapSection({
       setSyncing((current) => current.filter((entry) => entry !== id));
     }
   }
+
+  function ruleDetails(rule: AgentRule): string[] {
+    const run = rule.lastRun;
+    const did = run
+      ? run.status === "failed"
+        ? `Last run ${ago(run.startedAt)} didn't finish${run.error ? `: ${run.error}` : "."}`
+        : `Last ran ${ago(run.startedAt)}: ${[`${run.added} added`, run.updated ? `${run.updated} updated` : null, run.removed ? `${run.removed} removed` : null, `${run.skipped} skipped`].filter(Boolean).join(", ")}.`
+      : "Hasn't run yet. It runs whenever the feed syncs, or use Run now.";
+    return [
+      `“${rule.instruction}”`,
+      `Watches ${nameOf(externalCalendarId(rule.sourceFeed))}${rule.titleContains ? ` for titles containing “${rule.titleContains}”` : ""} up to ${rule.lookaheadDays} days ahead, and adds to ${nameOf(rule.targetCalendarId)}.`,
+      rule.requireApproval ? "Asks before adding." : "Adds without asking.",
+      did,
+      ...(rule.enabled ? [] : ["Paused: it won't run when the feed syncs."]),
+    ];
+  }
+
+  function ruleActions(rule: AgentRule) {
+    return [
+      {
+        id: "run",
+        label: "Run now",
+        run: async (): Promise<MapChange> => {
+          const [line] = await runAgentRules({ id: rule.id });
+          await Promise.all([onRulesChanged(), onRefresh(), onRefreshPending()]);
+          return { message: (line && ruleRunSummary(line)) ?? `${rule.name}: nothing new to add` };
+        },
+      },
+      {
+        id: "pause",
+        label: rule.enabled ? "Pause" : "Resume",
+        run: async (): Promise<MapChange> => {
+          await updateAgentRule(rule.id, { enabled: !rule.enabled });
+          await onRulesChanged();
+          return {
+            message: rule.enabled ? `${rule.name} paused` : `${rule.name} resumed`,
+            undo: () => void updateAgentRule(rule.id, { enabled: rule.enabled }).then(onRulesChanged, () => undefined),
+          };
+        },
+      },
+      { id: "edit", label: "Edit", run: () => setEditor({ rule }) },
+      { id: "delete", label: "Delete", run: () => setDeleting(rule) },
+    ];
+  }
+
+  const ruleFeeds = feeds
+    .map((feed) => feedSourceOf(feed.id))
+    .filter((feed): feed is RuleFeed => feed != null && Boolean(calendarLinks[feed]))
+    .map((feed) => ({ feed, name: nameOf(externalCalendarId(feed)) }));
+  const ruleCalendars = localCalendars.map((calendar) => ({
+    id: calendar.id,
+    name: calendar.name,
+    kind: calendar.kind,
+    readOnly: readOnly(calendar.id),
+  }));
 
   const functions: MapFunction[] = [
     {
@@ -456,6 +566,34 @@ export function CalendarMapSection({
         };
       },
     },
+    ...(rulesStatus === "unavailable"
+      ? []
+      : [
+          {
+            id: "rule",
+            kind: "link" as const,
+            label: "Agent rule",
+            group: "Agent",
+            icon: <RouteIcon />,
+            prompt: "choose the imported calendar to watch, then the WatAgent calendar to add to",
+            drawable: true,
+            acceptsFrom: (id: string) => {
+              const feed = feedSourceOf(id);
+              if (!feed) return "Agent rules watch an imported calendar, like LEARN or Portal.";
+              if (!calendarLinks[feed]) return `${nameOf(id)} has no calendar link to watch.`;
+              return rules.length >= 10 ? "You can have up to 10 Agent rules." : true;
+            },
+            accepts: (from: string, to: string) => {
+              if (!feedSourceOf(from)) return "Agent rules watch an imported calendar, like LEARN or Portal.";
+              if (!isLocal(to)) return "Agent rules add to WatAgent calendars.";
+              if (readOnly(to)) return `${nameOf(to)} is read only.`;
+              return rules.length >= 10 ? "You can have up to 10 Agent rules." : true;
+            },
+            apply: (from: string, to: string) => {
+              setEditor({ initial: { sourceFeed: feedSourceOf(from)!, targetCalendarId: to } });
+            },
+          },
+        ]),
   ];
 
   //dragging a WatAgent calendar onto the Agent asks about it
@@ -467,21 +605,65 @@ export function CalendarMapSection({
     },
   };
 
+  const shownEditor = editorPresence.value;
+  const shownDeleting = deletePresence.value;
+
   return (
-    <CalendarMap
-      label="Calendar map"
-      nodes={nodes}
-      edges={edges}
-      functions={functions}
-      nodeDrop={nodeDrop}
-      layoutStore={layoutStore}
-      hint="Drag a function onto a calendar. To choose whose copy of a shared event shows, drag from LEARN, Portal or Google's handle onto another."
-      toolbar={
-        <div className="settings-toggle calendar-map-toggle">
-          <label htmlFor={toggleId}>Hide duplicate copies</label>
-          <Switch id={toggleId} checked={!showDuplicateEvents} onChange={(checked) => onShowDuplicateEvents(!checked)} />
-        </div>
-      }
-    />
+    <>
+      <CalendarMap
+        label="Calendar map"
+        nodes={nodes}
+        edges={edges}
+        functions={functions}
+        nodeDrop={nodeDrop}
+        layoutStore={layoutStore}
+        hint="Drag a function onto a calendar. Drawing from a feed's handle to another feed chooses whose copy of a shared event shows; to a WatAgent calendar, it makes an Agent rule."
+        toolbar={
+          <div className="settings-toggle calendar-map-toggle">
+            <label htmlFor={toggleId}>Hide duplicate copies</label>
+            <Switch id={toggleId} checked={!showDuplicateEvents} onChange={(checked) => onShowDuplicateEvents(!checked)} />
+          </div>
+        }
+      />
+      {shownEditor ? (
+        <RuleEditor
+          key={shownEditor.rule?.id ?? "new"}
+          rule={shownEditor.rule}
+          initial={shownEditor.initial}
+          feeds={ruleFeeds}
+          calendars={ruleCalendars}
+          open={editorPresence.open}
+          onCancel={() => setEditor(null)}
+          onSaved={(saved) => {
+            setEditor(null);
+            void onRulesChanged();
+            onNotice(
+              shownEditor.rule
+                ? `${saved.name} saved`
+                : `${saved.name} saved. It runs the next time ${nameOf(externalCalendarId(saved.sourceFeed))} syncs, or use Run now on its line.`,
+            );
+          }}
+        />
+      ) : null}
+      {shownDeleting ? (
+        <ConfirmDialog
+          title={`Delete ${shownDeleting.name}?`}
+          message="It stops running. Anything it already added stays on your calendar."
+          confirmLabel="Delete rule"
+          open={deletePresence.open}
+          onCancel={() => setDeleting(null)}
+          onConfirm={() => {
+            const doomed = shownDeleting;
+            setDeleting(null);
+            void deleteAgentRule(doomed.id)
+              .then(() => {
+                onNotice(`${doomed.name} deleted`);
+                return onRulesChanged();
+              })
+              .catch((err: unknown) => onNotice(err instanceof Error ? err.message : "The rule wasn't deleted. Try again."));
+          }}
+        />
+      ) : null}
+    </>
   );
 }
