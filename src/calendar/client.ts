@@ -1,5 +1,5 @@
 import { ApiError, apiFetch, apiJson } from "@/shared/api-base";
-import { parseCalendarMeta, type CalendarItemDoc, type CalendarItemMeta } from "@/calendar/types";
+import { isFeedId, parseCalendarMeta, type CalendarItemDoc, type CalendarItemMeta, type ImportedCalendarSource } from "@/calendar/types";
 
 function timeZone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
@@ -72,7 +72,7 @@ export type CalendarImportProgress = { done: number; total: number | null };
 export type CalendarImportResult = {
   imported: number; added: number; updated: number; unchanged: number; removed: number;
   existed: boolean;
-  source: "learn" | "portal" | "other";
+  source: ImportedCalendarSource;
 };
 
 function importErrorMessage(payload: unknown, fallback: string): string {
@@ -81,7 +81,7 @@ function importErrorMessage(payload: unknown, fallback: string): string {
 }
 
 export async function importCalendarLink(
-  input: { url: string; rangeStartUTC: number; rangeEndUTC: number; source?: "auto" | "learn" | "portal" | "other" },
+  input: { url: string; feedId: ImportedCalendarSource; rangeStartUTC: number; rangeEndUTC: number },
   onProgress?: (progress: CalendarImportProgress) => void,
 ): Promise<CalendarImportResult> {
   const res = await apiFetch("/api/calendar/import", {
@@ -106,7 +106,7 @@ export async function importCalendarLink(
     if (event.type === "progress" && typeof event.done === "number") {
       onProgress?.({ done: event.done, total: typeof event.total === "number" ? event.total : null });
     }
-    if (event.type === "done" && (event.source === "learn" || event.source === "portal" || event.source === "other")) {
+    if (event.type === "done" && isFeedId(event.source)) {
       result = {
         imported: Number(event.imported) || 0,
         added: Number(event.added) || 0,
@@ -135,6 +135,6 @@ export async function importCalendarLink(
   return result;
 }
 
-export async function removeImportedCalendar(source: "learn" | "portal"): Promise<{ calendarPriorityOrder: ("learn" | "portal")[] }> {
-  return apiJson("/api/calendar/import", { method: "DELETE", body: JSON.stringify({ source }) });
+export async function removeImportedCalendar(source: ImportedCalendarSource): Promise<void> {
+  await apiJson("/api/calendar/import", { method: "DELETE", body: JSON.stringify({ source }) });
 }

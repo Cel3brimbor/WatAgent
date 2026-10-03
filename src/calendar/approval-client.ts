@@ -11,6 +11,8 @@ export type PendingAiChange = {
   calendar?: CalendarItemMeta;
   previousTitle?: string;
   previousCalendar?: CalendarItemMeta;
+  /** Set when an Agent rule proposed it. */
+  ruleId?: string;
   createdAt: number;
 };
 
@@ -28,6 +30,7 @@ function pendingOf(raw: unknown): PendingAiChange | null {
     calendar,
     previousTitle: typeof rec.previousTitle === "string" ? rec.previousTitle.slice(0, 200) : undefined,
     previousCalendar: parseCalendarMeta(rec.previousCalendar),
+    ruleId: typeof rec.ruleId === "string" ? rec.ruleId : undefined,
     createdAt: Number(rec.createdAt) || Date.now(),
   };
 }
