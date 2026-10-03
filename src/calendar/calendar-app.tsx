@@ -83,6 +83,8 @@ import {
 import { useAppearanceSync } from "@/calendar/use-appearance-sync";
 import { SideNav, type AppSection } from "@/calendar/side-nav";
 import { CalendarMapSection } from "@/calendar/calendar-map-section";
+import { onRulesRan, ruleRunSummary } from "@/agent/rules/rules-client";
+import { useAgentRules } from "@/agent/rules/use-agent-rules";
 import { TodoList } from "@/calendar/todo-list";
 import { CalendarChatPanel } from "@/agent/calendar-chat-panel";
 import type { PendingAiChange } from "@/calendar/approval-client";
@@ -325,11 +327,29 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
   const weekStartsOn = useMemo(() => localeWeekStartsOn(), []);
   const [chatOpen, setChatOpen] = useState(false);
   const [attachRequest, setAttachRequest] = useState<{ id: string; nonce: number } | null>(null);
+  const agentRules = useAgentRules();
+  const ruleNames = useMemo(
+    () => Object.fromEntries(agentRules.rules.map((rule) => [rule.id, rule.name])),
+    [agentRules.rules],
+  );
   const [chatResizing, setChatResizing] = useState(false);
   const [draft, setDraft] = useState<CalendarDraft | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const { refresh: refreshCalendar, refreshPending } = calendar;
+  const reloadRules = agentRules.reload;
+
+  //rules that ran after a feed sync: say what they did and show their new items
+  useEffect(
+    () =>
+      onRulesRan(({ lines }) => {
+        const message = lines.map(ruleRunSummary).filter(Boolean).join(" · ");
+        if (message) setNotice(message);
+        void Promise.all([refreshCalendar(), refreshPending(), reloadRules()]);
+      }),
+    [refreshCalendar, refreshPending, reloadRules],
+  );
   const [streamingAssistantId, setStreamingAssistantId] = useState<string | null>(null);
   const [googlePeek, setGooglePeek] = useState<{ item: TimelineItem; anchor: DOMRect } | null>(null);
   const [googleDelete, setGoogleDelete] = useState<(GoogleDraftTarget & { title: string }) | null>(null);
@@ -1383,6 +1403,11 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
                   setChatOpen(true);
                   setAttachRequest({ id, nonce: Date.now() });
                 }}
+                rules={agentRules.rules}
+                rulesStatus={agentRules.status}
+                onRulesChanged={agentRules.reload}
+                onRefreshPending={calendar.refreshPending}
+                onNotice={setNotice}
               />
             ) : null}
             {section === "settings" ? (
@@ -1511,6 +1536,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
           }
           onInspectPending={revealPending}
           attachRequest={attachRequest}
+          ruleNames={ruleNames}
           onEditCalendarItem={(item) => {
             const calId = calendarIdForMeta(item.calendar);
             if (calId && isCalendarReadOnly(sources, calId)) return;

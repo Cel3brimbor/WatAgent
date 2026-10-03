@@ -1,3 +1,4 @@
+import { runRulesAfterSync } from "@/agent/rules/rules-client";
 import { importCalendarLink, type CalendarImportProgress, type CalendarImportResult } from "@/calendar/client";
 import { academicImportRange } from "@/calendar/calendar-import-panel";
 import type { ImportedCalendarSource } from "@/calendar/types";
@@ -26,7 +27,10 @@ export async function syncImportedFeed(
   onProgress?: (progress: CalendarImportProgress) => void,
 ): Promise<CalendarImportResult> {
   const { rangeStartUTC, rangeEndUTC } = academicImportRangeUtc();
-  return importCalendarLink({ url, source, rangeStartUTC, rangeEndUTC }, onProgress);
+  const result = await importCalendarLink({ url, source, rangeStartUTC, rangeEndUTC }, onProgress);
+  //fresh events may be what an Agent rule is waiting for; they run in the background
+  runRulesAfterSync(result.source);
+  return result;
 }
 
 export function feedSyncProgressLabel(name: string, progress: CalendarImportProgress): string {

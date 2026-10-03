@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import { runRulesAfterSync } from "@/agent/rules/rules-client";
 import { importCalendarLink, type CalendarImportProgress } from "@/calendar/client";
 import { detectCalendarLink, isCalendarLink } from "@/calendar/calendar-priority";
 import type { CalendarFeedSource } from "@/calendar/types";
@@ -67,6 +68,7 @@ export function CalendarImportPanel({ onImported }: {
         setProgress,
       );
       await onImported(imported.source, link);
+      runRulesAfterSync(imported.source);
       const noun = (value: number) => `event${value === 1 ? "" : "s"}`;
       setResult(imported.imported === 0 && imported.removed === 0
         ? "No events found in this date range."
