@@ -17,7 +17,7 @@ const layout = createLocalLayoutStore("my-app.map.v1");
 
 <CalendarMap
   label="Calendar map"
-  nodes={nodes}         // MapNode[]: id, label, color, group ("hub" | "left" | "right"), badge, caption, dimmed, locked, busy, details, actions, toggle (an on/off button on the node)
+  nodes={nodes}         // MapNode[]: id, label, color, group ("hub" | "left" | "right"), badge, caption, dimmed, locked, busy, details, actions, toggle (an on/off button on the node), box (rows listed under the header, each with an optional dropdown and remove button; the node grows a row per item)
   edges={edges}         // MapEdge[]: from, to, label, weight, directed, dash, tone, faint, via (a pill on the line), details, actions, remove
   functions={functions} // MapFunction[]: "node" functions drop on one node; "link" functions connect two
   nodeDrop={drop}       // optional: what happens when one node is dragged onto another

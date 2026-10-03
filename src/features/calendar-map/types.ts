@@ -28,6 +28,32 @@ export type MapNode = {
   actions?: MapAction[];
   /** A small on/off button on the node itself, such as showing it somewhere. */
   toggle?: MapToggle;
+  /** Makes the node a box that lists items under its header, each with an optional choice and remove button. */
+  box?: MapBox;
+};
+
+export type MapBox = {
+  rows: MapBoxRow[];
+  /** Shown when there are no rows. */
+  empty?: string;
+};
+
+export type MapBoxRow = {
+  id: string;
+  label: string;
+  /** Any CSS color, drawn as the row's swatch. */
+  color?: string;
+  choice?: MapChoice;
+  remove?: { label: string; run: () => Outcome };
+};
+
+/** A small dropdown, such as a rank. */
+export type MapChoice = {
+  /** Spoken: what the dropdown sets. */
+  label: string;
+  value: string;
+  options: { value: string; label: string }[];
+  onChange: (value: string) => Outcome;
 };
 
 export type MapToggle = {

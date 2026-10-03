@@ -3,6 +3,9 @@ export { CalendarMap, type CalendarMapProps } from "./calendar-map";
 export { createLocalLayoutStore } from "./layout-store";
 export type {
   LayoutStore,
+  MapBox,
+  MapBoxRow,
+  MapChoice,
   MapAction,
   MapChange,
   MapEdge,

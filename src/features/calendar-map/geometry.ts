@@ -13,29 +13,56 @@ export const TOP_CLEARANCE = 32;
 export const PALETTE_CLEARANCE = 120;
 const LANE_GAP = 72;
 export const NODE_SIZE = { w: 186, h: 56 };
+//the space between nodes in a lane; a plain node plus this is LANE_GAP
+const NODE_GAP = LANE_GAP - NODE_SIZE.h;
+/** A box node: the usual header, then a row per item. Same width, so it fits any lane. */
+export const BOX_ROW = 34;
+const BOX_PAD = 8;
+
+/** A node's size in px. Box nodes grow a row per item, with room for one when empty. */
+export function nodeSize(node: Pick<MapNode, "box">): { w: number; h: number } {
+  if (!node.box) return NODE_SIZE;
+  return { w: NODE_SIZE.w, h: NODE_SIZE.h + Math.max(1, node.box.rows.length) * BOX_ROW + BOX_PAD };
+}
+
+//a lane's nodes stacked with NODE_GAP between them
+function laneHeight(lane: Pick<MapNode, "box">[]): number {
+  return lane.reduce((sum, node) => sum + nodeSize(node).h, 0) + NODE_GAP * Math.max(0, lane.length - 1);
+}
 
 export function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-//tall enough that the longest lane keeps nodes LANE_GAP apart
-export function canvasHeight(nodes: Pick<MapNode, "group">[]): number {
-  const longest = Math.max(1, ...(["left", "right"] as const).map((group) => nodes.filter((node) => node.group === group).length));
-  return Math.max(460, TOP_CLEARANCE + PALETTE_CLEARANCE + longest * LANE_GAP);
+//tall enough that the longest lane keeps its nodes NODE_GAP apart (plain nodes: LANE_GAP between centres)
+export function canvasHeight(nodes: Pick<MapNode, "group" | "box">[]): number {
+  const longest = Math.max(
+    NODE_SIZE.h,
+    ...(["left", "right"] as const).map((group) => laneHeight(nodes.filter((node) => node.group === group))),
+  );
+  return Math.max(460, TOP_CLEARANCE + PALETTE_CLEARANCE + longest + NODE_GAP);
 }
 
-//hub in the middle with a column either side, in the order given
-export function defaultLayout(nodes: Pick<MapNode, "id" | "group">[], size: Size): Record<string, MapPoint> {
+//hub in the middle with a column either side, in the order given, spread evenly from top to bottom
+export function defaultLayout(nodes: Pick<MapNode, "id" | "group" | "box">[], size: Size): Record<string, MapPoint> {
   const height = Math.max(1, size.height);
-  const top = (TOP_CLEARANCE + NODE_SIZE.h / 2) / height;
-  const bottom = Math.max(top, 1 - (PALETTE_CLEARANCE + NODE_SIZE.h / 2) / height);
+  const top = TOP_CLEARANCE;
+  const bottom = Math.max(top, height - PALETTE_CLEARANCE);
   const out: Record<string, MapPoint> = {};
   const place = (group: MapNode["group"], x: number) => {
     const lane = nodes.filter((node) => node.group === group);
-    lane.forEach((node, index) => {
-      const y = lane.length === 1 ? (top + bottom) / 2 : top + ((bottom - top) * index) / (lane.length - 1);
-      out[node.id] = { x, y };
-    });
+    if (lane.length === 1) {
+      out[lane[0].id] = { x, y: (top + bottom) / 2 / height };
+      return;
+    }
+    const filled = lane.reduce((sum, node) => sum + nodeSize(node).h, 0);
+    const gap = Math.max(NODE_GAP, (bottom - top - filled) / Math.max(1, lane.length - 1));
+    let edge = top;
+    for (const node of lane) {
+      const h = nodeSize(node).h;
+      out[node.id] = { x, y: (edge + h / 2) / height };
+      edge += h + gap;
+    }
   };
   place("hub", 0.5);
   place("left", 0.15);
