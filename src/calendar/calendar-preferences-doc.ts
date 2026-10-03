@@ -1,14 +1,15 @@
-import { calendarLinksOf, calendarNamesOf, calendarPriorityOrderOf, showDuplicateEventsOf } from "@/calendar/calendar-priority";
+import { importedCalendarsOf, legacyMergedCalendars, mergedCalendarsOf } from "@/calendar/imported-calendars";
 import {
   ALL_SOURCES,
   DEFAULT_COLORS,
   HEX_COLOR,
   readCalendarColors,
   readCalendarView,
-  readCalendarNames,
-  readCalendarLinks,
-  readCalendarPriorityOrder,
-  readShowDuplicateEvents,
+  readImportedCalendars,
+  readMergedCalendars,
+  readAgentHiddenIds,
+  readNewCalendarsShown,
+  agentHiddenIdsOf,
   readColorOverrides,
   readSidePanelSections,
   readSourceFilter,
@@ -19,16 +20,16 @@ import {
   type SidePanelSectionsOpen,
 } from "@/calendar/preferences";
 import { parseSmartTagsFromUnknown, readSmartTags, type SmartTag } from "@/calendar/smart-tags";
-import type { CalendarLinks, CalendarNames, CalendarPriorityOrder, CalendarView } from "@/calendar/types";
+import type { CalendarView, ImportedCalendar, MergedCalendar } from "@/calendar/types";
 import { BUILTIN_CALENDARS, localCalendarsOf, readLocalCalendars, type LocalCalendar } from "@/calendar/local-calendars";
 
 export type UserCalendarPreferencesV1 = {
   version: 1;
   view: CalendarView;
-  calendarNames: CalendarNames;
-  calendarLinks: CalendarLinks;
-  calendarPriorityOrder: CalendarPriorityOrder;
-  showDuplicateEvents: boolean;
+  importedCalendars: ImportedCalendar[];
+  mergedCalendars: MergedCalendar[];
+  agentHiddenCalendarIds: string[];
+  newCalendarsShown: boolean;
   localCalendars: LocalCalendar[];
   sources: CalendarSourceFilter;
   colors: CalendarColors;
@@ -102,13 +103,14 @@ export function readLocalCalendarPreferences(): UserCalendarPreferencesV1 {
   } catch {
     navCollapsed = false;
   }
+  const importedCalendars = readImportedCalendars();
   return {
     version: 1,
     view: readCalendarView(),
-    calendarNames: readCalendarNames(),
-    calendarLinks: readCalendarLinks(),
-    calendarPriorityOrder: readCalendarPriorityOrder(),
-    showDuplicateEvents: readShowDuplicateEvents(),
+    importedCalendars,
+    mergedCalendars: readMergedCalendars(importedCalendars),
+    agentHiddenCalendarIds: readAgentHiddenIds(),
+    newCalendarsShown: readNewCalendarsShown(),
     localCalendars: readLocalCalendars(),
     sources: readSourceFilter(),
     colors: readCalendarColors(),
@@ -131,13 +133,23 @@ export function parseUserCalendarPreferencesDoc(
       : fallbacks.view;
   const sources = sourcesOf(rec.sources) ?? fallbacks.sources;
   const colors = colorsOf(rec.colors) ?? fallbacks.colors;
+  //docs saved before these lists keep their links in fixed slots and their duplicate rule as a priority order
+  const importedCalendars =
+    rec.importedCalendars !== undefined || rec.calendarLinks !== undefined
+      ? importedCalendarsOf(rec.importedCalendars, rec.calendarLinks, rec.calendarNames)
+      : fallbacks.importedCalendars;
+  const mergedCalendars =
+    rec.mergedCalendars !== undefined
+      ? mergedCalendarsOf(rec.mergedCalendars)
+      : legacyMergedCalendars(rec.calendarPriorityOrder, rec.showDuplicateEvents, rec.duplicatePriority, importedCalendars);
   return {
     version: 1,
     view,
-    calendarNames: calendarNamesOf(rec.calendarNames),
-    calendarLinks: rec.calendarLinks !== undefined ? calendarLinksOf(rec.calendarLinks) : fallbacks.calendarLinks,
-    calendarPriorityOrder: calendarPriorityOrderOf(rec.calendarPriorityOrder, rec.duplicatePriority),
-    showDuplicateEvents: showDuplicateEventsOf(rec.showDuplicateEvents, rec.duplicatePriority),
+    importedCalendars,
+    mergedCalendars,
+    agentHiddenCalendarIds:
+      rec.agentHiddenCalendarIds !== undefined ? agentHiddenIdsOf(rec.agentHiddenCalendarIds) : fallbacks.agentHiddenCalendarIds,
+    newCalendarsShown: typeof rec.newCalendarsShown === "boolean" ? rec.newCalendarsShown : fallbacks.newCalendarsShown,
     localCalendars: rec.localCalendars !== undefined ? localCalendarsOf(rec.localCalendars) : fallbacks.localCalendars,
     sources,
     colors,
@@ -152,10 +164,8 @@ export function parseUserCalendarPreferencesDoc(
 }
 
 export function preferencesDocHasContent(doc: UserCalendarPreferencesV1): boolean {
-  const order = doc.calendarPriorityOrder;
-  const untouchedOrder = order.length === 0 || (order[0] === "learn" && order[1] === "portal" && order.length === 2);
-  if (!untouchedOrder || doc.showDuplicateEvents) return true;
-  if (Object.keys(doc.calendarNames).length > 0 || Object.keys(doc.calendarLinks).length > 0) return true;
+  if (doc.importedCalendars.length > 0 || doc.mergedCalendars.length > 0 || doc.agentHiddenCalendarIds.length > 0) return true;
+  if (!doc.newCalendarsShown) return true;
   if (doc.smartTags.length > 0) return true;
   if (JSON.stringify(doc.localCalendars) !== JSON.stringify(BUILTIN_CALENDARS)) return true;
   if (doc.navCollapsed) return true;

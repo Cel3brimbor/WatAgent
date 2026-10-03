@@ -1,11 +1,19 @@
 export type CalendarItemKind = "event" | "task";
 
-export type ImportedCalendarSource = "learn" | "portal" | "other";
-export type CalendarFeedSource = "learn" | "portal";
-export type CalendarPrioritySource = CalendarFeedSource | "google";
-export type CalendarPriorityOrder = CalendarPrioritySource[];
-export type CalendarNames = Partial<Record<CalendarFeedSource, string>>;
-export type CalendarLinks = Partial<Record<ImportedCalendarSource, string>>;
+//the three original slots, plus feed-<uuid> for every calendar link added since
+export type ImportedCalendarSource = "learn" | "portal" | "other" | `feed-${string}`;
+
+export const FEED_ID = /^(learn|portal|other|feed-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
+
+export function isFeedId(raw: unknown): raw is ImportedCalendarSource {
+  return typeof raw === "string" && FEED_ID.test(raw);
+}
+
+/** A calendar link and the name it shows under. Its events carry importSource = id. */
+export type ImportedCalendar = { id: ImportedCalendarSource; name: string; url: string };
+
+/** Imported calendars shown as one, each duplicate event once. members are ics:<feed> ids, the first copy's owner first. */
+export type MergedCalendar = { id: string; name: string; members: string[] };
 
 export type CalendarItemMeta = {
   kind: CalendarItemKind;
@@ -62,6 +70,8 @@ export type TimelineItem = {
   allDay: boolean;
   completed?: boolean;
   importSource?: ImportedCalendarSource;
+  /** The merged calendar this imported event shows under. */
+  mergedCalendarId?: string;
   calendarId?: string;
   pendingApproval?: boolean;
   pendingVerb?: "add" | "delete" | "edit";
@@ -105,7 +115,7 @@ export function parseCalendarMeta(raw: unknown): CalendarItemMeta | undefined {
     completed: kind === "task" ? Boolean(rec.completed) : undefined,
     googleEventId: googleEventIdOf(rec.googleEventId),
     icsImportId: typeof rec.icsImportId === "string" && /^[0-9a-f-]{36}$/.test(rec.icsImportId) ? rec.icsImportId : undefined,
-    importSource: rec.importSource === "learn" || rec.importSource === "portal" || rec.importSource === "other" ? rec.importSource : undefined,
+    importSource: isFeedId(rec.importSource) ? rec.importSource : undefined,
     calendarId: typeof rec.calendarId === "string" && /^cal-[0-9a-f-]{36}$/.test(rec.calendarId) ? rec.calendarId : undefined,
     location: optionalText(rec.location, 300, false),
     description: optionalText(rec.description, 4000, true),

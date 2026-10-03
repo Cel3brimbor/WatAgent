@@ -1,6 +1,7 @@
+import { isFeedId, type ImportedCalendarSource } from "@/calendar/types";
 import { ApiError, apiFetch, apiJson } from "@/shared/api-base";
 
-export type RuleFeed = "learn" | "portal" | "other";
+export type RuleFeed = ImportedCalendarSource;
 
 export type AgentRuleRun = {
   id: string;
@@ -77,7 +78,6 @@ export type RuleRunLine = {
   error?: string;
 };
 
-export const RULE_FEEDS: RuleFeed[] = ["learn", "portal", "other"];
 const TARGET = /^(events|tasks|cal-[0-9a-f-]{36})$/;
 
 /** The server doesn't have Agent rules yet. */
@@ -97,7 +97,7 @@ function text(raw: unknown, max: number): string | null {
 }
 
 function feedOf(raw: unknown): RuleFeed | null {
-  return raw === "learn" || raw === "portal" || raw === "other" ? raw : null;
+  return isFeedId(raw) ? raw : null;
 }
 
 export function ruleRunOf(raw: unknown): AgentRuleRun | null {

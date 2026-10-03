@@ -20,44 +20,43 @@ import {
   type MapFunction,
   type MapNode,
   type MapNodeDrop,
+  type MapToggle,
 } from "@/features/calendar-map";
-import { duplicateOverlaps } from "@/calendar/calendar-duplicates";
+import { sharedEventCounts } from "@/calendar/calendar-merge";
 import { calendarIdForMeta } from "@/calendar/calendar-ownership";
-import { outrankCalendarPriority } from "@/calendar/calendar-priority";
+import { feedOfCalendarId, mergedByMember, newMergedCalendarId } from "@/calendar/imported-calendars";
+import { RenameCalendarDialog } from "@/calendar/imported-calendars-panel";
 import { formatFeedSyncSummary, syncImportedFeed } from "@/calendar/calendar-sync";
-import { calendarItemVisible, externalCalendarId, externalCalendarsOf } from "@/calendar/external-calendars";
+import { calendarItemVisible, externalCalendarId, externalCalendarShown, externalCalendarsOf } from "@/calendar/external-calendars";
 import { calendarIdField, isPrimaryEventCalendarId, type LocalCalendar } from "@/calendar/local-calendars";
-import { calendarGroupsOf, isCalendarReadOnly, setCalendarReadOnly, type CalendarColors, type CalendarSourceFilter } from "@/calendar/preferences";
-import { overlayTimelineItemOf, timelineItemOf, type OverlayEvent } from "@/calendar/timeline";
-import type {
-  CalendarItemDoc,
-  CalendarLinks,
-  CalendarNames,
-  CalendarPriorityOrder,
-  CalendarPrioritySource,
-  ImportedCalendarSource,
-} from "@/calendar/types";
+import { calendarGroupsOf, isCalendarReadOnly, setCalendarReadOnly, withNewCalendar, type CalendarColors, type CalendarSourceFilter } from "@/calendar/preferences";
+import { timelineItemOf, type OverlayEvent } from "@/calendar/timeline";
+import type { CalendarItemDoc, ImportedCalendar, MergedCalendar } from "@/calendar/types";
 import { ConfirmDialog } from "@/shared/confirm-dialog";
-import { ChatIcon, EyeOffIcon, LockIcon, RouteIcon, ShieldCheckIcon, SyncIcon, TrophyIcon } from "@/shared/icons";
+import { ChatIcon, EyeIcon, EyeOffIcon, LockIcon, RouteIcon, ShieldCheckIcon, SyncIcon } from "@/shared/icons";
 import { Switch } from "@/shared/switch";
 import { usePresence } from "@/shared/use-presence";
 
 const layoutStore = createLocalLayoutStore("watagent.calendarMap.layout.v1");
 const AGENT = "agent";
 const GOOGLE = "google";
+//the drop target that starts a merged calendar; not a calendar until two are dropped in
+const NEW_MERGE = "merge-new";
 
 type Props = {
   items: CalendarItemDoc[];
   overlayEvents: OverlayEvent[];
-  /** The active order: only linked, imported or connected sources. */
-  priorityOrder: CalendarPriorityOrder;
-  onPriorityOrder: Dispatch<SetStateAction<CalendarPriorityOrder>>;
-  showDuplicateEvents: boolean;
-  onShowDuplicateEvents: (value: boolean) => void;
+  mergedCalendars: MergedCalendar[];
+  onMergedCalendars: Dispatch<SetStateAction<MergedCalendar[]>>;
+  /** Calendars whose link to the Agent was deleted, so the Agent can't see them. */
+  agentHiddenIds: string[];
+  onAgentHiddenIds: Dispatch<SetStateAction<string[]>>;
+  /** Whether a calendar you add, including a new merged calendar, starts shown on the calendar. */
+  newCalendarsShown: boolean;
+  onNewCalendarsShown: (shown: boolean) => void;
   sources: CalendarSourceFilter;
   onSources: Dispatch<SetStateAction<CalendarSourceFilter>>;
-  calendarNames: CalendarNames;
-  calendarLinks: CalendarLinks;
+  importedCalendars: ImportedCalendar[];
   colors: CalendarColors;
   colorOverrides: Record<string, string>;
   localCalendars: LocalCalendar[];
@@ -74,20 +73,13 @@ type Props = {
   onNotice: (message: string) => void;
 };
 
-//map nodes use the app's calendar ids: events, tasks, cal-<uuid>, ics:<feed>, plus the Google aggregate
-function nodeIdOf(source: CalendarPrioritySource): string {
-  return source === "google" ? GOOGLE : externalCalendarId(source);
-}
+//map nodes use the app's calendar ids: events, tasks, cal-<uuid>, ics:<feed>, merge-<uuid>, plus the Google aggregate
+const feedSourceOf = feedOfCalendarId;
 
-function prioritySourceOf(id: string): CalendarPrioritySource | null {
-  if (id === GOOGLE) return "google";
-  if (id === "ics:learn") return "learn";
-  if (id === "ics:portal") return "portal";
-  return null;
-}
-
-function feedSourceOf(id: string): ImportedCalendarSource | null {
-  return id === "ics:learn" ? "learn" : id === "ics:portal" ? "portal" : id === "ics:other" ? "other" : null;
+function ordinal(rank: number): string {
+  const tens = rank % 100;
+  const suffix = tens >= 11 && tens <= 13 ? "th" : ({ 1: "st", 2: "nd", 3: "rd" } as Record<number, string>)[rank % 10] ?? "th";
+  return `${rank}${suffix}`;
 }
 
 function plural(count: number, noun: string): string {
@@ -107,14 +99,15 @@ function ago(at: number): string {
 export function CalendarMapSection({
   items,
   overlayEvents,
-  priorityOrder,
-  onPriorityOrder,
-  showDuplicateEvents,
-  onShowDuplicateEvents,
+  mergedCalendars,
+  onMergedCalendars,
+  agentHiddenIds,
+  onAgentHiddenIds,
+  newCalendarsShown,
+  onNewCalendarsShown,
   sources,
   onSources,
-  calendarNames,
-  calendarLinks,
+  importedCalendars,
   colors,
   colorOverrides,
   localCalendars,
@@ -130,26 +123,29 @@ export function CalendarMapSection({
   onRefreshPending,
   onNotice,
 }: Props) {
-  const toggleId = useId();
   const [syncing, setSyncing] = useState<string[]>([]);
   const [editor, setEditor] = useState<{ rule?: AgentRule; initial?: Partial<AgentRuleDraft> } | null>(null);
   const [deleting, setDeleting] = useState<AgentRule | null>(null);
+  const newShownId = useId();
+  //calendars dropped on the New merged calendar node, first one wins; kept here until there are two
+  const [draft, setDraft] = useState<string[]>([]);
+  const [renamingMerged, setRenamingMerged] = useState<MergedCalendar | null>(null);
   const editorPresence = usePresence(editor);
   const deletePresence = usePresence(deleting);
   const groups = calendarGroupsOf(sources.groups);
 
-  const feeds = useMemo(
-    () => externalCalendarsOf(items, calendarNames, priorityOrder, calendarLinks),
-    [items, calendarNames, priorityOrder, calendarLinks],
-  );
-  const showGoogle = priorityOrder.includes("google") || googleConnected === true;
+  const feeds = useMemo(() => externalCalendarsOf(items, importedCalendars), [items, importedCalendars]);
+  const showGoogle = googleConnected === true || overlayEvents.length > 0;
+  const memberOf = useMemo(() => mergedByMember(mergedCalendars), [mergedCalendars]);
+  const isMerged = (id: string) => mergedCalendars.some((calendar) => calendar.id === id);
 
   const names = useMemo(() => {
     const out = new Map<string, string>([[AGENT, "Agent"], [GOOGLE, "Google Calendar"]]);
     for (const calendar of localCalendars) out.set(calendar.id, calendar.name);
     for (const feed of feeds) out.set(feed.id, feed.name);
+    for (const calendar of mergedCalendars) out.set(calendar.id, calendar.name);
     return out;
-  }, [localCalendars, feeds]);
+  }, [localCalendars, feeds, mergedCalendars]);
   const nameOf = (id: string) => names.get(id) ?? id;
 
   //saved and waiting-for-approval items per calendar
@@ -165,16 +161,13 @@ export function CalendarMapSection({
     return { saved, pending };
   }, [items]);
 
-  const overlaps = useMemo(
-    () => duplicateOverlaps([...items.map(timelineItemOf), ...overlayEvents.map(overlayTimelineItemOf)], priorityOrder),
-    [items, overlayEvents, priorityOrder],
-  );
-  const sharedWith = (a: CalendarPrioritySource, b: CalendarPrioritySource) =>
-    overlaps.find((pair) => (pair.a === a && pair.b === b) || (pair.a === b && pair.b === a))?.count ?? 0;
+  //per member: how many of its events another member of its merged calendar also has
+  const shared = useMemo(() => sharedEventCounts(items.map(timelineItemOf), mergedCalendars), [items, mergedCalendars]);
 
   //the same test the calendar grid uses, so the map never disagrees with what's drawn
   function shownOnGrid(id: string): boolean {
     if (id === GOOGLE) return sources.google && groups.other;
+    if (isMerged(id)) return externalCalendarShown(id, sources);
     const feed = feedSourceOf(id);
     const calendar = feed
       ? { kind: "event" as const, importSource: feed }
@@ -182,6 +175,7 @@ export function CalendarMapSection({
     return calendarItemVisible(
       { id: "", title: "", createdAt: 0, updatedAt: 0, calendar: { ...calendar, startUTC: 1, endUTC: 2, allDay: false } },
       sources,
+      mergedCalendars,
     );
   }
 
@@ -189,8 +183,12 @@ export function CalendarMapSection({
   function hiddenElsewhere(id: string): boolean {
     if (id === GOOGLE) return !groups.other;
     if (sources.hiddenIds.includes(id) && !groups.hidden) return true;
-    return feedSourceOf(id) ? !groups.external : !groups.watagent;
+    return feedSourceOf(id) || isMerged(id) ? !groups.external : !groups.watagent;
   }
+
+  const agentHidden = (id: string) => agentHiddenIds.includes(id);
+  //merged calendars have no Agent link of their own; the Agent sees their members
+  const hasAgentLink = (id: string) => id !== AGENT && !isMerged(id) && names.has(id);
 
   const readOnly = (id: string) => id !== AGENT && id !== GOOGLE && isCalendarReadOnly(sources, id);
   const isLocal = (id: string) => localCalendars.some((calendar) => calendar.id === id);
@@ -205,8 +203,8 @@ export function CalendarMapSection({
         group: "hub",
         caption: requireAiApproval ? "Approval on" : "Approval off",
         details: [
-          "Reads every calendar on this map.",
-          "Adds and changes events in WatAgent calendars, and edits imported events, except in read-only calendars.",
+          "Reads every calendar linked to it. Delete a link to hide that calendar from the Agent.",
+          "Adds and changes events in WatAgent calendars, except read-only ones. Imported calendars are always read only.",
           "New events go to Agent Main unless you name another calendar.",
           requireAiApproval ? "Its changes wait for your approval." : "Its changes apply right away.",
         ],
@@ -223,7 +221,12 @@ export function CalendarMapSection({
         color:
           calendar.id === "events" ? colors.event : calendar.id === "tasks" ? colors.task : colorOverrides[calendar.id] || colors.event,
         group: "left",
-        caption: [locked ? "Read only" : isPrimaryEventCalendarId(calendar.id) ? "Default" : null, hidden ? "Hidden" : null, amount]
+        caption: [
+          locked ? "Read only" : isPrimaryEventCalendarId(calendar.id) ? "Default" : null,
+          hidden ? "Hidden" : null,
+          agentHidden(calendar.id) ? "No Agent" : null,
+          amount,
+        ]
           .filter(Boolean)
           .join(" · "),
         locked,
@@ -232,88 +235,150 @@ export function CalendarMapSection({
           isPrimaryEventCalendarId(calendar.id) ? "New Agent events land here unless you name another calendar." : `A WatAgent calendar with ${amount}.`,
           locked ? "Read only: you and the Agent can't change its events." : "You and the Agent can change its events.",
           ...(hidden ? ["Hidden from the calendar."] : []),
+          ...(agentHidden(calendar.id) ? ["The Agent can't see it. Draw a line from the Agent to give it access again."] : []),
         ],
       });
     }
-    const ranked = priorityOrder.map(nodeIdOf).filter((id) => id === GOOGLE ? showGoogle : feeds.some((feed) => feed.id === id));
-    const unranked = feeds.filter((feed) => !ranked.includes(feed.id)).map((feed) => feed.id);
-    for (const id of [...ranked, ...unranked]) {
-      const source = prioritySourceOf(id);
-      const rank = source ? priorityOrder.indexOf(source) : -1;
+    for (const feed of feeds) {
+      const id = feed.id;
       const hidden = !shownOnGrid(id);
       const locked = readOnly(id);
-      const amount = id === GOOGLE ? `${overlayEvents.length} loaded` : plural(counts.saved.get(id) ?? 0, "event");
-      const shares = source
-        ? priorityOrder
-            .filter((other) => other !== source)
-            .map((other) => ({ other, count: sharedWith(source, other) }))
-            .filter((pair) => pair.count > 0)
-            .map((pair) => `Shares ${plural(pair.count, "event")} with ${nameOf(nodeIdOf(pair.other))}.`)
-        : [];
+      const amount = plural(counts.saved.get(id) ?? 0, "event");
+      const merged = memberOf.get(id);
       list.push({
         id,
-        label: nameOf(id),
-        color: id === GOOGLE ? colors.google : colorOverrides[id] ?? colors.event,
+        label: feed.name,
+        color: colorOverrides[id] ?? colors.event,
         group: "right",
-        badge: rank >= 0 ? String(rank + 1) : undefined,
-        caption: [id === GOOGLE || locked ? "Read only" : null, hidden ? "Hidden" : null, amount].filter(Boolean).join(" · "),
-        locked: id === GOOGLE || locked,
+        caption: ["Imported", merged ? `In ${merged.name}` : hidden ? "Hidden" : null, agentHidden(id) ? "No Agent" : null, amount]
+          .filter(Boolean)
+          .join(" · "),
+        locked,
         dimmed: hidden,
         busy: syncing.includes(id),
         details: [
-          rank >= 0
-            ? `Priority ${rank + 1} of ${priorityOrder.length}: when an event is in more than one calendar, the highest one's copy shows.`
-            : "Not part of duplicate priority, so all of its events show.",
-          ...shares,
-          id === GOOGLE
-            ? "The Agent reads Google events but never changes them."
-            : locked
-              ? "Read only: you and the Agent can't change its events."
-              : "The Agent can edit its events; new ones always go to WatAgent calendars.",
-          ...(hidden ? ["Hidden from the calendar, so its copies don't hide anyone else's."] : []),
+          merged
+            ? `Shows on the calendar as part of ${merged.name}, which keeps one copy of each shared event.`
+            : "An imported calendar. All of its events show.",
+          "Read only: its events change only when it syncs.",
+          ...(hidden && !merged ? ["Hidden from the calendar."] : []),
+          ...(agentHidden(id) ? ["The Agent can't see it. Draw a line from the Agent to give it access again."] : []),
         ],
       });
     }
-    return list;
+    for (const calendar of mergedCalendars) {
+      const hidden = !shownOnGrid(calendar.id);
+      const memberNames = calendar.members.map(nameOf);
+      list.push({
+        id: calendar.id,
+        label: calendar.name,
+        color: colorOverrides[calendar.id] ?? colors.event,
+        group: "right",
+        caption: [`${plural(calendar.members.length, "calendar")} merged`, hidden ? "Hidden" : null].filter(Boolean).join(" · "),
+        locked: true,
+        dimmed: hidden,
+        busy: calendar.members.some((member) => syncing.includes(member)),
+        actions: [
+          { id: "rename", label: "Rename", run: () => setRenamingMerged(calendar) },
+          { id: "unmerge", label: "Unmerge", run: () => unmerge(calendar) },
+        ],
+        details: [
+          `Shows ${memberNames.join(", ")} as one calendar. Drag another imported calendar onto it to add it last.`,
+          `Priority, first wins: ${memberNames.map((name, index) => `${index + 1}. ${name}`).join("  ")}`,
+          ...(hidden ? ["Hidden from the calendar."] : []),
+        ],
+      });
+    }
+    if (feeds.length >= 2) {
+      const waiting = draft.filter((id) => feeds.some((feed) => feed.id === id));
+      list.push({
+        id: NEW_MERGE,
+        label: "New merged calendar",
+        color: "var(--map-line-strong, #999)",
+        group: "right",
+        caption: waiting.length ? `${waiting.map(nameOf).join(", ")} · drop one more` : "Drop 2+ imported calendars here",
+        dimmed: waiting.length === 0,
+        actions: waiting.length ? [{ id: "clear", label: "Clear", run: () => clearDraft() }] : [],
+        details: [
+          "Drag imported calendars onto this node to merge them. The order you drop them in is their priority.",
+          "When an event is in more than one, the copy from the calendar dropped first shows.",
+          "Once two are in, they become a merged calendar. Drop more onto that calendar to add them last.",
+        ],
+      });
+    }
+    if (showGoogle) {
+      const hidden = !shownOnGrid(GOOGLE);
+      list.push({
+        id: GOOGLE,
+        label: nameOf(GOOGLE),
+        color: colors.google,
+        group: "right",
+        caption: ["Read only", hidden ? "Hidden" : null, agentHidden(GOOGLE) ? "No Agent" : null, `${overlayEvents.length} loaded`]
+          .filter(Boolean)
+          .join(" · "),
+        locked: true,
+        dimmed: hidden,
+        busy: syncing.includes(GOOGLE),
+        details: [
+          "The Agent reads Google events but never changes them.",
+          "Google calendars aren't merged; all of their events show.",
+          ...(agentHidden(GOOGLE) ? ["The Agent can't see it. Draw a line from the Agent to give it access again."] : []),
+          ...(hidden ? ["Hidden from the calendar."] : []),
+        ],
+      });
+    }
+    //members show through their merged calendar, so only it gets the switch
+    return list.map((node) => (node.id === AGENT || node.id === NEW_MERGE || memberOf.has(node.id) ? node : { ...node, toggle: gridToggle(node.id, node.label) }));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- every input the helpers read is listed
-  }, [localCalendars, feeds, priorityOrder, counts, overlaps, overlayEvents.length, sources, colors, colorOverrides, requireAiApproval, syncing, showGoogle]);
+  }, [draft, localCalendars, feeds, mergedCalendars, memberOf, counts, overlayEvents.length, sources, colors, colorOverrides, requireAiApproval, syncing, showGoogle, agentHiddenIds]);
 
   const edges = useMemo<MapEdge[]>(() => {
     const list: MapEdge[] = [];
-    const ranked = priorityOrder.filter((source) => nodes.some((node) => node.id === nodeIdOf(source)));
-    //neighbours in rank are enough to show the order; every pair's count is in the node details
-    for (let index = 0; index + 1 < ranked.length; index += 1) {
-      const winner = ranked[index];
-      const loser = ranked[index + 1];
-      const count = sharedWith(winner, loser);
-      const [winnerName, loserName] = [nameOf(nodeIdOf(winner)), nameOf(nodeIdOf(loser))];
-      list.push({
-        id: `dup:${winner}:${loser}`,
-        from: nodeIdOf(winner),
-        to: nodeIdOf(loser),
-        label: showDuplicateEvents ? "both shown" : `${count} shared`,
-        weight: Math.min(1, Math.log10(count + 1) / 2),
-        directed: !showDuplicateEvents,
-        dash: showDuplicateEvents ? "dashed" : undefined,
-        faint: count === 0,
-        details: [
-          showDuplicateEvents
-            ? "Duplicate copies are showing, so both calendars' copies appear."
-            : `${winnerName} wins over ${loserName}: when an event is in both, ${winnerName}'s copy shows.`,
-          `${plural(count, "event")} ${count === 1 ? "is" : "are"} in both.`,
-        ],
-        actions: [
-          {
-            id: "swap",
-            label: `Make ${loserName} win`,
-            run: () => outrank(loser, winner),
+    //each member feeds its merged calendar; the number is how many of its events another member also has
+    for (const calendar of mergedCalendars) {
+      calendar.members.forEach((member, index) => {
+        if (!nodes.some((node) => node.id === member)) return;
+        const count = shared.get(member) ?? 0;
+        list.push({
+          id: `merge:${calendar.id}:${member}`,
+          from: member,
+          to: calendar.id,
+          label: `${ordinal(index + 1)} · ${count} shared`,
+          weight: Math.min(1, Math.log10(count + 1) / 2),
+          directed: true,
+          faint: count === 0,
+          details: [
+            `${nameOf(member)} is part of ${calendar.name}.`,
+            `${plural(count, "event")} ${count === 1 ? "is" : "are"} also in another of its calendars.`,
+            index === 0
+              ? `Its copy of a shared event is the one that shows.`
+              : `Its copy shows when no earlier calendar has the event.`,
+          ],
+          actions: index === 0 ? [] : [{ id: "first", label: `Make ${nameOf(member)}'s copy win`, run: () => putFirst(calendar.id, member) }],
+          remove: {
+            label: calendar.members.length > 2 ? "Take out of merge" : "Unmerge",
+            run: () => removeMember(calendar.id, member),
           },
-        ],
+        });
       });
     }
+    draft.forEach((member, index) => {
+      if (!nodes.some((node) => node.id === member)) return;
+      list.push({
+        id: `merge:${NEW_MERGE}:${member}`,
+        from: member,
+        to: NEW_MERGE,
+        label: ordinal(index + 1),
+        directed: true,
+        dash: "dashed",
+        details: [`${nameOf(member)} is waiting to be merged. Drop another imported calendar on New merged calendar to finish.`],
+        remove: { label: "Take out", run: () => takeOutOfDraft(member) },
+      });
+    });
     for (const node of nodes) {
-      if (node.id === AGENT) continue;
+      if (!hasAgentLink(node.id) || agentHidden(node.id)) continue;
       const pending = counts.pending.get(node.id) ?? 0;
+      const revoke = { label: "Remove Agent access", run: () => setAgentAccess(node.id, false) };
       if (node.id === GOOGLE || readOnly(node.id)) {
         list.push({
           id: `agent:${node.id}`,
@@ -323,24 +388,24 @@ export function CalendarMapSection({
           directed: true,
           dash: "dashed",
           tone: "accent",
-          details: [`The Agent can read ${node.label} but can't change it.`],
+          details: [`The Agent can read ${node.label} but can't change it.`, "Delete this link to hide it from the Agent."],
+          remove: revoke,
         });
         continue;
       }
-      const verb = feedSourceOf(node.id) ? "edits" : "writes";
       list.push({
         id: `agent:${node.id}`,
         from: AGENT,
         to: node.id,
-        label: pending > 0 ? `${verb} · ${pending} pending` : verb,
+        label: pending > 0 ? `writes · ${pending} pending` : "writes",
         directed: true,
         tone: "accent",
         details: [
-          feedSourceOf(node.id)
-            ? `The Agent can change or delete ${node.label} events, but adds new ones to WatAgent calendars.`
-            : `The Agent can add, change and delete events in ${node.label}.`,
+          `The Agent can add, change and delete events in ${node.label}.`,
           ...(pending > 0 ? [`${plural(pending, "change")} ${pending === 1 ? "waits" : "wait"} for your approval.`] : []),
+          "Delete this link to hide it from the Agent.",
         ],
+        remove: revoke,
       });
     }
     //an Agent rule: from the feed it watches to the calendar it adds to, with its name on the line
@@ -359,19 +424,111 @@ export function CalendarMapSection({
         faint: !rule.enabled,
         details: ruleDetails(rule),
         actions: ruleActions(rule),
+        remove: { label: "Delete rule", run: () => setDeleting(rule) },
       });
     }
     return list;
     // eslint-disable-next-line react-hooks/exhaustive-deps -- every input the helpers read is listed
-  }, [nodes, priorityOrder, overlaps, showDuplicateEvents, counts, sources, rules]);
+  }, [nodes, draft, mergedCalendars, shared, counts, sources, rules, agentHiddenIds]);
 
-  function outrank(winner: CalendarPrioritySource, loser: CalendarPrioritySource): MapChange {
-    const [winnerName, loserName] = [nameOf(nodeIdOf(winner)), nameOf(nodeIdOf(loser))];
-    const before = priorityOrder;
-    const after = outrankCalendarPriority(before, winner, loser);
-    if (after === before) return { message: `${winnerName} already wins over ${loserName}` };
-    onPriorityOrder(after);
-    return { message: `${winnerName} now wins over ${loserName}`, undo: () => onPriorityOrder(before) };
+  function clearDraft(): MapChange {
+    const before = draft;
+    setDraft([]);
+    return { message: "New merged calendar cleared", undo: () => setDraft(before) };
+  }
+
+  function takeOutOfDraft(member: string): MapChange {
+    const before = draft;
+    setDraft(before.filter((id) => id !== member));
+    return { message: `${nameOf(member)} taken out of the new merged calendar`, undo: () => setDraft(before) };
+  }
+
+  function setAgentAccess(id: string, access: boolean): MapChange {
+    const before = agentHiddenIds;
+    onAgentHiddenIds((current) => (access ? current.filter((entry) => entry !== id) : [...new Set([...current, id])]));
+    return {
+      message: access ? `The Agent can see ${nameOf(id)} again` : `The Agent can no longer see ${nameOf(id)}`,
+      undo: () => onAgentHiddenIds(before),
+    };
+  }
+
+  //every merge change swaps the whole list, so undo puts the old list back
+  function changeMerges(next: MergedCalendar[], message: string): MapChange {
+    const before = mergedCalendars;
+    onMergedCalendars(next);
+    return { message, undo: () => onMergedCalendars(before) };
+  }
+
+  //why a calendar can't be dropped into a merge, if it can't
+  function mergeDropError(dragged: string, target: string): string | null {
+    if (!feedSourceOf(dragged)) return "Only imported calendars merge.";
+    const current = memberOf.get(dragged);
+    if (current?.id === target) return `${nameOf(dragged)} is already in ${current.name}.`;
+    if (current) return `${nameOf(dragged)} is in ${current.name}. Delete its link there first.`;
+    if (target === NEW_MERGE && draft.includes(dragged)) return `${nameOf(dragged)} is already in the new merged calendar.`;
+    return null;
+  }
+
+  //dropped on New merged calendar: the second calendar in makes the merge, in the order they were dropped
+  function dropIntoNewMerge(dragged: string): MapChange {
+    const before = draft;
+    const members = [...draft, dragged];
+    if (members.length < 2) {
+      setDraft(members);
+      return { message: `${nameOf(dragged)} added. Drop another imported calendar to merge them`, undo: () => setDraft(before) };
+    }
+    const name = members.map(nameOf).join(" + ").slice(0, 80);
+    const created: MergedCalendar = { id: newMergedCalendarId(), name, members };
+    const merges = mergedCalendars;
+    setDraft([]);
+    onSources((current) => withNewCalendar(current, created.id, newCalendarsShown));
+    onMergedCalendars([...merges, created]);
+    return {
+      message: newCalendarsShown
+        ? `${name} made. Each shared event shows once, ${nameOf(members[0])}'s copy first`
+        : `${name} made, hidden as new calendars start hidden. Use its eye to show it`,
+      undo: () => {
+        onMergedCalendars(merges);
+        setDraft(before);
+      },
+    };
+  }
+
+  //dropped on a merged calendar: joins it last, so its copy shows only when no one ahead has the event
+  function dropIntoMerge(mergedId: string, dragged: string): MapChange {
+    const target = mergedCalendars.find((calendar) => calendar.id === mergedId);
+    if (!target) return { message: "That merged calendar is already gone" };
+    return changeMerges(
+      mergedCalendars.map((calendar) => (calendar.id === mergedId ? { ...calendar, members: [...calendar.members, dragged] } : calendar)),
+      `${nameOf(dragged)} added to ${target.name} as number ${target.members.length + 1}`,
+    );
+  }
+
+  function removeMember(mergedId: string, member: string): MapChange {
+    const calendar = mergedCalendars.find((entry) => entry.id === mergedId);
+    if (!calendar) return { message: "That merged calendar is already gone" };
+    const members = calendar.members.filter((entry) => entry !== member);
+    if (members.length < 2) return unmerge(calendar);
+    return changeMerges(
+      mergedCalendars.map((entry) => (entry.id === mergedId ? { ...entry, members } : entry)),
+      `${nameOf(member)} taken out of ${calendar.name}. All its events show again`,
+    );
+  }
+
+  function unmerge(calendar: MergedCalendar): MapChange {
+    return changeMerges(
+      mergedCalendars.filter((entry) => entry.id !== calendar.id),
+      `${calendar.name} unmerged. ${calendar.members.map(nameOf).join(" and ")} show on their own again`,
+    );
+  }
+
+  function putFirst(mergedId: string, member: string): MapChange {
+    return changeMerges(
+      mergedCalendars.map((entry) =>
+        entry.id === mergedId ? { ...entry, members: [member, ...entry.members.filter((id) => id !== member)] } : entry,
+      ),
+      `${nameOf(member)}'s copy of a shared event now shows`,
+    );
   }
 
   function setShown(id: string, shown: boolean) {
@@ -384,9 +541,29 @@ export function CalendarMapSection({
     });
   }
 
+  //the eye on each node: shows or hides that calendar on the calendar grid
+  function gridToggle(id: string, label: string): MapToggle {
+    const shown = shownOnGrid(id);
+    return {
+      on: shown,
+      label: shown ? `Hide ${label} on the calendar` : `Show ${label} on the calendar`,
+      icon: shown ? <EyeIcon /> : <EyeOffIcon />,
+      run: () => {
+        if (!shown && hiddenElsewhere(id)) throw new Error(`${label} is hidden from the side panel. Show it there.`);
+        setShown(id, !shown);
+        return {
+          message: shown ? `${label} hidden from the calendar` : `${label} shown on the calendar`,
+          undo: () => setShown(id, shown),
+        };
+      },
+    };
+  }
+
   function setLocked(id: string, locked: boolean) {
     onSources((current) => setCalendarReadOnly(current, id, locked));
   }
+
+  const linkOf = (id: string) => importedCalendars.find((calendar) => externalCalendarId(calendar.id) === id);
 
   async function sync(id: string): Promise<MapChange> {
     setSyncing((current) => [...current, id]);
@@ -396,12 +573,13 @@ export function CalendarMapSection({
         await onSyncGoogle();
         return { message: "Google Calendar synced" };
       }
-      const source = feedSourceOf(id);
-      const url = source ? calendarLinks[source] : undefined;
-      if (!source || !url) throw new Error(`${nameOf(id)} has no calendar link to sync.`);
-      const result = await syncImportedFeed(source, url);
+      //a merged calendar syncs each of its links in turn
+      const targets = (mergedCalendars.find((calendar) => calendar.id === id)?.members ?? [id]).map(linkOf);
+      if (targets.some((target) => !target)) throw new Error(`${nameOf(id)} has no calendar link to sync.`);
+      const lines: string[] = [];
+      for (const target of targets as ImportedCalendar[]) lines.push(formatFeedSyncSummary(target.name, await syncImportedFeed(target)));
       await onRefresh();
-      return { message: formatFeedSyncSummary(nameOf(id), result) };
+      return { message: lines.join(" ") };
     } finally {
       setSyncing((current) => current.filter((entry) => entry !== id));
     }
@@ -447,13 +625,12 @@ export function CalendarMapSection({
         },
       },
       { id: "edit", label: "Edit", run: () => setEditor({ rule }) },
-      { id: "delete", label: "Delete", run: () => setDeleting(rule) },
     ];
   }
 
   const ruleFeeds = feeds
     .map((feed) => feedSourceOf(feed.id))
-    .filter((feed): feed is RuleFeed => feed != null && Boolean(calendarLinks[feed]))
+    .filter((feed): feed is RuleFeed => feed != null && Boolean(linkOf(externalCalendarId(feed))))
     .map((feed) => ({ feed, name: nameOf(externalCalendarId(feed)) }));
   const ruleCalendars = localCalendars.map((calendar) => ({
     id: calendar.id,
@@ -464,21 +641,6 @@ export function CalendarMapSection({
 
   const functions: MapFunction[] = [
     {
-      id: "wins",
-      kind: "link",
-      label: "Wins over",
-      group: "Calendars",
-      icon: <TrophyIcon />,
-      prompt: "choose the calendar whose copy should show, then the one it beats",
-      drawable: true,
-      acceptsFrom: (id) => (prioritySourceOf(id) ? true : "Only LEARN, Portal and Google compete over duplicate events."),
-      accepts: (from, to) => {
-        if (from === to) return "Choose a different calendar.";
-        return prioritySourceOf(from) && prioritySourceOf(to) ? true : "Only LEARN, Portal and Google compete over duplicate events.";
-      },
-      apply: (from, to) => outrank(prioritySourceOf(from)!, prioritySourceOf(to)!),
-    },
-    {
       id: "read-only",
       kind: "node",
       label: "Read-only",
@@ -488,6 +650,7 @@ export function CalendarMapSection({
       accepts: (id) => {
         if (id === AGENT) return "The Agent isn't a calendar.";
         if (id === GOOGLE) return "Google calendars keep their own permissions.";
+        if (feedSourceOf(id) || isMerged(id)) return "Imported calendars are always read only.";
         return isCalendar(id) ? true : "Choose a calendar.";
       },
       apply: (id) => {
@@ -496,27 +659,6 @@ export function CalendarMapSection({
         return {
           message: was ? `${nameOf(id)} can be changed again` : `${nameOf(id)} is read only for you and the Agent`,
           undo: () => setLocked(id, was),
-        };
-      },
-    },
-    {
-      id: "hide",
-      kind: "node",
-      label: "Hide",
-      group: "Calendars",
-      icon: <EyeOffIcon />,
-      prompt: "choose a calendar to hide or show",
-      accepts: (id) => {
-        if (!isCalendar(id)) return "The Agent isn't a calendar.";
-        if (!shownOnGrid(id) && hiddenElsewhere(id)) return `${nameOf(id)} is hidden from the side panel. Show it there.`;
-        return true;
-      },
-      apply: (id) => {
-        const shown = shownOnGrid(id);
-        setShown(id, !shown);
-        return {
-          message: shown ? `${nameOf(id)} hidden from the calendar` : `${nameOf(id)} shown on the calendar`,
-          undo: () => setShown(id, shown),
         };
       },
     },
@@ -530,11 +672,27 @@ export function CalendarMapSection({
       accepts: (id) => {
         if (syncing.includes(id)) return `${nameOf(id)} is already syncing.`;
         if (id === GOOGLE) return googleConnected === true ? true : "Link Google Calendar in Settings first.";
-        const source = feedSourceOf(id);
-        if (source) return calendarLinks[source] ? true : `${nameOf(id)} has no calendar link to sync.`;
+        if (isMerged(id) || feedSourceOf(id)) return linkOf(id) || isMerged(id) ? true : `${nameOf(id)} has no calendar link to sync.`;
         return "Only imported and Google calendars sync.";
       },
       apply: (id) => sync(id),
+    },
+    {
+      id: "access",
+      kind: "link",
+      label: "Agent access",
+      group: "Agent",
+      icon: <ShieldCheckIcon />,
+      prompt: "choose the Agent, then the calendar it should see again",
+      drawable: true,
+      acceptsFrom: (id) => (id === AGENT || (hasAgentLink(id) && agentHidden(id)) ? true : "Start from the Agent."),
+      accepts: (from, to) => {
+        const calendar = from === AGENT ? to : to === AGENT ? from : null;
+        if (!calendar || calendar === AGENT) return "Connect the Agent and a calendar.";
+        if (!hasAgentLink(calendar)) return "The Agent sees merged calendars through their members.";
+        return agentHidden(calendar) ? true : `The Agent can already see ${nameOf(calendar)}.`;
+      },
+      apply: (from, to) => setAgentAccess(from === AGENT ? to : from, true),
     },
     {
       id: "ask",
@@ -543,7 +701,11 @@ export function CalendarMapSection({
       group: "Agent",
       icon: <ChatIcon />,
       prompt: "choose a WatAgent calendar to attach to a message",
-      accepts: (id) => (isLocal(id) ? true : id === AGENT ? "Drop it on a WatAgent calendar." : "Only WatAgent calendars can be attached to a message."),
+      accepts: (id) => {
+        if (id === AGENT) return "Drop it on a WatAgent calendar.";
+        if (!isLocal(id)) return "Only WatAgent calendars can be attached to a message.";
+        return agentHidden(id) ? `The Agent can't see ${nameOf(id)}. Link it to the Agent first.` : true;
+      },
       apply: (id) => {
         onAskAgent(id);
         return { message: `Chat opened with @${nameOf(id)} attached` };
@@ -580,13 +742,15 @@ export function CalendarMapSection({
             acceptsFrom: (id: string) => {
               const feed = feedSourceOf(id);
               if (!feed) return "Agent rules watch an imported calendar, like LEARN or Portal.";
-              if (!calendarLinks[feed]) return `${nameOf(id)} has no calendar link to watch.`;
+              if (!linkOf(id)) return `${nameOf(id)} has no calendar link to watch.`;
               return rules.length >= 10 ? "You can have up to 10 Agent rules." : true;
             },
             accepts: (from: string, to: string) => {
               if (!feedSourceOf(from)) return "Agent rules watch an imported calendar, like LEARN or Portal.";
               if (!isLocal(to)) return "Agent rules add to WatAgent calendars.";
               if (readOnly(to)) return `${nameOf(to)} is read only.`;
+              const unseen = [from, to].find(agentHidden);
+              if (unseen) return `The Agent can't see ${nameOf(unseen)}. Link it to the Agent first.`;
               return rules.length >= 10 ? "You can have up to 10 Agent rules." : true;
             },
             apply: (from: string, to: string) => {
@@ -597,9 +761,19 @@ export function CalendarMapSection({
   ];
 
   //dragging a WatAgent calendar onto the Agent asks about it
+  //dragging a calendar onto the Agent gives it access again if it was taken away, and otherwise asks about it
+  //onto a merged calendar or New merged calendar, an imported calendar joins the merge
   const nodeDrop: MapNodeDrop = {
-    accepts: (dragged, target) => (target === AGENT && isLocal(dragged) ? true : "Only WatAgent calendars can be attached to a message."),
-    apply: (dragged) => {
+    accepts: (dragged, target) => {
+      if (target === NEW_MERGE || isMerged(target)) return mergeDropError(dragged, target) ?? true;
+      if (target !== AGENT) return "Drop it on the Agent or a merged calendar.";
+      if (hasAgentLink(dragged) && agentHidden(dragged)) return true;
+      return isLocal(dragged) ? true : "Only WatAgent calendars can be attached to a message.";
+    },
+    apply: (dragged, target) => {
+      if (target === NEW_MERGE) return dropIntoNewMerge(dragged);
+      if (isMerged(target)) return dropIntoMerge(target, dragged);
+      if (agentHidden(dragged)) return setAgentAccess(dragged, true);
       onAskAgent(dragged);
       return { message: `Chat opened with @${nameOf(dragged)} attached` };
     },
@@ -612,19 +786,30 @@ export function CalendarMapSection({
     <>
       <CalendarMap
         label="Calendar map"
+        toolbar={
+          <div className="settings-toggle calendar-map-toggle">
+            <label htmlFor={newShownId}>New calendars start shown</label>
+            <Switch id={newShownId} checked={newCalendarsShown} onChange={onNewCalendarsShown} />
+          </div>
+        }
         nodes={nodes}
         edges={edges}
         functions={functions}
         nodeDrop={nodeDrop}
         layoutStore={layoutStore}
-        hint="Drag a function onto a calendar. Drawing from a feed's handle to another feed chooses whose copy of a shared event shows; to a WatAgent calendar, it makes an Agent rule."
-        toolbar={
-          <div className="settings-toggle calendar-map-toggle">
-            <label htmlFor={toggleId}>Hide duplicate copies</label>
-            <Switch id={toggleId} checked={!showDuplicateEvents} onChange={(checked) => onShowDuplicateEvents(!checked)} />
-          </div>
-        }
+        hint="Use the eye on a calendar to show or hide it on the calendar. Drag a function onto a calendar. Drag imported calendars onto New merged calendar to merge them; the order you drop them is their priority. Draw from an imported calendar's handle to a WatAgent calendar to make an Agent rule. Select a link to delete it; deleting a calendar's link to the Agent hides it from the Agent."
       />
+      {renamingMerged ? (
+        <RenameCalendarDialog
+          name={renamingMerged.name}
+          onCancel={() => setRenamingMerged(null)}
+          onSave={(name) => {
+            const id = renamingMerged.id;
+            setRenamingMerged(null);
+            onMergedCalendars((current) => current.map((calendar) => (calendar.id === id ? { ...calendar, name } : calendar)));
+          }}
+        />
+      ) : null}
       {shownEditor ? (
         <RuleEditor
           key={shownEditor.rule?.id ?? "new"}
