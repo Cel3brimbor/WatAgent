@@ -255,6 +255,51 @@
   will-change: transform;
 }
 
+.node[data-toggle] .nodeBody {
+  padding-right: 2.3rem;
+}
+
+/*sits over its node's right side; a sibling, because a button can't hold another*/
+.nodeToggle {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--map-ink-soft);
+  cursor: pointer;
+  will-change: transform;
+  transition: background-color var(--map-fast) var(--map-ease), color var(--map-fast) var(--map-ease);
+}
+
+.nodeToggle[aria-pressed="true"] {
+  color: var(--map-ink);
+}
+
+@media (hover: hover) {
+  .nodeToggle:hover {
+    background: var(--map-hover);
+    color: var(--map-ink);
+  }
+}
+
+.nodeToggle:focus-visible {
+  outline: 2px solid var(--map-accent);
+  outline-offset: 1px;
+}
+
+.nodeToggle svg {
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
 .node[data-pressed] {
   z-index: 3;
   cursor: grabbing;

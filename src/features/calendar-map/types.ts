@@ -26,6 +26,16 @@ export type MapNode = {
   details?: string[];
   /** Buttons the inspector shows when the node is selected. */
   actions?: MapAction[];
+  /** A small on/off button on the node itself, such as showing it somewhere. */
+  toggle?: MapToggle;
+};
+
+export type MapToggle = {
+  on: boolean;
+  /** Spoken and shown as the tooltip: what pressing it does. */
+  label: string;
+  icon: ReactNode;
+  run: () => Outcome;
 };
 
 export type MapChange = {

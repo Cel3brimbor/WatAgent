@@ -14,4 +14,5 @@ export type {
   MapNodeFunction,
   MapNodeGroup,
   MapPoint,
+  MapToggle,
 } from "./types";
