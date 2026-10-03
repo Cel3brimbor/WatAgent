@@ -9,6 +9,7 @@
   --map-hover: var(--hover, rgba(29, 27, 24, 0.045));
   --map-press: var(--press, rgba(29, 27, 24, 0.09));
   --map-accent: var(--accent, #c2593b);
+  --map-danger: var(--danger, #b3261e);
   --map-accent-deep: var(--accent-deep, #8f3b22);
   --map-accent-soft: var(--accent-soft, rgba(194, 89, 59, 0.06));
   --map-glow: var(--glow, rgba(194, 89, 59, 0.16));
@@ -66,6 +67,10 @@
   .button:hover {
     background: var(--map-hover);
   }
+}
+
+.button[data-tone="danger"] {
+  color: var(--map-danger);
 }
 
 .button:active {

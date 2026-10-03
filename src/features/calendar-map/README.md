@@ -17,8 +17,8 @@ const layout = createLocalLayoutStore("my-app.map.v1");
 
 <CalendarMap
   label="Calendar map"
-  nodes={nodes}         // MapNode[]: id, label, color, group ("hub" | "left" | "right"), badge, caption, dimmed, locked, busy, details
-  edges={edges}         // MapEdge[]: from, to, label, weight, directed, dash, tone, faint, via (a pill on the line), details, actions
+  nodes={nodes}         // MapNode[]: id, label, color, group ("hub" | "left" | "right"), badge, caption, dimmed, locked, busy, details, actions
+  edges={edges}         // MapEdge[]: from, to, label, weight, directed, dash, tone, faint, via (a pill on the line), details, actions, remove
   functions={functions} // MapFunction[]: "node" functions drop on one node; "link" functions connect two
   nodeDrop={drop}       // optional: what happens when one node is dragged onto another
   layoutStore={layout}
@@ -26,7 +26,7 @@ const layout = createLocalLayoutStore("my-app.map.v1");
 />
 ```
 
-`apply` and edge actions return a `MapChange` (`{ message, undo? }`). The map shows the message, announces it, and offers Undo (also ⌘/Ctrl+Z) when `undo` is present. Throwing an `Error` shows its message instead.
+`apply`, node and edge actions, and an edge's `remove` return a `MapChange` (`{ message, undo? }`). The map shows the message, announces it, and offers Undo (also ⌘/Ctrl+Z) when `undo` is present. Throwing an `Error` shows its message instead.
 
 ## Interaction
 
@@ -34,6 +34,7 @@ const layout = createLocalLayoutStore("my-app.map.v1");
 - Functions can be dragged onto a node, or clicked (or pressed with Enter) to arm and then applied by choosing a node. Nodes that can't take a function show why.
 - Drawable link functions also start from the handle on a node's edge.
 - Arrow keys move the focused node; Shift moves it further. Esc cancels.
+- A selected edge with `remove` shows a Delete link button. Delete or Backspace does the same.
 - Respects `prefers-reduced-motion`, `prefers-reduced-transparency` and `prefers-contrast`.
 
 ## Removing or lifting it out

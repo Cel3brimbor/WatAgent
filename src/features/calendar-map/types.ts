@@ -24,6 +24,8 @@ export type MapNode = {
   busy?: boolean;
   /** Lines the inspector shows when the node is selected. */
   details?: string[];
+  /** Buttons the inspector shows when the node is selected. */
+  actions?: MapAction[];
 };
 
 export type MapChange = {
@@ -35,7 +37,8 @@ export type MapChange = {
 
 type Outcome = MapChange | void | Promise<MapChange | void>;
 
-export type MapEdgeAction = { id: string; label: string; run: () => Outcome };
+export type MapAction = { id: string; label: string; run: () => Outcome };
+export type MapEdgeAction = MapAction;
 
 export type MapEdge = {
   id: string;
@@ -54,6 +57,8 @@ export type MapEdge = {
   via?: { label: string };
   details?: string[];
   actions?: MapEdgeAction[];
+  /** Present when the link can be deleted: a Delete button in the inspector, and Delete or Backspace while it's selected. */
+  remove?: { label?: string; run: () => Outcome };
 };
 
 type FunctionBase = {

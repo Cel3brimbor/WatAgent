@@ -579,6 +579,12 @@ export function CalendarMap({ label, nodes, edges, functions, nodeDrop, layoutSt
     setLayout((current) => ({ ...current, [id]: toUnit(next, size) }));
   }
 
+  function removeEdge(edge: MapEdge) {
+    if (!edge.remove) return;
+    setSelection(null);
+    void run(edge.remove.run, edge.from);
+  }
+
   function onRootKeyDown(event: ReactKeyboardEvent<HTMLElement>) {
     if (event.key === "Escape") {
       if (gesture.kind !== "idle") {
@@ -587,6 +593,14 @@ export function CalendarMap({ label, nodes, edges, functions, nodeDrop, layoutSt
       } else if (selection) {
         setSelection(null);
       }
+      return;
+    }
+    if ((event.key === "Delete" || event.key === "Backspace") && selection?.kind === "edge" && gesture.kind === "idle") {
+      if ((event.target as HTMLElement).closest("input, textarea, select, [contenteditable='true']")) return;
+      const edge = edges.find((entry) => entry.id === selection.id);
+      if (!edge?.remove) return;
+      event.preventDefault();
+      removeEdge(edge);
       return;
     }
     if ((event.metaKey || event.ctrlKey) && !event.shiftKey && event.key.toLowerCase() === "z") {
@@ -889,9 +903,16 @@ export function CalendarMap({ label, nodes, edges, functions, nodeDrop, layoutSt
                 </ul>
               ) : null}
             </div>
-            <button type="button" className={styles.button} onClick={() => setSelection(null)}>
-              Done
-            </button>
+            <div className={styles.inspectorActions}>
+              {selectedNode.actions?.map((action) => (
+                <button key={action.id} type="button" className={styles.button} onClick={() => void run(action.run, selectedNode.id)}>
+                  {action.label}
+                </button>
+              ))}
+              <button type="button" className={styles.button} onClick={() => setSelection(null)}>
+                Done
+              </button>
+            </div>
           </>
         ) : selectedEdge ? (
           <>
@@ -913,6 +934,17 @@ export function CalendarMap({ label, nodes, edges, functions, nodeDrop, layoutSt
                   {action.label}
                 </button>
               ))}
+              {selectedEdge.remove ? (
+                <button
+                  type="button"
+                  className={styles.button}
+                  data-tone="danger"
+                  aria-keyshortcuts="Delete Backspace"
+                  onClick={() => removeEdge(selectedEdge)}
+                >
+                  {selectedEdge.remove.label ?? "Delete link"}
+                </button>
+              ) : null}
               <button type="button" className={styles.button} onClick={() => setSelection(null)}>
                 Done
               </button>
