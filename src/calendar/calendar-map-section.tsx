@@ -350,7 +350,7 @@ export function CalendarMapSection({
         busy: syncing.includes(GOOGLE),
         details: [
           "The Agent reads Google events but never changes them.",
-          "Google calendars aren't merged; all of their events show.",
+          "When the same event is also on another calendar, that copy shows and the Google one is hidden.",
           ...(agentHidden(GOOGLE) ? ["The Agent can't see it. Draw a line from the Agent to give it access again."] : []),
           ...(hidden ? ["Hidden from the calendar."] : []),
         ],
