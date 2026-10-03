@@ -9,7 +9,8 @@ export type Box = Pt & { w: number; h: number };
 export const MIN_CANVAS_WIDTH = 640;
 /** Kept clear at the top for breathing room and at the bottom for the floating palette. */
 export const TOP_CLEARANCE = 32;
-export const PALETTE_CLEARANCE = 104;
+//room for the palette, which can wrap onto a second row
+export const PALETTE_CLEARANCE = 120;
 const LANE_GAP = 72;
 export const NODE_SIZE = { w: 186, h: 56 };
 

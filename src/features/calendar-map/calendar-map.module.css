@@ -437,11 +437,13 @@
   left: 50%;
   z-index: 4;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 1rem;
+  justify-content: center;
+  gap: 0.4rem 1rem;
+  width: max-content;
   max-width: calc(100% - 1.5rem);
   padding: 0.45rem 0.6rem;
-  overflow-x: auto;
   border: 1px solid var(--map-line);
   border-radius: 16px;
   background: var(--map-material);
@@ -660,11 +662,16 @@
   white-space: nowrap;
 }
 
-@media (max-width: 760px) {
+/*phones scroll one row instead of stacking over the map*/
+@media (max-width: 560px) {
   .palette {
     right: 0.6rem;
     left: 0.6rem;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    width: auto;
     max-width: none;
+    overflow-x: auto;
     transform: none;
   }
 
