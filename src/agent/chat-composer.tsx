@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, type CSSProperties, type FormEvent, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type FormEvent, type KeyboardEvent } from "react";
 import { AgentEffortButton } from "@/agent/agent-effort-button";
 import type { AgentEffort } from "@/agent/agent-effort";
 import { CalendarBadge } from "@/agent/calendar-badge";
@@ -32,6 +32,8 @@ type Props = {
   onStop: () => void;
   onError: (message: string | null) => void;
   onEditCalendarItem?: (item: CalendarItemDoc) => void;
+  /** Attach a calendar from outside the composer, such as the map's Ask Agent. A new nonce attaches again. */
+  attachRequest?: { id: string; nonce: number } | null;
 };
 
 export function ChatComposer({
@@ -47,11 +49,24 @@ export function ChatComposer({
   onStop,
   onError,
   onEditCalendarItem,
+  attachRequest,
 }: Props) {
   const [text, setText] = useState("");
   const [attached, setAttached] = useState<MentionCalendar[]>([]);
   const [mention, setMention] = useState<MentionState | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const handledAttach = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!attachRequest || handledAttach.current === attachRequest.nonce) return;
+    handledAttach.current = attachRequest.nonce;
+    const calendar = calendars.find((row) => row.id === attachRequest.id);
+    if (!calendar) return;
+    setAttached((list) =>
+      list.some((row) => row.id === calendar.id) || list.length >= MAX_ATTACHED ? list : [...list, calendar],
+    );
+    inputRef.current?.focus();
+  }, [attachRequest, calendars]);
   const capped = attached.length >= MAX_ATTACHED;
   const matches =
     mention && !capped ? matchCalendars(calendars, mention.query, attached.map((calendar) => calendar.id)) : [];

@@ -58,6 +58,7 @@ type Props = {
   onRejectAll: () => void;
   onInspectPending: (change: PendingAiChange) => void;
   onEditCalendarItem?: (item: CalendarItemDoc) => void;
+  attachRequest?: { id: string; nonce: number } | null;
 };
 
 export function CalendarChatPanel({
@@ -90,6 +91,7 @@ export function CalendarChatPanel({
   onRejectAll,
   onInspectPending,
   onEditCalendarItem,
+  attachRequest,
 }: Props) {
   const panelRef = useRef<HTMLElement>(null);
   const chatResize = useChatResize(panelRef);
@@ -322,6 +324,7 @@ export function CalendarChatPanel({
           onStop={onStop}
           onError={onError}
           onEditCalendarItem={onEditCalendarItem}
+          attachRequest={attachRequest}
         />
       </div>
     </aside>

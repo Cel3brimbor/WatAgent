@@ -164,3 +164,55 @@ export function DotsVerticalIcon({ className }: IconProps) {
     </svg>
   );
 }
+
+export function LockIcon(props: IconProps) {
+  return (
+    <Glyph {...props} strokeWidth={1.6}>
+      <rect x="3.5" y="7" width="9" height="6.5" rx="1.5" />
+      <path d="M5.5 7V5.25a2.5 2.5 0 0 1 5 0V7" />
+    </Glyph>
+  );
+}
+
+export function EyeOffIcon(props: IconProps) {
+  return (
+    <Glyph {...props} strokeWidth={1.5}>
+      <path d="M6.6 3.9A6.4 6.4 0 0 1 8 3.75C12 3.75 14.25 8 14.25 8a11 11 0 0 1-1.6 2.1M4.2 5.1A10.7 10.7 0 0 0 1.75 8S4 12.25 8 12.25a6 6 0 0 0 2.9-.75" />
+      <path d="M6.6 6.6a2 2 0 0 0 2.8 2.8M2.5 2.5l11 11" />
+    </Glyph>
+  );
+}
+
+export function SyncIcon(props: IconProps) {
+  return (
+    <Glyph {...props} strokeWidth={1.6}>
+      <path d="M12.75 6.5A5 5 0 0 0 3.6 5.2M3.25 9.5a5 5 0 0 0 9.15 1.3" />
+      <path d="M3.4 2.75v2.6H6M12.6 13.25v-2.6H10" />
+    </Glyph>
+  );
+}
+
+export function ChatIcon(props: IconProps) {
+  return (
+    <Glyph {...props} strokeWidth={1.6}>
+      <path d="M3 4.25A1.5 1.5 0 0 1 4.5 2.75h7A1.5 1.5 0 0 1 13 4.25v5.5a1.5 1.5 0 0 1-1.5 1.5H7l-3 2.25v-2.25h0A1 1 0 0 1 3 10.25z" />
+    </Glyph>
+  );
+}
+
+export function ShieldCheckIcon(props: IconProps) {
+  return (
+    <Glyph {...props} strokeWidth={1.6}>
+      <path d="M8 1.9 3.25 3.75v3.6c0 3 2 5.2 4.75 6.75 2.75-1.55 4.75-3.75 4.75-6.75v-3.6z" />
+      <path d="m5.9 8 1.5 1.5 2.75-3" />
+    </Glyph>
+  );
+}
+
+export function TrophyIcon(props: IconProps) {
+  return (
+    <Glyph {...props} strokeWidth={1.6}>
+      <path d="M5 2.75h6v3.5a3 3 0 0 1-6 0zM5 4H2.75a2 2 0 0 0 2.4 2.6M11 4h2.25a2 2 0 0 1-2.4 2.6M8 9.25v2.5M5.5 13.25h5" />
+    </Glyph>
+  );
+}

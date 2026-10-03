@@ -82,6 +82,7 @@ import {
 } from "@/calendar/local-calendars";
 import { useAppearanceSync } from "@/calendar/use-appearance-sync";
 import { SideNav, type AppSection } from "@/calendar/side-nav";
+import { CalendarMapSection } from "@/calendar/calendar-map-section";
 import { TodoList } from "@/calendar/todo-list";
 import { CalendarChatPanel } from "@/agent/calendar-chat-panel";
 import type { PendingAiChange } from "@/calendar/approval-client";
@@ -135,6 +136,7 @@ const VIEW_OPTIONS: SegmentOption<CalendarView>[] = [
 ];
 
 const VIEW_DEPTH: Record<CalendarView, number> = { year: 0, month: 1, week: 2, workweek: 2, day: 3 };
+const SECTION_TITLES: Record<Exclude<AppSection, "calendar">, string> = { tasks: "To-do list", map: "Map", settings: "Settings" };
 
 //which way the stage should move: sideways through time, or zooming between granularities
 type NavDirection = "next" | "prev" | "in" | "out" | "none";
@@ -322,6 +324,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
   const [googleSyncedAt, setGoogleSyncedAt] = useState<number | null>(null);
   const weekStartsOn = useMemo(() => localeWeekStartsOn(), []);
   const [chatOpen, setChatOpen] = useState(false);
+  const [attachRequest, setAttachRequest] = useState<{ id: string; nonce: number } | null>(null);
   const [chatResizing, setChatResizing] = useState(false);
   const [draft, setDraft] = useState<CalendarDraft | null>(null);
   const [busy, setBusy] = useState(false);
@@ -1262,7 +1265,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
           {section === "calendar" ? (
             <h2 aria-live="polite">{formatFocusLabel(focus, view, weekStartsOn)}</h2>
           ) : (
-            <h2>{section === "tasks" ? "To-do list" : "Settings"}</h2>
+            <h2>{SECTION_TITLES[section]}</h2>
           )}
         </div>
         <div className="calendar-toolbar-right">
@@ -1354,6 +1357,32 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
                 }}
                 onComplete={calendar.completeTask}
                 onCreate={() => setDraft({ ...defaultAllDayDraft(startOfLocalDay(new Date())), kind: "task" })}
+              />
+            ) : null}
+            {section === "map" ? (
+              <CalendarMapSection
+                items={itemsForUi}
+                overlayEvents={overlayEvents}
+                priorityOrder={priorityOrder}
+                onPriorityOrder={setCalendarPriorityOrder}
+                showDuplicateEvents={showDuplicateEvents}
+                onShowDuplicateEvents={setShowDuplicateEvents}
+                sources={sources}
+                onSources={setSources}
+                calendarNames={calendarNames}
+                calendarLinks={calendarLinks}
+                colors={colors}
+                colorOverrides={colorOverrides}
+                localCalendars={shownCalendars}
+                googleConnected={googleConnected}
+                requireAiApproval={calendar.requireAiApproval}
+                onRequireAiApproval={calendar.setRequireAiApproval}
+                onRefresh={calendar.refresh}
+                onSyncGoogle={() => googlePullRef.current()}
+                onAskAgent={(id) => {
+                  setChatOpen(true);
+                  setAttachRequest({ id, nonce: Date.now() });
+                }}
               />
             ) : null}
             {section === "settings" ? (
@@ -1481,6 +1510,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
             void calendar.rejectPendingChanges({ all: true }).catch(() => setNotice("Unable to undo changes."))
           }
           onInspectPending={revealPending}
+          attachRequest={attachRequest}
           onEditCalendarItem={(item) => {
             const calId = calendarIdForMeta(item.calendar);
             if (calId && isCalendarReadOnly(sources, calId)) return;
