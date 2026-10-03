@@ -819,6 +819,7 @@ export function CalendarMap({ label, nodes, edges, functions, nodeDrop, layoutSt
                         data-dimmed={node.dimmed || undefined}
                         data-toggle={node.toggle ? true : undefined}
                       data-box={node.box ? true : undefined}
+                      data-node={node.id}
                         data-accept={answer === true ? "yes" : typeof answer === "string" ? "no" : undefined}
                         data-over={highlighted || undefined}
                         aria-pressed={selected}
@@ -910,7 +911,10 @@ export function CalendarMap({ label, nodes, edges, functions, nodeDrop, layoutSt
                                       title={row.remove.label}
                                       onClick={() => {
                                         const remove = row.remove;
-                                        if (remove) void run(remove.run, node.id);
+                                        if (!remove) return;
+                                        //the row goes away with its button, so keep focus on the box, where Delete and ⌘Z still work
+                                        rootRef.current?.querySelector<HTMLElement>(`[data-node="${CSS.escape(node.id)}"]`)?.focus({ preventScroll: true });
+                                        void run(remove.run, node.id);
                                       }}
                                     >
                                       <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
