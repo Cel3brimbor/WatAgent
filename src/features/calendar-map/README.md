@@ -38,7 +38,11 @@ const layout = createLocalLayoutStore("my-app.map.v1");
 
 ## Removing or lifting it out
 
-- **Remove it from WatAgent:** delete this folder and `src/calendar/calendar-map-section.tsx`, drop the `"map"` entry in `src/calendar/side-nav.tsx`, and its render line in `src/calendar/calendar-app.tsx`.
+- **Remove it from WatAgent:**
+  - Delete this folder and `src/calendar/calendar-map-section.tsx`.
+  - In `src/calendar/side-nav.tsx`, drop `"map"` from `AppSection`, its `BARS` entry and its icon.
+  - In `src/calendar/calendar-app.tsx`, drop the `CalendarMapSection` import and render block, the `map` title, and the `attachRequest` state (only the map sets it).
+  - `npm run typecheck` and `npm run lint` should pass. That was checked on a scratch branch.
 - **Use it in another app:** copy this folder plus `src/shared/motion.ts`, and point the `@/shared/motion` import at the copy.
 
 ## Checks
