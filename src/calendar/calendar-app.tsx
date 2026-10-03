@@ -99,6 +99,27 @@ function importedCalendarLabel(source: TimelineItem["importSource"], names: Cale
   return undefined;
 }
 
+function eventCalendarLabel(
+  item: Pick<TimelineItem, "kind" | "startUTC" | "endUTC" | "allDay" | "importSource" | "calendarId">,
+  calendars: LocalCalendar[],
+  names: CalendarNames,
+): string | undefined {
+  const imported = importedCalendarLabel(item.importSource, names);
+  if (imported) return imported;
+  if (item.kind !== "event" && item.kind !== "task") return undefined;
+  const id = localCalendarIdOf({
+    kind: item.kind,
+    startUTC: item.startUTC,
+    endUTC: item.endUTC,
+    allDay: item.allDay,
+    importSource: item.importSource,
+    calendarId: item.calendarId,
+  });
+  if (!id) return undefined;
+  return calendars.find((calendar) => calendar.id === id)?.name
+    ?? (id === "events" ? "WatAgent" : id === "tasks" ? "Tasks" : undefined);
+}
+
 const VIEW_OPTIONS: SegmentOption<CalendarView>[] = [
   { value: "day", label: "Day", hint: "Day (D)" },
   { value: "workweek", label: "5 Day", hint: "5 days, Monday to Friday (5)" },
@@ -514,14 +535,27 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
             const calendarName = item.google?.calendarName ? ` [${item.google.calendarName}]` : "";
             return `- ${item.kind} "${item.title}" ${when}${where}${calendarName} (read-only Google calendar)`;
           }
+          const ownedId = localCalendarIdOf({
+            kind: item.kind === "task" ? "task" : "event",
+            startUTC: item.startUTC,
+            endUTC: item.endUTC,
+            allDay: item.allDay,
+            importSource: item.importSource,
+            calendarId: item.calendarId,
+          });
+          const calendarName = ownedId
+            ? shownCalendars.find((calendar) => calendar.id === ownedId)?.name
+              ?? (ownedId === "events" ? "WatAgent" : ownedId === "tasks" ? "Tasks" : ownedId)
+            : "";
+          const calendar = ownedId ? ` calendar=${ownedId} "${calendarName.replace(/"/g, "")}"` : "";
           const done = item.kind === "task" ? ` completed=${item.completed ? "true" : "false"}` : "";
           const where = item.location ? ` @ ${item.location}` : "";
           const about = item.description ? ` — ${item.description.replace(/\s+/g, " ").slice(0, 140)}` : "";
-          return `- ${item.kind} id=${item.id} "${item.title}" ${when}${where}${about}${done}`;
+          return `- ${item.kind} id=${item.id}${calendar} "${item.title}" ${when}${where}${about}${done}`;
         })
         .join("\n")
         .slice(0, 12_000),
-    [timelineFor, focus],
+    [timelineFor, focus, shownCalendars],
   );
 
   const googlePullRef = useRef<() => Promise<number | null>>(async () => null);
@@ -1368,7 +1402,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
           item={shownPeek.item}
           anchor={shownPeek.anchor}
           open={peek.open}
-          calendarLabel={importedCalendarLabel(shownPeek.item.importSource, calendarNames)}
+          calendarLabel={eventCalendarLabel(shownPeek.item, shownCalendars, calendarNames)}
           onClose={closePeek}
           onEdit={
             shownPeek.item.pendingApproval
@@ -1397,7 +1431,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
                     id: shownPeek.item.id,
                     title: shownPeek.item.title,
                     kind: "event",
-                    calendarName: importedCalendarLabel(shownPeek.item.importSource, calendarNames),
+                    calendarName: eventCalendarLabel(shownPeek.item, shownCalendars, calendarNames),
                   });
                 }
               : shownPeek.item.google?.deletable
