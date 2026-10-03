@@ -209,10 +209,11 @@ export function ShieldCheckIcon(props: IconProps) {
   );
 }
 
-export function TrophyIcon(props: IconProps) {
+//two lines joining into one
+export function MergeIcon(props: IconProps) {
   return (
     <Glyph {...props} strokeWidth={1.6}>
-      <path d="M5 2.75h6v3.5a3 3 0 0 1-6 0zM5 4H2.75a2 2 0 0 0 2.4 2.6M11 4h2.25a2 2 0 0 1-2.4 2.6M8 9.25v2.5M5.5 13.25h5" />
+      <path d="M4 2.75v1a4 4 0 0 0 4 4 4 4 0 0 0 4-4v-1M8 7.75v5.5M6 11.25l2 2 2-2" />
     </Glyph>
   );
 }
