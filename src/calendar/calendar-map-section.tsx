@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useMemo, useState, type Dispatch, type SetStateAction } from "react";
+import { useEffect, useId, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import { RuleEditor } from "@/agent/rules/rule-editor";
 import {
   deleteAgentRule,
@@ -24,13 +24,13 @@ import {
 } from "@/features/calendar-map";
 import { sharedEventCounts } from "@/calendar/calendar-merge";
 import { calendarIdForMeta } from "@/calendar/calendar-ownership";
-import { feedOfCalendarId, mergedByMember } from "@/calendar/imported-calendars";
+import { feedOfCalendarId, mergedByMember, newMergedCalendarId } from "@/calendar/imported-calendars";
 import { RenameCalendarDialog } from "@/calendar/imported-calendars-panel";
-import { MergeBoardSection } from "@/calendar/merge-board-section";
+import { boxesOf, commitBoxes, moveInBoxes, newBoxName, TRAY, type Boxes, type MergeBox } from "@/calendar/merge-board";
 import { formatFeedSyncSummary, syncImportedFeed } from "@/calendar/calendar-sync";
 import { calendarItemVisible, externalCalendarId, externalCalendarShown, externalCalendarsOf } from "@/calendar/external-calendars";
 import { calendarIdField, isPrimaryEventCalendarId, type LocalCalendar } from "@/calendar/local-calendars";
-import { calendarGroupsOf, isCalendarReadOnly, setCalendarReadOnly, withNewCalendar, type CalendarColors, type CalendarSourceFilter } from "@/calendar/preferences";
+import { calendarGroupsOf, isCalendarReadOnly, readMergeDrafts, setCalendarReadOnly, withNewCalendar, writeMergeDrafts, type CalendarColors, type CalendarSourceFilter } from "@/calendar/preferences";
 import { timelineItemOf, type OverlayEvent } from "@/calendar/timeline";
 import type { CalendarItemDoc, ImportedCalendar, MergedCalendar } from "@/calendar/types";
 import { ConfirmDialog } from "@/shared/confirm-dialog";
@@ -126,7 +126,13 @@ export function CalendarMapSection({
   const [editor, setEditor] = useState<{ rule?: AgentRule; initial?: Partial<AgentRuleDraft> } | null>(null);
   const [deleting, setDeleting] = useState<AgentRule | null>(null);
   const newShownId = useId();
-  const [renamingMerged, setRenamingMerged] = useState<MergedCalendar | null>(null);
+  const [renamingBox, setRenamingBox] = useState<MergeBox | null>(null);
+  //merge boxes with fewer than two calendars; they stay on this device until they fill.
+  //read after mount so the server and browser renders match
+  const [drafts, setDrafts] = useState<MergeBox[]>([]);
+  useEffect(() => {
+    setDrafts(readMergeDrafts());
+  }, []);
   const editorPresence = usePresence(editor);
   const deletePresence = usePresence(deleting);
   const groups = calendarGroupsOf(sources.groups);
@@ -135,14 +141,21 @@ export function CalendarMapSection({
   const showGoogle = googleConnected === true || overlayEvents.length > 0;
   const memberOf = useMemo(() => mergedByMember(mergedCalendars), [mergedCalendars]);
   const isMerged = (id: string) => mergedCalendars.some((calendar) => calendar.id === id);
+  //a draft filled from elsewhere is a merged calendar now
+  const openDrafts = useMemo(() => drafts.filter((box) => !mergedCalendars.some((calendar) => calendar.id === box.id)), [drafts, mergedCalendars]);
+  const boxList = useMemo<MergeBox[]>(() => [...mergedCalendars, ...openDrafts], [mergedCalendars, openDrafts]);
+  const isBox = (id: string) => boxList.some((box) => box.id === id);
+  //every imported calendar's box, with the rest in TRAY
+  const savedBoxes = useMemo(() => boxesOf(feeds.map((feed) => feed.id), boxList), [feeds, boxList]);
+  const boxHolding = (feed: string) => boxList.find((box) => savedBoxes[box.id]?.includes(feed));
 
   const names = useMemo(() => {
     const out = new Map<string, string>([[AGENT, "Agent"], [GOOGLE, "Google Calendar"]]);
     for (const calendar of localCalendars) out.set(calendar.id, calendar.name);
     for (const feed of feeds) out.set(feed.id, feed.name);
-    for (const calendar of mergedCalendars) out.set(calendar.id, calendar.name);
+    for (const box of boxList) out.set(box.id, box.name);
     return out;
-  }, [localCalendars, feeds, mergedCalendars]);
+  }, [localCalendars, feeds, boxList]);
   const nameOf = (id: string) => names.get(id) ?? id;
 
   //saved and waiting-for-approval items per calendar
@@ -185,7 +198,7 @@ export function CalendarMapSection({
 
   const agentHidden = (id: string) => agentHiddenIds.includes(id);
   //merged calendars have no Agent link of their own; the Agent sees their members
-  const hasAgentLink = (id: string) => id !== AGENT && !isMerged(id) && names.has(id);
+  const hasAgentLink = (id: string) => id !== AGENT && !isBox(id) && names.has(id);
 
   const readOnly = (id: string) => id !== AGENT && id !== GOOGLE && isCalendarReadOnly(sources, id);
   const isLocal = (id: string) => localCalendars.some((calendar) => calendar.id === id);
@@ -242,12 +255,18 @@ export function CalendarMapSection({
       const locked = readOnly(id);
       const amount = plural(counts.saved.get(id) ?? 0, "event");
       const merged = memberOf.get(id);
+      const waiting = merged ? undefined : boxHolding(id);
       list.push({
         id,
         label: feed.name,
         color: colorOverrides[id] ?? colors.event,
         group: "right",
-        caption: ["Imported", merged ? `In ${merged.name}` : hidden ? "Hidden" : null, agentHidden(id) ? "No Agent" : null, amount]
+        caption: [
+          "Imported",
+          merged ? `In ${merged.name}` : waiting ? `Waiting in ${waiting.name}` : hidden ? "Hidden" : null,
+          agentHidden(id) ? "No Agent" : null,
+          amount,
+        ]
           .filter(Boolean)
           .join(" · "),
         locked,
@@ -263,27 +282,57 @@ export function CalendarMapSection({
         ],
       });
     }
-    for (const calendar of mergedCalendars) {
-      const hidden = !shownOnGrid(calendar.id);
-      const memberNames = calendar.members.map(nameOf);
+    //each merge box: its calendars in priority order, with a dropdown to change the order
+    for (const box of boxList) {
+      const members = savedBoxes[box.id] ?? [];
+      const merged = members.length >= 2;
+      const hidden = merged && !shownOnGrid(box.id);
       list.push({
-        id: calendar.id,
-        label: calendar.name,
-        color: colorOverrides[calendar.id] ?? colors.event,
+        id: box.id,
+        label: box.name,
+        color: colorOverrides[box.id] ?? colors.event,
         group: "right",
-        caption: [`${plural(calendar.members.length, "calendar")} merged`, hidden ? "Hidden" : null].filter(Boolean).join(" · "),
-        locked: true,
+        caption: merged
+          ? [`Merged · top copy wins`, hidden ? "Hidden" : null].filter(Boolean).join(" · ")
+          : members.length === 1
+            ? "Drop one more to merge"
+            : "Drop 2+ imported calendars",
+        locked: merged,
         dimmed: hidden,
-        busy: calendar.members.some((member) => syncing.includes(member)),
+        busy: members.some((member) => syncing.includes(member)),
+        box: {
+          empty: "Drag imported calendars here",
+          rows: members.map((member, index) => ({
+            id: member,
+            label: nameOf(member),
+            color: colorOverrides[member] ?? colors.event,
+            choice:
+              members.length > 1
+                ? {
+                    label: "Priority",
+                    value: String(index),
+                    options: members.map((_, rank) => ({ value: String(rank), label: ordinal(rank + 1) })),
+                    onChange: (value: string) => setRank(box.id, member, Number(value)),
+                  }
+                : undefined,
+            remove: { label: "Take out", run: () => takeOut(member) },
+          })),
+        },
         actions: [
-          { id: "rename", label: "Rename", run: () => setRenamingMerged(calendar) },
-          { id: "unmerge", label: "Unmerge", run: () => unmerge(calendar) },
+          { id: "rename", label: "Rename", run: () => setRenamingBox(box) },
+          { id: "delete", label: "Delete box", run: () => deleteBox(box) },
         ],
-        details: [
-          `Shows ${memberNames.join(", ")} as one calendar. Change it under Merge calendars, below the map.`,
-          `Priority, first wins: ${memberNames.map((name, index) => `${index + 1}. ${name}`).join("  ")}`,
-          ...(hidden ? ["Hidden from the calendar."] : []),
-        ],
+        details: merged
+          ? [
+              `Shows ${members.map(nameOf).join(", ")} as one calendar.`,
+              `When an event is in more than one, the copy from the calendar ranked 1st shows, then 2nd, and so on. Change a calendar's rank with its dropdown.`,
+              ...members.map((member) => `${nameOf(member)}: ${plural(shared.get(member) ?? 0, "event")} also in another of its calendars.`),
+              ...(hidden ? ["Hidden from the calendar."] : []),
+            ]
+          : [
+              "A merge box. Drag imported calendars onto it; it merges them once it holds two.",
+              "Until then it's saved on this device only.",
+            ],
       });
     }
     if (showGoogle) {
@@ -308,40 +357,17 @@ export function CalendarMapSection({
       });
     }
     //members show through their merged calendar, so only it gets the switch
-    return list.map((node) => (node.id === AGENT || memberOf.has(node.id) ? node : { ...node, toggle: gridToggle(node.id, node.label) }));
+    //boxes still filling aren't on the calendar yet, so they get no switch either
+    return list.map((node) =>
+      node.id === AGENT || memberOf.has(node.id) || (isBox(node.id) && !isMerged(node.id))
+        ? node
+        : { ...node, toggle: gridToggle(node.id, node.label) },
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps -- every input the helpers read is listed
-  }, [localCalendars, feeds, mergedCalendars, memberOf, counts, overlayEvents.length, sources, colors, colorOverrides, requireAiApproval, syncing, showGoogle, agentHiddenIds]);
+  }, [localCalendars, feeds, mergedCalendars, boxList, savedBoxes, shared, memberOf, counts, overlayEvents.length, sources, colors, colorOverrides, requireAiApproval, syncing, showGoogle, agentHiddenIds]);
 
   const edges = useMemo<MapEdge[]>(() => {
     const list: MapEdge[] = [];
-    //each member feeds its merged calendar; the number is how many of its events another member also has
-    for (const calendar of mergedCalendars) {
-      calendar.members.forEach((member, index) => {
-        if (!nodes.some((node) => node.id === member)) return;
-        const count = shared.get(member) ?? 0;
-        list.push({
-          id: `merge:${calendar.id}:${member}`,
-          from: member,
-          to: calendar.id,
-          label: `${ordinal(index + 1)} · ${count} shared`,
-          weight: Math.min(1, Math.log10(count + 1) / 2),
-          directed: true,
-          faint: count === 0,
-          details: [
-            `${nameOf(member)} is part of ${calendar.name}.`,
-            `${plural(count, "event")} ${count === 1 ? "is" : "are"} also in another of its calendars.`,
-            index === 0
-              ? `Its copy of a shared event is the one that shows.`
-              : `Its copy shows when no earlier calendar has the event.`,
-          ],
-          actions: index === 0 ? [] : [{ id: "first", label: `Make ${nameOf(member)}'s copy win`, run: () => putFirst(calendar.id, member) }],
-          remove: {
-            label: calendar.members.length > 2 ? "Take out of merge" : "Unmerge",
-            run: () => removeMember(calendar.id, member),
-          },
-        });
-      });
-    }
     for (const node of nodes) {
       if (!hasAgentLink(node.id) || agentHidden(node.id)) continue;
       const pending = counts.pending.get(node.id) ?? 0;
@@ -396,7 +422,7 @@ export function CalendarMapSection({
     }
     return list;
     // eslint-disable-next-line react-hooks/exhaustive-deps -- every input the helpers read is listed
-  }, [nodes, mergedCalendars, shared, counts, sources, rules, agentHiddenIds]);
+  }, [nodes, counts, sources, rules, agentHiddenIds]);
 
   function setAgentAccess(id: string, access: boolean): MapChange {
     const before = agentHiddenIds;
@@ -407,38 +433,75 @@ export function CalendarMapSection({
     };
   }
 
-  //every merge change swaps the whole list, so undo puts the old list back
-  function changeMerges(next: MergedCalendar[], message: string): MapChange {
-    const before = mergedCalendars;
-    onMergedCalendars(next);
-    return { message, undo: () => onMergedCalendars(before) };
+  function saveDrafts(next: MergeBox[]) {
+    setDrafts(next);
+    writeMergeDrafts(next);
   }
 
-  function removeMember(mergedId: string, member: string): MapChange {
-    const calendar = mergedCalendars.find((entry) => entry.id === mergedId);
-    if (!calendar) return { message: "That merged calendar is already gone" };
-    const members = calendar.members.filter((entry) => entry !== member);
-    if (members.length < 2) return unmerge(calendar);
-    return changeMerges(
-      mergedCalendars.map((entry) => (entry.id === mergedId ? { ...entry, members } : entry)),
-      `${nameOf(member)} taken out of ${calendar.name}. All its events show again`,
-    );
+  //every box change saves boxes with two or more as merged calendars and keeps the rest as drafts; undo puts both back
+  function applyBoxes(next: Boxes): MapChange {
+    if (next === savedBoxes) return { message: "Nothing changed" };
+    const result = commitBoxes(next, mergedCalendars, openDrafts, nameOf);
+    if (result.changes.length === 0) return { message: "Nothing changed" };
+    const before = { merged: mergedCalendars, drafts: openDrafts };
+    onMergedCalendars(result.merged);
+    saveDrafts(result.drafts);
+    for (const created of result.created) onSources((current) => withNewCalendar(current, created.id, newCalendarsShown));
+    const waiting = result.drafts.filter((box) => box.members.length === 1).map((box) => box.name);
+    return {
+      message:
+        result.changes.join(". ") +
+        (waiting.length ? `. Drop one more calendar on ${waiting.join(" and ")} to merge it` : "") +
+        (result.created.length && !newCalendarsShown ? ". New calendars start hidden, so use its eye to show it" : ""),
+      undo: () => {
+        onMergedCalendars(before.merged);
+        saveDrafts(before.drafts);
+      },
+    };
   }
 
-  function unmerge(calendar: MergedCalendar): MapChange {
-    return changeMerges(
-      mergedCalendars.filter((entry) => entry.id !== calendar.id),
-      `${calendar.name} unmerged. ${calendar.members.map(nameOf).join(" and ")} show on their own again`,
-    );
+  function dropInto(boxId: string, feed: string): MapChange {
+    return applyBoxes(moveInBoxes(savedBoxes, feed, boxId));
   }
 
-  function putFirst(mergedId: string, member: string): MapChange {
-    return changeMerges(
-      mergedCalendars.map((entry) =>
-        entry.id === mergedId ? { ...entry, members: [member, ...entry.members.filter((id) => id !== member)] } : entry,
-      ),
-      `${nameOf(member)}'s copy of a shared event now shows`,
-    );
+  function takeOut(feed: string): MapChange {
+    return applyBoxes(moveInBoxes(savedBoxes, feed, TRAY));
+  }
+
+  //rank is 0-based: 0 means its copy wins
+  function setRank(boxId: string, feed: string, rank: number): MapChange {
+    const members = (savedBoxes[boxId] ?? []).filter((member) => member !== feed);
+    members.splice(Math.max(0, Math.min(rank, members.length)), 0, feed);
+    return applyBoxes({ ...savedBoxes, [boxId]: members });
+  }
+
+  function addBox(): MapChange {
+    const box: MergeBox = { id: newMergedCalendarId(), name: newBoxName(boxList.map((entry) => entry.name)), members: [] };
+    const before = openDrafts;
+    saveDrafts([...openDrafts, box]);
+    return { message: `${box.name} added. Drag imported calendars onto it`, undo: () => saveDrafts(before) };
+  }
+
+  //its calendars show on their own again
+  function deleteBox(box: MergeBox): MapChange {
+    const members = savedBoxes[box.id] ?? [];
+    const before = { merged: mergedCalendars, drafts: openDrafts };
+    if (isMerged(box.id)) onMergedCalendars(mergedCalendars.filter((calendar) => calendar.id !== box.id));
+    saveDrafts(openDrafts.filter((entry) => entry.id !== box.id));
+    return {
+      message: members.length
+        ? `${box.name} deleted. ${members.map(nameOf).join(" and ")} ${members.length === 1 ? "shows on its own" : "show on their own"} again`
+        : `${box.name} deleted`,
+      undo: () => {
+        onMergedCalendars(before.merged);
+        saveDrafts(before.drafts);
+      },
+    };
+  }
+
+  function renameBox(box: MergeBox, name: string) {
+    if (isMerged(box.id)) onMergedCalendars(mergedCalendars.map((calendar) => (calendar.id === box.id ? { ...calendar, name } : calendar)));
+    else saveDrafts(openDrafts.map((entry) => (entry.id === box.id ? { ...entry, name } : entry)));
   }
 
   function setShown(id: string, shown: boolean) {
@@ -484,7 +547,8 @@ export function CalendarMapSection({
         return { message: "Google Calendar synced" };
       }
       //a merged calendar syncs each of its links in turn
-      const targets = (mergedCalendars.find((calendar) => calendar.id === id)?.members ?? [id]).map(linkOf);
+      const targets = (isBox(id) ? savedBoxes[id] ?? [] : [id]).map(linkOf);
+      if (targets.length === 0) throw new Error(`${nameOf(id)} has no calendars to sync yet.`);
       if (targets.some((target) => !target)) throw new Error(`${nameOf(id)} has no calendar link to sync.`);
       const lines: string[] = [];
       for (const target of targets as ImportedCalendar[]) lines.push(formatFeedSyncSummary(target.name, await syncImportedFeed(target)));
@@ -560,7 +624,7 @@ export function CalendarMapSection({
       accepts: (id) => {
         if (id === AGENT) return "The Agent isn't a calendar.";
         if (id === GOOGLE) return "Google calendars keep their own permissions.";
-        if (feedSourceOf(id) || isMerged(id)) return "Imported calendars are always read only.";
+        if (feedSourceOf(id) || isBox(id)) return "Imported calendars are always read only.";
         return isCalendar(id) ? true : "Choose a calendar.";
       },
       apply: (id) => {
@@ -582,7 +646,8 @@ export function CalendarMapSection({
       accepts: (id) => {
         if (syncing.includes(id)) return `${nameOf(id)} is already syncing.`;
         if (id === GOOGLE) return googleConnected === true ? true : "Link Google Calendar in Settings first.";
-        if (isMerged(id) || feedSourceOf(id)) return linkOf(id) || isMerged(id) ? true : `${nameOf(id)} has no calendar link to sync.`;
+        if (isBox(id)) return (savedBoxes[id] ?? []).length ? true : `${nameOf(id)} has no calendars yet.`;
+        if (feedSourceOf(id)) return linkOf(id) ? true : `${nameOf(id)} has no calendar link to sync.`;
         return "Only imported and Google calendars sync.";
       },
       apply: (id) => sync(id),
@@ -672,13 +737,19 @@ export function CalendarMapSection({
 
   //dragging a WatAgent calendar onto the Agent asks about it
   //dragging a calendar onto the Agent gives it access again if it was taken away, and otherwise asks about it
+  //onto a merge box, an imported calendar joins it last (moving out of any other box); onto the Agent, see dragged's comment
   const nodeDrop: MapNodeDrop = {
     accepts: (dragged, target) => {
-      if (target !== AGENT) return "Drop it on the Agent.";
+      if (isBox(target)) {
+        if (!feedSourceOf(dragged)) return "Only imported calendars go in merge boxes.";
+        return savedBoxes[target]?.includes(dragged) ? `${nameOf(dragged)} is already in ${nameOf(target)}.` : true;
+      }
+      if (target !== AGENT) return "Drop it on the Agent or a merge box.";
       if (hasAgentLink(dragged) && agentHidden(dragged)) return true;
       return isLocal(dragged) ? true : "Only WatAgent calendars can be attached to a message.";
     },
-    apply: (dragged) => {
+    apply: (dragged, target) => {
+      if (isBox(target)) return dropInto(target, dragged);
       if (agentHidden(dragged)) return setAgentAccess(dragged, true);
       onAskAgent(dragged);
       return { message: `Chat opened with @${nameOf(dragged)} attached` };
@@ -693,9 +764,14 @@ export function CalendarMapSection({
       <CalendarMap
         label="Calendar map"
         toolbar={
-          <div className="settings-toggle calendar-map-toggle">
-            <label htmlFor={newShownId}>New calendars start shown</label>
-            <Switch id={newShownId} checked={newCalendarsShown} onChange={onNewCalendarsShown} />
+          <div className="calendar-map-tools">
+            <button type="button" className="calendar-map-add" onClick={() => onNotice(addBox().message)}>
+              + Add merge box
+            </button>
+            <div className="settings-toggle calendar-map-toggle">
+              <label htmlFor={newShownId}>New calendars start shown</label>
+              <Switch id={newShownId} checked={newCalendarsShown} onChange={onNewCalendarsShown} />
+            </div>
           </div>
         }
         nodes={nodes}
@@ -703,23 +779,16 @@ export function CalendarMapSection({
         functions={functions}
         nodeDrop={nodeDrop}
         layoutStore={layoutStore}
-        hint="Use the eye on a calendar to show or hide it on the calendar. Drag a function onto a calendar. To merge imported calendars, drag them into a box under Merge calendars, below. Draw from an imported calendar's handle to a WatAgent calendar to make an Agent rule. Select a link to delete it; deleting a calendar's link to the Agent hides it from the Agent."
+        hint="Use the eye on a calendar to show or hide it on the calendar. Drag a function onto a calendar. To merge imported calendars, add a merge box and drag them onto it; each calendar's dropdown in the box sets its priority. Draw from an imported calendar's handle to a WatAgent calendar to make an Agent rule. Select a link to delete it; deleting a calendar's link to the Agent hides it from the Agent."
       />
-      <MergeBoardSection
-        feeds={feeds.map((feed) => ({ id: feed.id, name: feed.name, color: colorOverrides[feed.id] ?? colors.event }))}
-        merged={mergedCalendars}
-        onMerged={onMergedCalendars}
-        onCreated={(id) => onSources((current) => withNewCalendar(current, id, newCalendarsShown))}
-        newCalendarsShown={newCalendarsShown}
-      />
-      {renamingMerged ? (
+      {renamingBox ? (
         <RenameCalendarDialog
-          name={renamingMerged.name}
-          onCancel={() => setRenamingMerged(null)}
+          name={renamingBox.name}
+          onCancel={() => setRenamingBox(null)}
           onSave={(name) => {
-            const id = renamingMerged.id;
-            setRenamingMerged(null);
-            onMergedCalendars((current) => current.map((calendar) => (calendar.id === id ? { ...calendar, name } : calendar)));
+            const box = renamingBox;
+            setRenamingBox(null);
+            renameBox(box, name);
           }}
         />
       ) : null}
