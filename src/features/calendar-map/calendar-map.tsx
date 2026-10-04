@@ -59,6 +59,9 @@ export type CalendarMapProps = {
   hint?: string;
   /** Shown when there are no nodes. */
   empty?: ReactNode;
+  /** Share results and undo with the calendar list view. */
+  onResult?: (change: MapChange) => void;
+  onUndo?: () => void;
 };
 
 type Selection = { kind: "node" | "edge"; id: string } | null;
@@ -110,6 +113,8 @@ export function CalendarMap({
   nodeDrop,
   layoutStore,
   toolbar,
+  onResult,
+  onUndo,
   settings,
   hint,
   empty,
@@ -255,15 +260,21 @@ export function CalendarMap({
       try {
         change = await action();
       } catch (err) {
-        tell(err instanceof Error && err.message ? err.message : FAILED);
+        const message = err instanceof Error && err.message ? err.message : FAILED;
+        if (onResult) onResult({ message });
+        else tell(message);
         return;
       }
       if (pulseId) setPulse({ id: pulseId, key: Date.now() });
       if (!change) return;
+      if (onResult) {
+        onResult(change);
+        return;
+      }
       if (change.undo) undoStack.current = [...undoStack.current, change].slice(-UNDO_DEPTH);
       tell(change.message, change.undo ? change : undefined);
     },
-    [tell],
+    [onResult, tell],
   );
 
   const undo = useCallback(
@@ -384,7 +395,14 @@ export function CalendarMap({
     for (const node of nodes) nodeDrag.stop(node.id);
     reflowing.current.clear();
     setLayout({});
-    void run(() => ({ message: "Map arranged", undo: () => setLayout(previous) }));
+    layoutStore?.save({});
+    void run(() => ({
+      message: "Map arranged",
+      undo: () => {
+        layoutStore?.save(previous);
+        setLayout(previous);
+      },
+    }));
   }
 
   const nodeDrag = useNodeDrag({
@@ -635,6 +653,12 @@ export function CalendarMap({
     }
     if ((event.metaKey || event.ctrlKey) && !event.shiftKey && event.key.toLowerCase() === "z") {
       if ((event.target as HTMLElement).closest("input, textarea, select, [contenteditable='true']")) return;
+      if (onUndo) {
+        event.preventDefault();
+        event.stopPropagation();
+        onUndo();
+        return;
+      }
       if (undoStack.current.length === 0) return;
       event.preventDefault();
       undo();

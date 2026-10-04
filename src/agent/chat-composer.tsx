@@ -21,6 +21,7 @@ type MentionState = { start: number; query: string; index: number };
 
 type Props = {
   busy: boolean;
+  restricted?: boolean;
   error: string | null;
   effort: AgentEffort;
   calendars: MentionCalendar[];
@@ -38,6 +39,7 @@ type Props = {
 
 export function ChatComposer({
   busy,
+  restricted = false,
   error,
   effort,
   calendars,
@@ -99,7 +101,7 @@ export function ChatComposer({
 
   function submit(event?: FormEvent) {
     event?.preventDefault();
-    if (busy) return;
+    if (restricted || busy) return;
     let value = text;
     let nextAttached = attached;
     const field = inputRef.current;
@@ -169,7 +171,7 @@ export function ChatComposer({
   }
 
   return (
-    <form className="composer" onSubmit={submit}>
+    <form className={`composer${restricted ? " is-restricted" : ""}`} onSubmit={submit}>
       {error ? (
         <p className="composer-error" role="alert">
           {error}
@@ -238,8 +240,16 @@ export function ChatComposer({
           value={text}
           rows={2}
           maxLength={MAX_CHARS}
-          placeholder={attached.length ? "Ask about the attached calendar…" : "Ask about this day, or add an event…"}
+          disabled={restricted}
+          placeholder={
+            restricted
+              ? "AI features are restricted"
+              : attached.length
+                ? "Ask about the attached calendar…"
+                : "Ask about this day, or add an event…"
+          }
           aria-label="Message"
+          aria-disabled={restricted || undefined}
           aria-autocomplete="list"
           aria-expanded={mention != null}
           aria-controls={mention ? "calendar-mention-list" : undefined}
@@ -256,16 +266,16 @@ export function ChatComposer({
           onKeyDown={onKeyDown}
         />
         <div className="composer-bar">
-          <AgentEffortButton value={effort} onChange={onEffort} />
+          <AgentEffortButton value={effort} onChange={onEffort} disabled={restricted} />
           {busy ? (
-            <button type="button" className="composer-send is-stop" onClick={onStop} aria-label="Stop">
+            <button type="button" className="composer-send is-stop" onClick={onStop} aria-label="Stop" disabled={restricted}>
               <StopIcon />
             </button>
           ) : (
             <button
               type="submit"
-              className={`composer-send${ready ? " is-ready" : ""}`}
-              disabled={!ready}
+              className={`composer-send${ready && !restricted ? " is-ready" : ""}`}
+              disabled={!ready || restricted}
               aria-label="Send"
             >
               <ArrowUpIcon />

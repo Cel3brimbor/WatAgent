@@ -9,17 +9,22 @@ import { usePresence } from "@/shared/use-presence";
 type Props = {
   value: AgentEffort;
   onChange: (effort: AgentEffort) => void;
+  disabled?: boolean;
 };
 
 function enabledOptions(root: HTMLElement | null): HTMLButtonElement[] {
   return root ? [...root.querySelectorAll<HTMLButtonElement>(".context-menu-item:not(:disabled)")] : [];
 }
 
-export function AgentEffortButton({ value, onChange }: Props) {
+export function AgentEffortButton({ value, onChange, disabled = false }: Props) {
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLUListElement>(null);
   const [open, setOpen] = useState(false);
   const presence = usePresence(open ? value : null);
+
+  useEffect(() => {
+    if (disabled) setOpen(false);
+  }, [disabled]);
 
   useLayoutEffect(() => {
     const menu = menuRef.current;
@@ -102,7 +107,11 @@ export function AgentEffortButton({ value, onChange }: Props) {
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={`Agent effort, ${label}`}
-        onClick={() => setOpen((current) => !current)}
+        disabled={disabled}
+        onClick={() => {
+          if (disabled) return;
+          setOpen((current) => !current);
+        }}
       >
         <span className="composer-effort-name">Effort</span>
         <span className="composer-effort-value">{label}</span>

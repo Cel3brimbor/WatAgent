@@ -64,6 +64,10 @@ function memberOf(item: TimelineItem): string | null {
   return item.importSource ? importedCalendarId(item.importSource) : null;
 }
 
+function isGoogleEvent(item: TimelineItem): boolean {
+  return item.kind === "gcal_event";
+}
+
 //a feed can list one event twice under different UIDs; identical copies from one imported calendar show once
 function dropSameFeedCopies(items: TimelineItem[]): TimelineItem[] {
   const copies = new Set<string>();
@@ -77,9 +81,35 @@ function dropSameFeedCopies(items: TimelineItem[]): TimelineItem[] {
   });
 }
 
+//google loses to any other calendar in the same duplicate group. among google-only copies, portal loses to learn
+function googleCopiesToHide(items: TimelineItem[]): Set<TimelineItem> {
+  const pool = items.filter((item) => competes(item) && (isGoogleEvent(item) || item.kind === "event"));
+  const find = groupDuplicates(pool);
+  const groups = new Map<number, TimelineItem[]>();
+  pool.forEach((item, index) => {
+    const root = find(index);
+    const group = groups.get(root);
+    if (group) group.push(item);
+    else groups.set(root, [item]);
+  });
+  const hidden = new Set<TimelineItem>();
+  for (const group of groups.values()) {
+    const google = group.filter(isGoogleEvent);
+    if (google.length === 0) continue;
+    const googleOnly = google.length === group.length;
+    //a google-only group keeps every copy, except a portal subscription loses to learn
+    if (googleOnly && !google.some((item) => googleFeedOf(item) === "learn")) continue;
+    for (const item of google) {
+      if (!googleOnly || googleFeedOf(item) === "portal") hidden.add(item);
+    }
+  }
+  return hidden;
+}
+
 /**
  * Members of a merged calendar show as that calendar: each duplicate once, the copy from its earliest member.
- * Events from imported calendars outside any merge, WatAgent events and Google events pass through.
+ * Google is last: its copy hides when the event is also on another calendar.
+ * Between Google's own LEARN and Portal subscriptions, the Portal copy hides.
  */
 export function mergeTimeline(items: TimelineItem[], merged: MergedCalendar[]): TimelineItem[] {
   const distinct = dropSameFeedCopies(items);
@@ -97,11 +127,7 @@ export function mergeTimeline(items: TimelineItem[], merged: MergedCalendar[]): 
     });
     for (const item of winner.values()) kept.add(item);
   }
-  //Google calendars subscribed to both feeds: the Portal copy of a LEARN event hides
-  const googleOpen = distinct.filter((item) => competes(item) && googleFeedOf(item));
-  const findGoogle = groupDuplicates(googleOpen);
-  const learnRoots = new Set(googleOpen.flatMap((item, index) => (googleFeedOf(item) === "learn" ? [findGoogle(index)] : [])));
-  const googleHidden = new Set(googleOpen.filter((item, index) => googleFeedOf(item) === "portal" && learnRoots.has(findGoogle(index))));
+  const googleHidden = googleCopiesToHide(distinct);
 
   return distinct.flatMap((item) => {
     if (googleHidden.has(item)) return [];

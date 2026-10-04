@@ -7,6 +7,7 @@ import {
 } from "@/shared/config";
 import { startNativeOAuth } from "@/auth/native-oauth";
 import { clearNativeSession, loadRefreshToken, storeRefreshToken } from "@/security/secure-store";
+import { isNativeBan, nativeBannedError, reportAccessError } from "@/auth/access";
 import { authUserOf, type AuthDriver, type AuthUser } from "@/auth/types";
 
 let client: SupabaseClient | null = null;
@@ -48,6 +49,11 @@ export const nativeAuthDriver: AuthDriver = {
     if (!stored) return null;
     lastStoredToken = stored;
     const { data, error } = await auth.refreshSession({ refresh_token: stored });
+    if (isNativeBan(error)) {
+      const banned = nativeBannedError();
+      reportAccessError(banned);
+      throw banned;
+    }
     if (error || !data.session) {
       lastStoredToken = null;
       await clearNativeSession().catch(() => undefined);
@@ -72,6 +78,11 @@ export const nativeAuthDriver: AuthDriver = {
     if (error || !data?.url) throw new Error("Unable to start sign-in.");
     const code = await startNativeOAuth(data.url, APP_URL_SCHEME);
     const exchanged = await auth.exchangeCodeForSession(code);
+    if (isNativeBan(exchanged.error)) {
+      const banned = nativeBannedError();
+      reportAccessError(banned);
+      throw banned;
+    }
     if (exchanged.error || !exchanged.data.session) throw new Error("Unable to complete sign-in.");
     return userOf(exchanged.data.session);
   },

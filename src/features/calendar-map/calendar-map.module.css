@@ -44,6 +44,38 @@
   min-width: 0;
 }
 
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem 1.1rem;
+  margin: -0.25rem 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--map-ink-soft);
+  font-size: 0.78rem;
+  font-weight: 560;
+}
+
+.legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.legend i {
+  display: inline-block;
+  width: 1.35rem;
+  border-top: 2px solid var(--map-accent);
+}
+
+.legend i[data-kind="read"] {
+  border-top-style: dashed;
+}
+
+.legend i[data-kind="rule"] {
+  border-top-style: dotted;
+}
+
 .button {
   display: inline-flex;
   align-items: center;
@@ -564,7 +596,7 @@
   border-radius: 999px;
   background: var(--map-panel);
   cursor: crosshair;
-  opacity: 0;
+  opacity: 0.55;
   touch-action: none;
   transform: translateY(-50%);
   transition: opacity var(--map-fast) var(--map-ease);

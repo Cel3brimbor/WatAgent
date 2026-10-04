@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { AccessError } from "@/auth/access";
 
 type Props = {
   error?: string | null;
@@ -38,7 +39,8 @@ export function LoginScreen({ error, onSignIn }: Props) {
             setFailure(null);
             try {
               await onSignIn();
-            } catch {
+            } catch (err) {
+              if (err instanceof AccessError) return;
               setFailure("Sign-in failed. Please try again.");
             } finally {
               setWorking(false);

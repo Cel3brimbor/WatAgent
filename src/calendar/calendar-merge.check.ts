@@ -55,11 +55,17 @@ const formDue = { ...portal, id: "form-due", title: "Video Release Form - Due", 
 assert.deepEqual(ids(mergeTimeline([formDue, form], [school])), ["form"]);
 assert.deepEqual(ids(mergeTimeline([formDue, { ...form, id: "form-later", endUTC: formStart + 60000 }], [school])), ["form-due", "form-later"]);
 
-//Google stays separate, apart from its own LEARN and Portal subscriptions
+//google is last whenever the event also exists on another calendar
 const googleLearn: TimelineItem = { ...learn, id: "g-learn", kind: "gcal_event", importSource: undefined, google: { calendarName: "LEARN calendar" } };
 const googlePortal: TimelineItem = { ...portal, id: "g-portal", kind: "gcal_event", importSource: undefined, google: { calendarName: "UWaterloo Portal" } };
-assert.deepEqual(ids(mergeTimeline([googlePortal, googleLearn], [])), ["g-learn"]);
-assert.deepEqual(ids(mergeTimeline([googleLearn, learn, portal], [school])), ["g-learn", "learn"], "Google never hides imported copies");
+const googlePersonal: TimelineItem = { ...learn, id: "g-personal", kind: "gcal_event", importSource: undefined, google: { calendarName: "Personal" } };
+assert.deepEqual(ids(mergeTimeline([googlePortal, googleLearn], [])), ["g-learn"], "between Google subscriptions, Portal still loses to LEARN");
+assert.deepEqual(ids(mergeTimeline([googleLearn, learn, portal], [school])), ["learn"], "an imported copy beats Google");
+assert.deepEqual(ids(mergeTimeline([googlePersonal, learn], [])), ["learn"], "Google loses even when the calendars are not merged");
+assert.deepEqual(ids(mergeTimeline([googlePersonal, manual], [])), ["manual"], "a WatAgent event beats Google");
+assert.deepEqual(ids(mergeTimeline([googlePersonal], [])), ["g-personal"], "a Google-only event still shows");
+assert.deepEqual(ids(mergeTimeline([googlePersonal, task], [])), ["g-personal", "task"], "tasks never hide a Google event");
+assert.deepEqual(ids(mergeTimeline([googlePersonal, googleLearn], [])), ["g-personal", "g-learn"], "other Google calendars are not ranked against each other");
 
 //shared counts
 assert.deepEqual(sharedEventCounts([learn, portal, nextDay], [school]), new Map([["ics:learn", 1], ["ics:portal", 1]]));
