@@ -19,7 +19,7 @@ import { calendarItemVisible, externalCalendarId, externalCalendarsOf } from "@/
 import { mergeTimeline } from "@/calendar/calendar-merge";
 import { mergedByMember } from "@/calendar/imported-calendars";
 import type { SideExternalCalendar } from "@/calendar/calendar-side-panel";
-import { aggregateTimeline, rangesOverlap, type BusyBlock, type OverlayEvent } from "@/calendar/timeline";
+import { aggregateTimeline, overlayTimelineItemOf, rangesOverlap, timelineItemOf, type BusyBlock, type OverlayEvent } from "@/calendar/timeline";
 import {
   ALL_SOURCES,
   readCalendarColors,
@@ -88,7 +88,8 @@ import { CalendarMapSection } from "@/calendar/calendar-map-section";
 import { onRulesRan, ruleRunSummary } from "@/agent/rules/rules-client";
 import { useAgentRules } from "@/agent/rules/use-agent-rules";
 import { TodoList } from "@/calendar/todo-list";
-import { readKeywordTasks, type KeywordTasks } from "@/calendar/keyword-tasks";
+import { keywordTasksOf, readKeywordTasks, withKeywordTaskDone, type KeywordTasks, type KeywordTaskSource } from "@/calendar/keyword-tasks";
+import { KeywordTaskRules, type KeywordTaskCalendarOption } from "@/calendar/keyword-task-rules";
 import { AccessError, plainReason } from "@/auth/access";
 import { CalendarChatPanel } from "@/agent/calendar-chat-panel";
 import type { PendingAiChange } from "@/calendar/approval-client";
@@ -621,6 +622,45 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
       })),
     ],
     [calendar.displayItems, overlayEvents],
+  );
+
+  //every event, each merged duplicate once, that a keyword rule could turn into a task
+  const keywordTaskSources = useMemo<KeywordTaskSource[]>(() => {
+    const own = itemsForUi
+      .filter((item) => item.calendar.kind === "event" && !item.pendingApproval && !item.editorDraft)
+      .map(timelineItemOf);
+    return mergeTimeline([...own, ...shownOverlayEvents.map(overlayTimelineItemOf)], mergedCalendars).flatMap((item): KeywordTaskSource[] => {
+      const calendarId = item.kind === "gcal_event" ? item.google?.calendarId : timelineItemCalendarId(item);
+      if (!calendarId) return [];
+      return [{
+        key: item.id,
+        calendarId,
+        mergedCalendarId: item.mergedCalendarId,
+        title: item.title,
+        startUTC: item.startUTC,
+        endUTC: item.endUTC,
+        allDay: item.allDay,
+        location: item.location ?? item.google?.location,
+        description: item.description ?? item.google?.description,
+      }];
+    });
+  }, [itemsForUi, shownOverlayEvents, mergedCalendars]);
+  const derivedKeywordTasks = useMemo(() => keywordTasksOf(keywordTasks, keywordTaskSources), [keywordTasks, keywordTaskSources]);
+  const keywordTaskCalendars = useMemo<KeywordTaskCalendarOption[]>(
+    () => [
+      ...sideExternalCalendars.map((calendar) => ({ id: calendar.id, name: calendar.name, group: "Imported" as const })),
+      ...sidebarCalendars
+        .filter((calendar) => !isExcludedGoogleCalendarName(calendar.name))
+        .map((calendar) => ({ id: calendar.id, name: calendar.name, group: "Google" as const })),
+      ...shownCalendars
+        .filter((calendar) => calendar.kind === "event")
+        .map((calendar) => ({ id: calendar.id, name: calendar.name, group: "WatAgent" as const })),
+    ],
+    [sideExternalCalendars, sidebarCalendars, shownCalendars],
+  );
+  const keywordTaskCalendarName = useCallback(
+    (id: string) => keywordTaskCalendars.find((calendar) => calendar.id === id)?.name ?? "Calendar",
+    [keywordTaskCalendars],
   );
 
   function toggleNav() {
@@ -1456,6 +1496,22 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
                 }}
                 onComplete={calendar.completeTask}
                 onCreate={() => setDraft({ ...defaultAllDayDraft(startOfLocalDay(new Date())), kind: "task" })}
+                keywordTasks={derivedKeywordTasks}
+                calendarName={keywordTaskCalendarName}
+                onKeywordComplete={(key, done) => setKeywordTasks((current) => withKeywordTaskDone(current, key, done))}
+                onKeywordOpen={(task) => {
+                  setFocus(new Date(task.dueUTC));
+                  setView("day");
+                  setSection("calendar");
+                }}
+                rules={
+                  <KeywordTaskRules
+                    config={keywordTasks}
+                    onChange={setKeywordTasks}
+                    calendars={keywordTaskCalendars}
+                    sources={keywordTaskSources}
+                  />
+                }
               />
             ) : null}
             {section === "map" ? (

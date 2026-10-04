@@ -3749,6 +3749,246 @@ select {
   font-size: 0.78rem;
 }
 
+/*keyword tasks: rules that turn calendar events into tasks*/
+.todo-main small {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.15rem 0.5rem;
+}
+
+.todo-main small > span,
+.todo-list li.is-done .todo-main small > span {
+  overflow: visible;
+  color: inherit;
+  font-weight: 400;
+  text-decoration: none;
+  white-space: normal;
+}
+
+.todo-main small > .todo-overdue {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.todo-main small > .todo-origin {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.todo-keyword {
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--task-color) 16%, transparent);
+  color: var(--ink);
+  font-size: 0.72rem;
+  font-style: normal;
+}
+
+.todo-older {
+  margin-top: 0.75rem;
+}
+
+.ktask-rules {
+  margin-bottom: 1.25rem;
+  padding: 0.85rem 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel-solid);
+}
+
+.ktask-rules-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.ktask-rules-head h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 560;
+  letter-spacing: -0.015em;
+}
+
+.ktask-rules-head p,
+.ktask-empty {
+  margin: 0.2rem 0 0;
+  color: var(--ink-soft);
+  font-size: 0.82rem;
+}
+
+.ktask-rules-head .ghost-btn {
+  flex-shrink: 0;
+}
+
+.ktask-rule-list {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+/*the rules sit inside .todo-list, whose li rule draws task cards*/
+.todo-list .ktask-rule {
+  display: block;
+  padding: 0.45rem 0 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+
+.ktask-rule-row {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.ktask-rule-summary {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  gap: 0.05rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+}
+
+.ktask-rule-name {
+  overflow: hidden;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ktask-rule-summary small {
+  overflow: hidden;
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ktask-rule.is-paused .ktask-rule-summary {
+  opacity: 0.55;
+}
+
+.ktask-edit {
+  flex-shrink: 0;
+}
+
+.ktask-editor {
+  display: grid;
+  gap: 0.7rem;
+  margin: 0.65rem 0 0.35rem;
+  padding: 0.75rem;
+  border-radius: 10px;
+  background: var(--surface-sunken, var(--paper));
+}
+
+.ktask-field {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+  font-size: 0.78rem;
+}
+
+.ktask-field > span,
+.ktask-calendars legend,
+.ktask-calendar-group-label {
+  color: var(--ink-soft);
+  font-size: 0.74rem;
+  font-weight: 600;
+}
+
+.ktask-field small {
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+}
+
+.ktask-field-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: 0.7rem;
+}
+
+.ktask-calendars {
+  display: grid;
+  gap: 0.5rem;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.ktask-calendars legend {
+  margin-bottom: 0.25rem;
+  padding: 0;
+}
+
+.ktask-calendar-group {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.ktask-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.ktask-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  max-width: 100%;
+  min-height: 1.75rem;
+  padding: 0.2rem 0.65rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel-solid);
+  color: var(--ink);
+  font-size: 0.78rem;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out);
+}
+
+.ktask-chip .glyph {
+  width: 0.75rem;
+  height: 0.75rem;
+}
+
+.ktask-chip.is-on {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, var(--panel-solid));
+}
+
+@media (hover: hover) {
+  .ktask-chip:not(.is-on):hover {
+    border-color: var(--line-strong);
+  }
+}
+
+.ktask-editor-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.ktask-matches {
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+}
+
 .ghost-btn.is-syncing,
 .ghost-btn.is-syncing:disabled {
   opacity: 1;
