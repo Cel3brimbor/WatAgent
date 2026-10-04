@@ -91,6 +91,7 @@ import { onRulesRan, ruleRunSummary } from "@/agent/rules/rules-client";
 import { useAgentRules } from "@/agent/rules/use-agent-rules";
 import { TodoList } from "@/calendar/todo-list";
 import { CampusEventsSection } from "@/campus/campus-events-section";
+import { campusEventMeta, type CampusEvent } from "@/campus/campus-events";
 import { keywordTasksOf, readKeywordTasks, withKeywordTaskDone, type KeywordTasks, type KeywordTaskSource } from "@/calendar/keyword-tasks";
 import { KeywordTaskRules, type KeywordTaskCalendarOption } from "@/calendar/keyword-task-rules";
 import { AccessError, plainReason } from "@/auth/access";
@@ -561,6 +562,24 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
     );
     await calendar.refresh();
   }, [calendar]);
+
+  //UWaterloo events copy onto any WatAgent event calendar you can write to
+  const campusTargets = useMemo(
+    () =>
+      shownCalendars
+        .filter((entry) => entry.kind === "event" && !isCalendarReadOnly(sources, entry.id))
+        .map((entry) => ({ id: entry.id, name: entry.name })),
+    [shownCalendars, sources],
+  );
+
+  const addCampusEvent = useCallback(
+    (event: CampusEvent, calendarId: string) => {
+      calendar.upsert({ title: event.title, calendar: campusEventMeta(event, calendarId) });
+      const name = campusTargets.find((entry) => entry.id === calendarId)?.name ?? "your calendar";
+      setNotice(`Added “${event.title}” to ${name}.`);
+    },
+    [calendar, campusTargets],
+  );
 
   const addImported = useCallback(async (added: ImportedCalendar) => {
     const isNew = !importedCalendars.some((entry) => entry.id === added.id);
@@ -1516,7 +1535,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
                 }
               />
             ) : null}
-            {section === "events" ? <CampusEventsSection /> : null}
+            {section === "events" ? <CampusEventsSection items={calendar.items} calendars={campusTargets} onAdd={addCampusEvent} /> : null}
             {section === "map" ? (
               <CalendarMapSection
                 items={itemsForUi}

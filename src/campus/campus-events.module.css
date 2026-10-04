@@ -254,6 +254,60 @@
   gap: 0.35rem;
 }
 
+.add {
+  min-height: 1.9rem;
+  padding: 0.3rem 0.65rem 0.3rem 0.8rem;
+  font-size: 0.8rem;
+}
+
+.add :global(.glyph) {
+  width: 0.85rem;
+  height: 0.85rem;
+  margin: 0 -0.1rem 0 0;
+  color: var(--ink-soft);
+}
+
+.added,
+.addedSmall {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: var(--success);
+  font-size: 0.8rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.added {
+  min-height: 1.9rem;
+  padding: 0 0.4rem;
+}
+
+.added :global(.glyph),
+.addedSmall :global(.glyph) {
+  width: 0.85rem;
+  height: 0.85rem;
+}
+
+.addedSmall {
+  font-size: 0.75rem;
+}
+
+.addSmall {
+  padding: 0.15rem 0.45rem;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--accent-deep);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.addSmall:hover {
+  background: var(--accent-soft);
+}
+
 .empty {
   display: grid;
   justify-items: start;

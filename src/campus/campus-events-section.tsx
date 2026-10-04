@@ -4,6 +4,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { fetchCampusEvents } from "@/campus/campus-client";
 import {
   campusDays,
+  campusEventIcs,
+  campusPlacements,
+  googleCalendarLink,
+  icsFileName,
   localSpan,
   matchesCampusQuery,
   type CampusEvent,
@@ -11,7 +15,18 @@ import {
   type CampusSeries,
 } from "@/campus/campus-events";
 import { formatTime } from "@/calendar/date-utils";
+import type { CalendarItemDoc } from "@/calendar/types";
+import { ContextMenu, menuStateFromElement, type ContextMenuItem, type ContextMenuPosition } from "@/shared/context-menu";
+import { CheckIcon, ChevronDownIcon } from "@/shared/icons";
 import styles from "./campus-events.module.css";
+
+type Props = {
+  /** Everything on your calendars, to mark events you already have. */
+  items: CalendarItemDoc[];
+  /** WatAgent calendars an event can be added to. */
+  calendars: Array<{ id: string; name: string }>;
+  onAdd: (event: CampusEvent, calendarId: string) => void;
+};
 
 //rows rendered at first; the rest wait behind "Show more" so a busy term doesn't build hundreds of cards
 const PAGE = 40;
@@ -76,6 +91,18 @@ function whenLines(event: CampusEvent): { main: string; end?: string; until?: st
   return { main: formatTime(startUTC), until: `until ${monthDay(endUTC)}` };
 }
 
+//a file the browser saves, for Apple Calendar, Outlook and the rest
+function downloadIcs(event: CampusEvent) {
+  const url = URL.createObjectURL(new Blob([campusEventIcs(event, Date.now())], { type: "text/calendar;charset=utf-8" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = icsFileName(event);
+  document.body.append(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 function updatedLabel(updatedAt: number | null, now: number): string {
   if (updatedAt == null) return "";
   const minutes = Math.max(0, Math.round((now - updatedAt) / 60_000));
@@ -96,13 +123,15 @@ function useMinute(): number {
   return now;
 }
 
-export function CampusEventsSection() {
+export function CampusEventsSection({ items, calendars, onAdd }: Props) {
   const { data, error, loading, reload } = useCampusEvents();
   const [category, setCategory] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const [limit, setLimit] = useState(PAGE);
+  const [menu, setMenu] = useState<{ position: ContextMenuPosition; event: CampusEvent } | null>(null);
   const now = useMinute();
+  const placementOf = useMemo(() => campusPlacements(items, null), [items]);
 
   const labels = useMemo(() => new Map((data?.categories ?? []).map((entry) => [entry.id, entry.label])), [data]);
   const sourceNames = useMemo(() => new Map((data?.sources ?? []).map((entry) => [entry.id, entry.name])), [data]);
@@ -127,6 +156,45 @@ export function CampusEventsSection() {
     return [{ ...day, series }];
   });
   const seriesCount = days.reduce((sum, day) => sum + day.series.length, 0);
+
+  const menuItems: ContextMenuItem[] = menu
+    ? [
+        ...calendars.map((calendar) => ({
+          id: `calendar:${calendar.id}`,
+          label: `Add to ${calendar.name}`,
+          onSelect: () => onAdd(menu.event, calendar.id),
+        })),
+        {
+          id: "google",
+          label: "Open in Google Calendar",
+          onSelect: () => void window.open(googleCalendarLink(menu.event), "_blank", "noopener,noreferrer"),
+        },
+        { id: "ics", label: "Download .ics file", onSelect: () => downloadIcs(menu.event) },
+      ]
+    : [];
+
+  function addButton(event: CampusEvent, compact = false) {
+    if (placementOf(event) === "added") {
+      return (
+        <span className={compact ? styles.addedSmall : styles.added}>
+          <CheckIcon />
+          Added
+        </span>
+      );
+    }
+    return (
+      <button
+        type="button"
+        className={compact ? styles.addSmall : `ghost-btn ${styles.add}`}
+        aria-haspopup="menu"
+        aria-label={`Add ${event.title} to a calendar`}
+        onClick={(click) => setMenu({ position: menuStateFromElement(click.currentTarget), event })}
+      >
+        {compact ? "Add" : "Add to calendar"}
+        {compact ? null : <ChevronDownIcon />}
+      </button>
+    );
+  }
 
   function toggleExpanded(key: string) {
     setExpanded((current) => {
@@ -174,12 +242,14 @@ export function CampusEventsSection() {
                 return (
                   <li key={occurrence.id}>
                     <span>{[shortDay(localSpan(occurrence).startUTC), lines.end ? `${lines.main} – ${lines.end}` : lines.until ?? lines.main].join(" · ")}</span>
+                    {addButton(occurrence, true)}
                   </li>
                 );
               })}
             </ul>
           ) : null}
         </div>
+        <div className={styles.actions}>{addButton(next)}</div>
       </li>
     );
   }
@@ -291,6 +361,7 @@ export function CampusEventsSection() {
         </div>
       ) : null}
       {renderBody()}
+      <ContextMenu state={menu?.position ?? null} items={menuItems} onClose={() => setMenu(null)} />
       {data && data.sources.length > 0 ? (
         <p className={styles.footer}>
           From{" "}
