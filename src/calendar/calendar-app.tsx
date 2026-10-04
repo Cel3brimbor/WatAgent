@@ -146,7 +146,7 @@ const VIEW_OPTIONS: SegmentOption<CalendarView>[] = [
 ];
 
 const VIEW_DEPTH: Record<CalendarView, number> = { year: 0, month: 1, week: 2, workweek: 2, day: 3 };
-const SECTION_TITLES: Record<Exclude<AppSection, "calendar">, string> = { tasks: "To-do list", map: "Calendars", settings: "Settings" };
+const SECTION_TITLES: Record<Exclude<AppSection, "calendar">, string> = { tasks: "Tasks", map: "Calendars", settings: "Settings" };
 
 //which way the stage should move: sideways through time, or zooming between granularities
 type NavDirection = "next" | "prev" | "in" | "out" | "none";

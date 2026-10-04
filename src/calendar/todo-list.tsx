@@ -68,7 +68,7 @@ export function TodoList({ items, onOpen, onComplete, onCreate, keywordTasks = [
     <section className="todo-list" aria-labelledby="todo-heading">
       <div className="todo-list-head">
         <div>
-          <h2 id="todo-heading">To-do list</h2>
+          <h2 id="todo-heading">Tasks</h2>
           <p>{openCount === 0 ? "Nothing left open" : `${openCount} open`}</p>
         </div>
         <button type="button" className="primary-btn" onClick={onCreate}>
