@@ -644,7 +644,7 @@ function MemberList({
   }
 
   return (
-    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+    <DndContext id={`merge-members-${merge.id}`} sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
       <SortableContext items={ids} strategy={verticalListSortingStrategy}>
         <ol className="calendars-members" aria-label={`Priority order in ${merge.name}`}>
           {merge.members.map((member, index) => (

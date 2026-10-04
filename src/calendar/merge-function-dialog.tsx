@@ -106,7 +106,7 @@ export function MergeFunctionDialog({ name: initialName, members: initialMembers
           {members.length > 1 ? (
             <div className={styles.priority}>
               <span className={styles.priorityTitle}>Source priority</span>
-              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+              <DndContext id="merge-function-priority" sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
                 <SortableContext items={members} strategy={verticalListSortingStrategy}>
                   <ol className={styles.priorityList} aria-label="Source priority order">
                     {members.map((id, index) => (
