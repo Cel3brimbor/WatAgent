@@ -12,12 +12,16 @@ export type SmartTagRule = {
   value: string;
 };
 
+/** How much of a matching event the tag color paints. Half and quarter stay left of the diagonal. */
+export type SmartTagCover = "full" | "half" | "quarter";
+
 export type SmartTag = {
   id: string;
   name: string;
   color: string;
   enabled: boolean;
   match: "any" | "all";
+  cover: SmartTagCover;
   rules: SmartTagRule[];
   exemptCalendarIds: string[];
 };
@@ -30,7 +34,7 @@ export type SmartTagTarget = {
   description?: string;
 };
 
-export type SmartTagHit = { id: string; name: string; color: string };
+export type SmartTagHit = { id: string; name: string; color: string; cover: SmartTagCover };
 
 export type SmartTagMatcher = (target: SmartTagTarget) => SmartTagHit | null;
 
@@ -39,6 +43,12 @@ export const SMART_TAG_FIELDS: Array<{ id: SmartTagField; label: string }> = [
   { id: "location", label: "Location" },
   { id: "description", label: "Description" },
   { id: "any", label: "Any field" },
+];
+
+export const SMART_TAG_COVERS: Array<{ id: SmartTagCover; label: string; hint: string }> = [
+  { id: "quarter", label: "Quarter", hint: "Tag color on a quarter of the event, left of the diagonal" },
+  { id: "half", label: "Half", hint: "Tag color on the left of the diagonal" },
+  { id: "full", label: "Full", hint: "Tag color fills the event" },
 ];
 
 export const SMART_TAG_OPERATORS: Array<{ id: SmartTagOperator; label: string }> = [
@@ -57,6 +67,7 @@ const MAX_VALUE = 300;
 const MAX_NAME = 60;
 const FIELDS = new Set<SmartTagField>(SMART_TAG_FIELDS.map((field) => field.id));
 const OPERATORS = new Set<SmartTagOperator>(SMART_TAG_OPERATORS.map((operator) => operator.id));
+const COVERS = new Set<SmartTagCover>(SMART_TAG_COVERS.map((cover) => cover.id));
 
 export function smartTagLabel(tag: SmartTag): string {
   const name = tag.name.trim();
@@ -145,7 +156,9 @@ export function compileSmartTags(tags: SmartTag[]): SmartTagMatcher {
   const compiled = tags.flatMap((tag) => {
     if (!tag.enabled) return [];
     const test = compileSmartTag(tag);
-    return test ? [{ hit: { id: tag.id, name: smartTagLabel(tag), color: tag.color }, test }] : [];
+    return test
+      ? [{ hit: { id: tag.id, name: smartTagLabel(tag), color: tag.color, cover: tag.cover }, test }]
+      : [];
   });
   if (compiled.length === 0) return () => null;
   return (target) => compiled.find((entry) => entry.test(target))?.hit ?? null;
@@ -168,6 +181,7 @@ export function newSmartTag(existing: SmartTag[]): SmartTag {
     color,
     enabled: true,
     match: "any",
+    cover: "half",
     rules: [newSmartTagRule()],
     exemptCalendarIds: [],
   };
@@ -205,6 +219,8 @@ function tagOf(raw: unknown): SmartTag | null {
     color,
     enabled: rec.enabled !== false,
     match: rec.match === "all" ? "all" : "any",
+    //tags saved before coverage existed painted the whole event
+    cover: COVERS.has(rec.cover as SmartTagCover) ? (rec.cover as SmartTagCover) : "full",
     rules: rules.slice(0, MAX_RULES),
     exemptCalendarIds: Array.isArray(rec.exemptCalendarIds)
       ? rec.exemptCalendarIds

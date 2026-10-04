@@ -40,10 +40,11 @@ import { ChatIcon, EyeIcon, EyeOffIcon, LockIcon, RouteIcon, ShieldCheckIcon, Sy
 import { calendarItemVisible, externalCalendarId, externalCalendarShown, externalCalendarsOf } from "@/calendar/external-calendars";
 import { feedOfCalendarId, mergedByMember, newMergedCalendarId } from "@/calendar/imported-calendars";
 import { RenameCalendarDialog } from "@/calendar/imported-calendars-panel";
-import { calendarIdField, isPrimaryEventCalendarId, type LocalCalendar } from "@/calendar/local-calendars";
+import { calendarIdField, isBuiltinLocalCalendarId, isPrimaryEventCalendarId, type LocalCalendar } from "@/calendar/local-calendars";
 import { boxesOf, commitBoxes, moveInBoxes, newBoxName, TRAY, type Boxes, type MergeBox } from "@/calendar/merge-board";
 import {
   calendarGroupsOf,
+  calendarSwatchColor,
   isCalendarReadOnly,
   readMergeDrafts,
   setCalendarReadOnly,
@@ -422,6 +423,7 @@ export function CalendarMapSection({
   }
 
   function setShown(id: string, shown: boolean) {
+    if (isBuiltinLocalCalendarId(id) && !shown) return;
     onSources((current) => {
       if (id === GOOGLE) return { ...current, google: shown };
       if (id === "events") return { ...current, events: shown };
@@ -443,6 +445,7 @@ export function CalendarMapSection({
   }
 
   function setLocked(id: string, locked: boolean) {
+    if (isBuiltinLocalCalendarId(id)) return;
     onSources((current) => setCalendarReadOnly(current, id, locked));
   }
 
@@ -499,6 +502,7 @@ export function CalendarMapSection({
 
   function showState(id: string): { shown: boolean | null; showBlocked?: string } {
     if (memberOf.has(id)) return { shown: null };
+    if (isBuiltinLocalCalendarId(id)) return { shown: true, showBlocked: "This calendar always stays visible." };
     const shown = shownOnGrid(id);
     return {
       shown,
@@ -533,8 +537,7 @@ export function CalendarMapSection({
       list.push({
         id: calendar.id,
         name: calendar.name,
-        color:
-          calendar.id === "events" ? colors.event : calendar.id === "tasks" ? colors.task : colorOverrides[calendar.id] || colors.event,
+        color: calendarSwatchColor(calendar.id, colors, colorOverrides),
         group: "watagent",
         caption: [
           locked ? "Read only" : isPrimaryEventCalendarId(calendar.id) ? "Default" : null,
@@ -548,7 +551,7 @@ export function CalendarMapSection({
         agent: !unseen,
         agentSentence: accessSentence(unseen, locked),
         lock: locked,
-        lockEditable: true,
+        lockEditable: !isBuiltinLocalCalendarId(calendar.id),
         lockSentence: locked ? "You and the Agent can’t change its events." : "You and the Agent can change its events.",
         pending: !unseen && !locked ? (counts.pending.get(calendar.id) ?? 0) : 0,
         approvalOn: requireAiApproval,
@@ -568,7 +571,7 @@ export function CalendarMapSection({
       list.push({
         id: feed.id,
         name: feed.name,
-        color: colorOverrides[feed.id] ?? colors.event,
+        color: calendarSwatchColor(feed.id, colors, colorOverrides),
         group: "imported",
         caption: [
           "Imported",
@@ -676,7 +679,7 @@ export function CalendarMapSection({
         members: members.map((member) => ({
           id: member,
           name: nameOf(member),
-          color: colorOverrides[member] ?? colors.event,
+          color: calendarSwatchColor(member, colors, colorOverrides),
           sharedLabel: `${plural(shared.get(member) ?? 0, "event")} also on another calendar in this merge`,
         })),
       };
@@ -722,8 +725,7 @@ export function CalendarMapSection({
       list.push({
         id: calendar.id,
         label: calendar.name,
-        color:
-          calendar.id === "events" ? colors.event : calendar.id === "tasks" ? colors.task : colorOverrides[calendar.id] || colors.event,
+        color: calendarSwatchColor(calendar.id, colors, colorOverrides),
         group: "right",
         caption: [
           locked ? "Read only" : isPrimaryEventCalendarId(calendar.id) ? "Default" : null,
@@ -755,7 +757,7 @@ export function CalendarMapSection({
       list.push({
         id,
         label: feed.name,
-        color: colorOverrides[id] ?? colors.event,
+        color: calendarSwatchColor(id, colors, colorOverrides),
         group: "left",
         caption: [
           "Imported",
@@ -786,7 +788,7 @@ export function CalendarMapSection({
       list.push({
         id: box.id,
         label: box.name,
-        color: colorOverrides[box.id] ?? colors.event,
+        color: calendarSwatchColor(box.id, colors, colorOverrides),
         group: "right",
         caption: merged ? `${members.length} sources · Merged` : "Merge not configured",
         locked: merged,
@@ -820,6 +822,7 @@ export function CalendarMapSection({
           rows: members.map((member, index) => ({
             id: member,
             label: nameOf(member),
+            color: calendarSwatchColor(member, colors, colorOverrides),
             choice:
               members.length > 1
                 ? {
@@ -829,6 +832,7 @@ export function CalendarMapSection({
                     onChange: (value: string) => setRank(box.id, member, Number(value)),
                   }
                 : undefined,
+            remove: { label: "Remove", run: () => takeOut(member) },
           })),
         },
       });
@@ -856,8 +860,13 @@ export function CalendarMapSection({
     }
     //members show through their merged calendar, so only it gets the switch
     //boxes still filling aren't on the calendar yet, so they get no switch either
+    //agent main and tasks always stay visible
     return list.map((node) =>
-      node.variant === "function" || node.id === AGENT || memberOf.has(node.id) || (isBox(node.id) && !isMerged(node.id))
+      node.variant === "function" ||
+      node.id === AGENT ||
+      memberOf.has(node.id) ||
+      isBuiltinLocalCalendarId(node.id) ||
+      (isBox(node.id) && !isMerged(node.id))
         ? node
         : { ...node, toggle: eyeToggle(node.id, node.label) },
     );
@@ -1010,6 +1019,7 @@ export function CalendarMapSection({
       prompt: "choose a calendar to lock or unlock",
       accepts: (id) => {
         if (id === AGENT) return "The Agent isn't a calendar.";
+        if (isBuiltinLocalCalendarId(id)) return "Agent Main and Tasks can't be locked.";
         if (id === GOOGLE) return "Google calendars keep their own permissions.";
         if (feedSourceOf(id) || isBox(id)) return "Imported calendars are always read only.";
         return isCalendar(id) ? true : "Choose a calendar.";

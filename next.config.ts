@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import path from "node:path";
 
 function formatHost(host: string): string {
   return host.includes(":") ? `[${host}]` : host;
@@ -22,6 +23,8 @@ if (isDev && devHost && isLoopbackUrl(process.env.NEXT_PUBLIC_API_BASE_URL)) {
 }
 
 const nextConfig: NextConfig = {
+  //monorepo: trace deps from repo root so Next.js doesn't guess from stray lockfiles
+  outputFileTracingRoot: path.join(__dirname, ".."),
   output: "export",
   trailingSlash: true,
   images: { unoptimized: true },

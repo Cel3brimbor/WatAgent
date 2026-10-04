@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
 import { CALENDAR_PALETTE } from "@/calendar/preferences";
 import {
+  SMART_TAG_COVERS,
   SMART_TAG_FIELDS,
   SMART_TAG_LIMITS,
   SMART_TAG_OPERATORS,
@@ -12,6 +13,7 @@ import {
   smartTagLabel,
   smartTagPatternError,
   type SmartTag,
+  type SmartTagCover,
   type SmartTagField,
   type SmartTagOperator,
   type SmartTagRule,
@@ -171,6 +173,63 @@ export function SmartTagsPanel({ tags, onChange, calendars, samples, open, onOpe
   );
 }
 
+function CoverPicker({
+  color,
+  value,
+  onChange,
+}: {
+  color: string;
+  value: SmartTagCover;
+  onChange: (cover: SmartTagCover) => void;
+}) {
+  const refs = useRef<Array<HTMLButtonElement | null>>([]);
+  const index = Math.max(
+    0,
+    SMART_TAG_COVERS.findIndex((option) => option.id === value),
+  );
+
+  function onKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
+    const delta =
+      event.key === "ArrowRight" || event.key === "ArrowDown"
+        ? 1
+        : event.key === "ArrowLeft" || event.key === "ArrowUp"
+          ? -1
+          : 0;
+    if (!delta) return;
+    event.preventDefault();
+    const next = (index + delta + SMART_TAG_COVERS.length) % SMART_TAG_COVERS.length;
+    onChange(SMART_TAG_COVERS[next].id);
+    refs.current[next]?.focus();
+  }
+
+  return (
+    <div className="smart-tag-cover" role="radiogroup" aria-label="How much of the event the tag colors">
+      {SMART_TAG_COVERS.map((option, i) => {
+        const checked = option.id === value;
+        return (
+          <button
+            key={option.id}
+            ref={(el) => {
+              refs.current[i] = el;
+            }}
+            type="button"
+            role="radio"
+            aria-checked={checked}
+            tabIndex={checked ? 0 : -1}
+            title={option.hint}
+            className={`smart-tag-cover-option${checked ? " is-current" : ""}`}
+            onClick={() => onChange(option.id)}
+            onKeyDown={onKeyDown}
+          >
+            <span className={`smart-tag-cover-swatch is-${option.id}`} style={{ "--tag-color": color } as CSSProperties} />
+            <span>{option.label}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function SmartTagEditor({
   tag,
   first,
@@ -240,6 +299,8 @@ function SmartTagEditor({
         <input type="color" value={color} onChange={(event) => onPatch({ color: event.target.value.toLowerCase() })} />
         <span>Custom color</span>
       </label>
+
+      <CoverPicker color={color} value={tag.cover ?? "full"} onChange={(cover) => onPatch({ cover })} />
 
       <div className="smart-tag-section-label">
         {tag.rules.length > 1 ? (

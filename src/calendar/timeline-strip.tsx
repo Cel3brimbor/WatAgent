@@ -8,7 +8,7 @@ import { CheckIcon } from "@/shared/icons";
 type Props = {
   item: TimelineItem;
   compact?: boolean;
-  /** Stacked title → time → location (day/week grid cards). */
+  /**stacked title → time → location (day/week grid cards).*/
   layout?: "inline" | "card";
   onOpen: (item: TimelineItem, anchor?: DOMRect) => void;
   onCompleteTask?: (id: string, completed: boolean) => void;
@@ -30,6 +30,22 @@ const VERB_LABEL = { add: "Added", delete: "Removed", edit: "Updated" } as const
 function stripColorStyle(color: string | undefined): CSSProperties | undefined {
   if (!color || !HEX.test(color)) return undefined;
   return { "--strip-color": color } as CSSProperties;
+}
+
+//full fills the chip. half and quarter paint only the side left of the diagonal
+function tagPaint(item: TimelineItem, calendarColor: string | undefined): { className: string; style: CSSProperties | undefined } {
+  const tag = item.smartTag;
+  const cover = tag?.cover === "half" || tag?.cover === "quarter" ? tag.cover : "full";
+  if (!tag || cover === "full") {
+    return { className: "", style: stripColorStyle(tag?.color ?? calendarColor) };
+  }
+  return {
+    className: ` is-tag-${cover}`,
+    style: {
+      "--tag-color": tag.color,
+      ...(calendarColor && HEX.test(calendarColor) ? { "--strip-color": calendarColor } : {}),
+    } as CSSProperties,
+  };
 }
 
 function StripCardBody({
@@ -66,13 +82,14 @@ export function TimelineStrip({ item, compact, layout = "inline", onOpen, onComp
 
   if (item.kind === "gcal_event") {
     const timeLabel = item.allDay ? null : timeRange(item);
+    const paint = tagPaint(item, item.calendarColor ?? item.google?.calendarColor);
     return (
       <button
         type="button"
-        className={`calendar-strip is-gcal-event${compact ? " is-compact" : ""}${layoutClass}`}
+        className={`calendar-strip is-gcal-event${compact ? " is-compact" : ""}${layoutClass}${paint.className}`}
         aria-label={item.title}
         title={item.smartTag ? `${item.title} · ${item.smartTag.name}` : undefined}
-        style={stripColorStyle(item.smartTag?.color ?? item.calendarColor ?? item.google?.calendarColor)}
+        style={paint.style}
         onClick={(event) => {
           event.stopPropagation();
           onOpen(item, event.currentTarget.getBoundingClientRect());
@@ -92,15 +109,16 @@ export function TimelineStrip({ item, compact, layout = "inline", onOpen, onComp
 
   const timeLabel = item.allDay ? null : timeRange(item);
   const verb = item.pendingVerb;
+  const paint = tagPaint(item, item.calendarColor);
 
   return (
     <button
       type="button"
       data-calendar-item={item.id}
-      className={`calendar-strip is-${item.kind}${item.completed ? " is-done" : ""}${item.pendingApproval ? " is-pending" : ""}${verb ? ` is-pending-${verb}` : ""}${item.editorDraft ? " is-editor-draft" : ""}${compact ? " is-compact" : ""}${layoutClass}`}
+      className={`calendar-strip is-${item.kind}${item.completed ? " is-done" : ""}${item.pendingApproval ? " is-pending" : ""}${verb ? ` is-pending-${verb}` : ""}${item.editorDraft ? " is-editor-draft" : ""}${compact ? " is-compact" : ""}${layoutClass}${paint.className}`}
       aria-label={verb ? `${VERB_LABEL[verb]}, pending: ${item.title}` : undefined}
       title={item.smartTag ? `${item.title} · ${item.smartTag.name}` : undefined}
-      style={stripColorStyle(item.smartTag?.color ?? item.calendarColor)}
+      style={paint.style}
       onClick={(event) => {
           event.stopPropagation();
           onOpen(item, event.currentTarget.getBoundingClientRect());

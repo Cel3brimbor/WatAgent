@@ -30,6 +30,11 @@ assert.deepEqual(
   "duplicates, bad ids and blank names are dropped; events keeps the canonical name",
 );
 assert.equal(localCalendarsOf([{ id: "events", name: "Renamed" }])[0]?.name, "Agent Main");
+assert.equal(
+  localCalendarsOf([{ id: "tasks", name: "To-dos" }]).find((c) => c.id === "tasks")?.name,
+  "Tasks",
+  "Tasks keeps the canonical name",
+);
 
 const doc = (calendar: CalendarItemMeta): CalendarItemDoc => ({ id: String(Math.random()), title: "t", calendar, createdAt: 0, updatedAt: 0 });
 assert.deepEqual(shownLocalCalendars([school], []).map((c) => c.id), ["events", school.id], "Agent Main is always shown");

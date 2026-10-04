@@ -5,23 +5,38 @@ export type LocalCalendar = { id: string; name: string; kind: "event" | "task" }
 
 export const PRIMARY_EVENT_CALENDAR_ID = "events";
 export const PRIMARY_EVENT_CALENDAR_NAME = "Agent Main";
+export const PRIMARY_TASK_CALENDAR_ID = "tasks";
+export const PRIMARY_TASK_CALENDAR_NAME = "Tasks";
 
 export function primaryEventCalendar(): LocalCalendar {
   return { id: PRIMARY_EVENT_CALENDAR_ID, name: PRIMARY_EVENT_CALENDAR_NAME, kind: "event" };
+}
+
+export function primaryTaskCalendar(): LocalCalendar {
+  return { id: PRIMARY_TASK_CALENDAR_ID, name: PRIMARY_TASK_CALENDAR_NAME, kind: "task" };
 }
 
 export function isPrimaryEventCalendarId(id: string): boolean {
   return id === PRIMARY_EVENT_CALENDAR_ID;
 }
 
+/** Agent Main and Tasks can't be deleted, renamed, hidden, or locked read-only. */
+export function isBuiltinLocalCalendarId(id: string): boolean {
+  return id === PRIMARY_EVENT_CALENDAR_ID || id === PRIMARY_TASK_CALENDAR_ID;
+}
+
 function withPrimaryEventCalendar(list: LocalCalendar[]): LocalCalendar[] {
-  const rest = list.filter((calendar) => calendar.id !== PRIMARY_EVENT_CALENDAR_ID);
+  const rest = list
+    .filter((calendar) => calendar.id !== PRIMARY_EVENT_CALENDAR_ID)
+    .map((calendar) =>
+      calendar.id === PRIMARY_TASK_CALENDAR_ID ? primaryTaskCalendar() : calendar,
+    );
   return [primaryEventCalendar(), ...rest];
 }
 
 export const BUILTIN_CALENDARS: LocalCalendar[] = [
   primaryEventCalendar(),
-  { id: "tasks", name: "Tasks", kind: "task" },
+  primaryTaskCalendar(),
 ];
 
 const CUSTOM_ID = /^cal-[0-9a-f-]{36}$/;

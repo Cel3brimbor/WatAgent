@@ -1,4 +1,5 @@
-import { importedCalendarsOf, legacyMergedCalendars, mergedCalendarsOf } from "@/calendar/imported-calendars";
+import { feedOfCalendarId, importedCalendarsOf, legacyMergedCalendars, mergedCalendarsOf } from "@/calendar/imported-calendars";
+import { isBuiltinLocalCalendarId } from "@/calendar/local-calendars";
 import type { CalendarView, ImportedCalendar, MergedCalendar } from "@/calendar/types";
 
 const STORAGE_KEY = "watagent.calendar.preferences.v1";
@@ -79,14 +80,27 @@ export function isImportedCalendarId(id: string): boolean {
 }
 
 export function isCalendarReadOnly(filter: CalendarSourceFilter, id: string): boolean {
+  if (isBuiltinLocalCalendarId(id)) return false;
   return isImportedCalendarId(id) || filter.readOnlyCalendarIds.includes(id);
 }
 
 export function setCalendarReadOnly(filter: CalendarSourceFilter, id: string, readOnly: boolean): CalendarSourceFilter {
+  if (isBuiltinLocalCalendarId(id)) return protectBuiltinCalendarSources(filter);
   const ids = new Set(filter.readOnlyCalendarIds);
   if (readOnly) ids.add(id);
   else ids.delete(id);
-  return { ...filter, readOnlyCalendarIds: [...ids] };
+  return protectBuiltinCalendarSources({ ...filter, readOnlyCalendarIds: [...ids] });
+}
+
+/** Agent Main and Tasks stay visible, editable, and out of the Hidden list. */
+export function protectBuiltinCalendarSources(filter: CalendarSourceFilter): CalendarSourceFilter {
+  return {
+    ...filter,
+    events: true,
+    tasks: true,
+    hiddenIds: filter.hiddenIds.filter((id) => !isBuiltinLocalCalendarId(id)),
+    readOnlyCalendarIds: filter.readOnlyCalendarIds.filter((id) => !isBuiltinLocalCalendarId(id)),
+  };
 }
 
 export function isSidebarHidden(filter: CalendarSourceFilter, id: string): boolean {
@@ -116,7 +130,7 @@ export function readSourceFilter(): CalendarSourceFilter {
     };
     const legacyApp = parsed.app !== false;
     const legacyMuted = idList(parsed.hiddenGoogleIds);
-    return {
+    return protectBuiltinCalendarSources({
       events: typeof parsed.events === "boolean" ? parsed.events : legacyApp,
       tasks: typeof parsed.tasks === "boolean" ? parsed.tasks : legacyApp,
       google: parsed.google !== false,
@@ -124,7 +138,7 @@ export function readSourceFilter(): CalendarSourceFilter {
       hiddenIds: idList(parsed.hiddenIds),
       readOnlyCalendarIds: idList(parsed.readOnlyCalendarIds),
       ...(parsed.groups && typeof parsed.groups === "object" ? { groups: calendarGroupsOf(parsed.groups) } : {}),
-    };
+    });
   } catch {
     return ALL_SOURCES;
   }
@@ -204,6 +218,46 @@ export function writeCalendarColors(colors: CalendarColors): void {
   }
 }
 
+const KNOWN_IMPORTED_COLORS: Partial<Record<"learn" | "portal" | "other", string>> = {
+  learn: "#4986e7",
+  portal: "#9a9cff",
+  other: "#7bd148",
+};
+
+function paletteColorForId(calendarId: string): string {
+  let hash = 2166136261;
+  for (let index = 0; index < calendarId.length; index += 1) {
+    hash ^= calendarId.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return CALENDAR_PALETTE[Math.abs(hash) % CALENDAR_PALETTE.length];
+}
+
+/** Default swatch for imported and merged calendars when the user has not picked a color. */
+export function defaultImportedCalendarColor(calendarId: string): string {
+  const feed = feedOfCalendarId(calendarId);
+  if (feed === "learn" || feed === "portal" || feed === "other") {
+    const known = KNOWN_IMPORTED_COLORS[feed];
+    if (known) return known;
+  }
+  if (calendarId.startsWith("merge-") || calendarId.startsWith("ics:")) return paletteColorForId(calendarId);
+  return DEFAULT_COLORS.event;
+}
+
+/** Side panel, map, and timeline color for a calendar row or event. */
+export function calendarSwatchColor(
+  calendarId: string,
+  colors: CalendarColors,
+  colorOverrides: Record<string, string>,
+): string {
+  const override = colorOverrides[calendarId];
+  if (override) return override;
+  if (calendarId === "events") return colors.event;
+  if (calendarId === "tasks") return colors.task;
+  if (calendarId.startsWith("ics:") || calendarId.startsWith("merge-")) return defaultImportedCalendarColor(calendarId);
+  return colors.event;
+}
+
 const OVERRIDES_KEY = "watagent.calendar.colorOverrides.v1";
 
 export function readColorOverrides(): Record<string, string> {
@@ -235,7 +289,7 @@ export function writeColorOverrides(overrides: Record<string, string>): void {
 export function writeSourceFilter(filter: CalendarSourceFilter): void {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(SOURCES_KEY, JSON.stringify(filter));
+    window.localStorage.setItem(SOURCES_KEY, JSON.stringify(protectBuiltinCalendarSources(filter)));
   } catch {
     return;
   }

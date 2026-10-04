@@ -81,7 +81,7 @@ export type TimelineItem = {
   description?: string;
   /** Display-only overlay; never sent to Google or the API. */
   calendarColor?: string;
-  smartTag?: { id: string; name: string; color: string };
+  smartTag?: { id: string; name: string; color: string; cover: "full" | "half" | "quarter" };
 };
 
 export type CalendarView = "day" | "workweek" | "week" | "month" | "year";

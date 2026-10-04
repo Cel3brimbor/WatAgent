@@ -13,6 +13,7 @@ import {
   readColorOverrides,
   readSidePanelSections,
   readSourceFilter,
+  protectBuiltinCalendarSources,
   calendarGroupsOf,
   DEFAULT_SIDE_PANEL_SECTIONS,
   type CalendarColors,
@@ -55,7 +56,7 @@ function hexOr(raw: unknown, fallback: string): string {
 function sourcesOf(raw: unknown): CalendarSourceFilter | null {
   if (!raw || typeof raw !== "object") return null;
   const rec = raw as Record<string, unknown>;
-  return {
+  return protectBuiltinCalendarSources({
     events: rec.events !== false,
     tasks: rec.tasks !== false,
     google: rec.google !== false,
@@ -63,7 +64,7 @@ function sourcesOf(raw: unknown): CalendarSourceFilter | null {
     hiddenIds: idList(rec.hiddenIds),
     readOnlyCalendarIds: idList(rec.readOnlyCalendarIds),
     ...(rec.groups && typeof rec.groups === "object" ? { groups: calendarGroupsOf(rec.groups) } : {}),
-  };
+  });
 }
 
 function colorsOf(raw: unknown): CalendarColors | null {

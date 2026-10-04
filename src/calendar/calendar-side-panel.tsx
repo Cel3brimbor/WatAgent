@@ -10,6 +10,7 @@ import type { GoogleCalendarRef } from "@/calendar/google-calendar-client";
 import { isExcludedGoogleCalendarName } from "@/calendar/calendar-lists";
 import {
   CALENDAR_PALETTE,
+  calendarSwatchColor,
   calendarGroupsOf,
   isCalendarReadOnly,
   setCalendarReadOnly,
@@ -22,7 +23,7 @@ import {
 import type { SmartTag, SmartTagTarget } from "@/calendar/smart-tags";
 import { SmartTagsPanel } from "@/calendar/smart-tags-panel";
 import { CheckIcon, ChevronIcon, DotsIcon, GoogleCalendarIcon, PlusIcon } from "@/calendar/sidebar-icons";
-import { isPrimaryEventCalendarId, type LocalCalendar } from "@/calendar/local-calendars";
+import { isBuiltinLocalCalendarId, type LocalCalendar } from "@/calendar/local-calendars";
 import { ChevronLeftIcon, ChevronRightIcon } from "@/shared/icons";
 import { Disclosure } from "@/shared/disclosure";
 import { usePresence } from "@/shared/use-presence";
@@ -162,7 +163,7 @@ export function CalendarSidePanel({
   const localRows: Row[] = localCalendars.map((calendar) => ({
     id: calendar.id,
     name: calendar.name,
-    color: calendar.id === "events" ? colors.event : calendar.id === "tasks" ? colors.task : colorOverrides[calendar.id] || colors.event,
+    color: calendarSwatchColor(calendar.id, colors, colorOverrides),
     checked: calendar.id === "events" ? sources.events : calendar.id === "tasks" ? sources.tasks : !sources.mutedGoogleIds.includes(calendar.id),
   }));
   const localById = (id: string) => localCalendars.find((calendar) => calendar.id === id);
@@ -179,7 +180,7 @@ export function CalendarSidePanel({
       google: true,
     }));
   const externalRows: Row[] = externalCalendars.map((calendar) => ({
-    id: calendar.id, name: calendar.name, color: colorOverrides[calendar.id] || colors.event,
+    id: calendar.id, name: calendar.name, color: calendarSwatchColor(calendar.id, colors, colorOverrides),
     checked: !sources.mutedGoogleIds.includes(calendar.id),
   }));
   const allRows: Row[] = [...localRows, ...externalRows, ...googleRows];
@@ -195,6 +196,7 @@ export function CalendarSidePanel({
   const smartTagCalendars = allRows.map((row) => ({ id: row.id, name: row.name, google: Boolean(row.google) }));
 
   function toggle(id: string, checked: boolean) {
+    if (isBuiltinLocalCalendarId(id) && !checked) return;
     if (externalById(id) || isCustom(id)) {
       onSources({ ...sources, mutedGoogleIds: checked ? sources.mutedGoogleIds.filter((item) => item !== id) : [...new Set([...sources.mutedGoogleIds, id])] });
       return;
@@ -226,6 +228,7 @@ export function CalendarSidePanel({
   }
 
   function hideCalendar(id: string) {
+    if (isBuiltinLocalCalendarId(id)) return;
     if (isSidebarHidden(sources, id)) return;
     const hiddenIds = [...sources.hiddenIds, id];
     if (id === "events") {
@@ -286,6 +289,7 @@ export function CalendarSidePanel({
   }
 
   function toggleReadOnly(id: string) {
+    if (isBuiltinLocalCalendarId(id)) return;
     const next = !isCalendarReadOnly(sources, id);
     onSources(setCalendarReadOnly(sources, id, next));
     setMenu(null);
@@ -459,16 +463,16 @@ export function CalendarSidePanel({
           open={menuPresence.open}
           onSync={menuCanSync && !syncBusy ? () => void syncCalendarRow(shownMenu.id) : undefined}
           onDisplayOnly={() => displayOnly(shownMenu.id)}
-          onHide={() => hideCalendar(shownMenu.id)}
-          onToggleReadOnly={!menuIsGoogle && !menuExternal ? () => toggleReadOnly(shownMenu.id) : undefined}
-          readOnly={!menuIsGoogle && isCalendarReadOnly(sources, shownMenu.id)}
+          onHide={isBuiltinLocalCalendarId(shownMenu.id) ? undefined : () => hideCalendar(shownMenu.id)}
+          onToggleReadOnly={!menuIsGoogle && !menuExternal && !isBuiltinLocalCalendarId(shownMenu.id) ? () => toggleReadOnly(shownMenu.id) : undefined}
+          readOnly={!menuIsGoogle && !isBuiltinLocalCalendarId(shownMenu.id) && isCalendarReadOnly(sources, shownMenu.id)}
           onColor={(color) => paint(shownMenu.id, color)}
-          onRename={menuLocal && !isPrimaryEventCalendarId(menuLocal.id) ? () => {
+          onRename={menuLocal && !isBuiltinLocalCalendarId(menuLocal.id) ? () => {
             setRenamingLocal(menuLocal); setMenu(null);
           } : menuExternal && (menuExternal.merged || menuExternal.feeds.length > 0) ? () => {
             setRenaming(menuExternal); setMenu(null);
           } : undefined}
-          onRemove={menuLocal && !isPrimaryEventCalendarId(menuLocal.id) ? (deleteBusy ? undefined : () => {
+          onRemove={menuLocal && !isBuiltinLocalCalendarId(menuLocal.id) ? (deleteBusy ? undefined : () => {
             setDeleting(menuLocal); setMenu(null);
           }) : !removeBusy && menuExternal?.source && menuExternal.feeds.length > 0 ? () => {
             setRemoving(menuExternal); setMenu(null);
@@ -603,7 +607,7 @@ function CalendarGroup({
                   aria-pressed={groupOn && row.checked}
                   aria-label={`${groupOn && row.checked ? "Hide" : "Show"} ${row.name}`}
                   onClick={() => {
-                    if (!groupOn) return;
+                    if (!groupOn || isBuiltinLocalCalendarId(row.id)) return;
                     onToggleRow?.(row.id, !row.checked);
                   }}
                 >
@@ -659,7 +663,7 @@ function CalendarOptionsMenu({
   open: boolean;
   onSync?: () => void;
   onDisplayOnly: () => void;
-  onHide: () => void;
+  onHide?: () => void;
   onToggleReadOnly?: () => void;
   readOnly?: boolean;
   onColor: (color: string) => void;
@@ -697,9 +701,11 @@ function CalendarOptionsMenu({
       <button type="button" role="menuitem" onClick={onDisplayOnly}>
         Display this only
       </button>
-      <button type="button" role="menuitem" onClick={onHide}>
-        Hide calendar
-      </button>
+      {onHide ? (
+        <button type="button" role="menuitem" onClick={onHide}>
+          Hide calendar
+        </button>
+      ) : null}
       {onToggleReadOnly ? (
         <button type="button" role="menuitem" onClick={onToggleReadOnly}>
           {readOnly ? "Allow edits" : "Make read-only"}

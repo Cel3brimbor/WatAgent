@@ -621,6 +621,7 @@ select {
 .side-cal-more:active,
 .smart-tags-add:active:not(:disabled),
 .smart-tag-icon-btn:active:not(:disabled),
+.smart-tag-cover-option:active,
 .chat-tab-add:active,
 .chat-history:active,
 .chat-tab-close:active,
@@ -658,6 +659,7 @@ select {
 .side-cal-more,
 .smart-tags-add,
 .smart-tag-icon-btn,
+.smart-tag-cover-option,
 .chat-tab-add,
 .chat-history,
 .chat-tab-close,
@@ -1432,6 +1434,68 @@ select {
   border-radius: 6px;
   background: transparent;
   cursor: pointer;
+}
+
+.smart-tag-cover {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.3rem;
+}
+
+.smart-tag-cover-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.22rem;
+  min-width: 0;
+  padding: 0.32rem 0.2rem 0.28rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 0.68rem;
+  font-weight: 650;
+}
+
+.smart-tag-cover-option:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+.smart-tag-cover-option.is-current {
+  border-color: var(--accent);
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.smart-tag-cover-option:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--glow);
+}
+
+.smart-tag-cover-swatch {
+  position: relative;
+  width: 100%;
+  height: 1.45rem;
+  overflow: hidden;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--ink) 14%, var(--paper));
+}
+
+.smart-tag-cover-swatch::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--tag-color);
+}
+
+/*same cut the event chip uses: left of the diagonal is the tag*/
+.smart-tag-cover-swatch.is-half::before {
+  clip-path: polygon(0 0, 100% 0, 0 100%);
+}
+
+.smart-tag-cover-swatch.is-quarter::before {
+  clip-path: polygon(0 0, 70.71% 0, 0 70.71%);
 }
 
 .smart-tag-section-label {
@@ -6539,6 +6603,44 @@ h3 {
 
 :root[data-scheme="dark"] .calendar-strip:is(.is-event, .is-gcal-event, .is-task) {
   --strip-tint: 26%;
+}
+
+/*tag color stays left of the diagonal; the rest keeps the calendar colour*/
+.calendar-strip.is-tag-half,
+.calendar-strip.is-tag-quarter {
+  position: relative;
+  isolation: isolate;
+  border-left-color: var(--tag-color);
+  background: color-mix(in srgb, var(--strip-color) var(--strip-tint, 16%), var(--paper));
+}
+
+.calendar-strip.is-tag-half::before,
+.calendar-strip.is-tag-quarter::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--tag-color) var(--strip-tint, 16%), var(--paper));
+}
+
+.calendar-strip.is-tag-half::before {
+  clip-path: polygon(0 0, 100% 0, 0 100%);
+}
+
+.calendar-strip.is-tag-quarter::before {
+  clip-path: polygon(0 0, 70.71% 0, 0 70.71%);
+}
+
+.calendar-strip.is-tag-half > *,
+.calendar-strip.is-tag-quarter > * {
+  position: relative;
+  z-index: 1;
+}
+
+.calendar-strip.is-tag-half .calendar-strip-title,
+.calendar-strip.is-tag-quarter .calendar-strip-title {
+  color: color-mix(in srgb, var(--tag-color) 35%, var(--ink));
 }
 
 .settings-section,

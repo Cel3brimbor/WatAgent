@@ -36,6 +36,7 @@ import {
   isCalendarReadOnly,
   isSidebarHidden,
   calendarGroupsOf,
+  calendarSwatchColor,
   type CalendarColors,
   type CalendarSourceFilter,
   type SidePanelSectionsOpen,
@@ -72,6 +73,7 @@ import { SettingsPanel } from "@/calendar/settings-panel";
 import { useCalendarPreferencesSync } from "@/calendar/use-calendar-preferences-sync";
 import {
   BUILTIN_CALENDARS,
+  isBuiltinLocalCalendarId,
   isPrimaryEventCalendarId,
   PRIMARY_EVENT_CALENDAR_NAME,
   calendarIdField,
@@ -471,12 +473,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
         id: calendar.id,
         name: calendar.name,
         kind: calendar.kind,
-        color:
-          calendar.id === "events"
-            ? colors.event
-            : calendar.id === "tasks"
-              ? colors.task
-              : colorOverrides[calendar.id] || colors.event,
+        color: calendarSwatchColor(calendar.id, colors, colorOverrides),
         readOnly: isCalendarReadOnly(sources, calendar.id),
       })),
     [shownCalendars, colors, colorOverrides, sources, agentHiddenCalendarIds],
@@ -690,11 +687,15 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
       }), mergedCalendars).map((item) => ({
         ...item,
         calendarColor: item.importSource
-          ? colorOverrides[item.mergedCalendarId ?? externalCalendarId(item.importSource)] ?? colors.event
-          : item.calendarId ? colorOverrides[item.calendarId] ?? colors.event : undefined,
+          ? calendarSwatchColor(item.mergedCalendarId ?? externalCalendarId(item.importSource), colors, colorOverrides)
+          : item.calendarId
+            ? calendarSwatchColor(item.calendarId, colors, colorOverrides)
+            : item.kind === "task"
+              ? colors.task
+              : colors.event,
       }));
     },
-    [itemsForUi, busyBlocks, shownOverlayEvents, mergedCalendars, colorOverrides, colors.event],
+    [itemsForUi, busyBlocks, shownOverlayEvents, mergedCalendars, colorOverrides, colors],
   );
 
   const itemsForDay = useCallback(
@@ -1002,7 +1003,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
   }
 
   function renameLocalCalendar(id: string, name: string) {
-    if (isPrimaryEventCalendarId(id)) return;
+    if (isBuiltinLocalCalendarId(id)) return;
     setLocalCalendars((list) => {
       //a built-in that came back after deletion is shown but not stored; store it with its new name
       const base = list.some((entry) => entry.id === id)
@@ -1013,7 +1014,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
   }
 
   async function deleteLocalCalendar(id: string) {
-    if (isPrimaryEventCalendarId(id)) return;
+    if (isBuiltinLocalCalendarId(id)) return;
     const name = shownCalendars.find((entry) => entry.id === id)?.name ?? "Calendar";
     const ids = calendar.items.filter((item) => localCalendarIdOf(item.calendar) === id).map((item) => item.id);
     const failed = await calendar.removeMany(ids);
