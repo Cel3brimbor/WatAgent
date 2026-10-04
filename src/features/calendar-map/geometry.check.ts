@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { BOX_ROW, boxesOverlap, canvasHeight, centreBounds, defaultLayout, edgeGeometry, flowGeometry, exitPoint, MIN_CANVAS_WIDTH, NODE_SIZE, nodeAt, nodeSize, segmentHitsBox, toPx, toUnit } from "./geometry";
+import { BOX_ROW, boxesOverlap, canvasHeight, centreBounds, defaultLayout, DIRECT_MIN, edgeGeometry, flowGeometry, exitPoint, MIN_CANVAS_WIDTH, NODE_SIZE, nodeAt, nodeSize, segmentHitsBox, toPx, toUnit, type Box, type Pt } from "./geometry";
 
 const wide = { width: 800, height: 500 };
 const nodes = [
@@ -110,3 +110,94 @@ assert.equal(flow.start.y, a.y - 5);
 assert.equal(flow.end.y, b.y + 5, "parallel inputs receive distinct ports");
 assert.equal(flowGeometry(a, a), null, "overlapping cards don't draw misleading arrows");
 assert.ok(flowGeometry(top, low, [top, middle, low], lane)?.path.includes(" Q"), "blocked routes retain obstacle avoidance");
+
+//nodes dragged close together: every arrow stays outside both nodes and points into the one it ends at
+type Curve = { at: (t: number) => Pt; tangent: (t: number) => Pt };
+function curveOf(path: string): Curve {
+  const numbers = path.match(/-?\d+(\.\d+)?(e-?\d+)?/g)!.map(Number);
+  const [p0, p1, p2, p3] = Array.from({ length: numbers.length / 2 }, (_, i) => ({ x: numbers[2 * i], y: numbers[2 * i + 1] }));
+  if (!p3) {
+    return {
+      at: (t) => ({ x: (1 - t) ** 2 * p0.x + 2 * (1 - t) * t * p1.x + t * t * p2.x, y: (1 - t) ** 2 * p0.y + 2 * (1 - t) * t * p1.y + t * t * p2.y }),
+      tangent: (t) => ({ x: 2 * (1 - t) * (p1.x - p0.x) + 2 * t * (p2.x - p1.x), y: 2 * (1 - t) * (p1.y - p0.y) + 2 * t * (p2.y - p1.y) }),
+    };
+  }
+  return {
+    at: (t) => ({
+      x: (1 - t) ** 3 * p0.x + 3 * (1 - t) ** 2 * t * p1.x + 3 * (1 - t) * t * t * p2.x + t ** 3 * p3.x,
+      y: (1 - t) ** 3 * p0.y + 3 * (1 - t) ** 2 * t * p1.y + 3 * (1 - t) * t * t * p2.y + t ** 3 * p3.y,
+    }),
+    tangent: (t) => ({
+      x: 3 * (1 - t) ** 2 * (p1.x - p0.x) + 6 * (1 - t) * t * (p2.x - p1.x) + 3 * t * t * (p3.x - p2.x),
+      y: 3 * (1 - t) ** 2 * (p1.y - p0.y) + 6 * (1 - t) * t * (p2.y - p1.y) + 3 * t * t * (p3.y - p2.y),
+    }),
+  };
+}
+const inside = (point: Pt, box: Box, slack = 0) => Math.abs(point.x - box.x) < box.w / 2 - slack && Math.abs(point.y - box.y) < box.h / 2 - slack;
+function checkArrow(from: Box, to: Box, label: string, fromOffset = 0, toOffset = 0) {
+  const arrow = flowGeometry(from, to, [from, to], undefined, fromOffset, toOffset);
+  if (!arrow) {
+    assert.ok(boxesOverlap(from, to), `${label}: only overlapping nodes go without an arrow`);
+    return;
+  }
+  const curve = curveOf(arrow.path);
+  for (let t = 0; t <= 1.0001; t += 0.02) {
+    const point = curve.at(t);
+    assert.ok(!inside(point, from, 0.5) && !inside(point, to, 0.5), `${label}: the arrow runs through a node at t=${t.toFixed(2)}`);
+  }
+  //walking on from the tip along its final direction soon enters the target, so the arrowhead points into it
+  let direction = curve.tangent(1);
+  if (Math.hypot(direction.x, direction.y) < 1e-9) direction = curve.tangent(0.98);
+  const length = Math.hypot(direction.x, direction.y);
+  const enters = [5, 10, 15, 20, 25, 30].some((step) =>
+    inside({ x: arrow.end.x + (direction.x / length) * step, y: arrow.end.y + (direction.y / length) * step }, to),
+  );
+  assert.ok(enters, `${label}: the arrowhead points away from its node`);
+  //the midpoint, where labels and rule pills sit, is on the curve
+  const mid = curve.at(0.5);
+  assert.ok(Math.hypot(mid.x - arrow.mid.x, mid.y - arrow.mid.y) < 0.01, `${label}: the label point is off the curve`);
+}
+const node = (x: number, y: number, h = NODE_SIZE.h): Box => ({ x, y, w: NODE_SIZE.w, h });
+const tall = nodeSize({ box: { rows: [row("a"), row("b"), row("c")] } }).h;
+for (const height of [NODE_SIZE.h, tall]) {
+  const source = node(400, 300);
+  for (let dx = -320; dx <= 320; dx += 8) {
+    for (let dy = -200; dy <= 200; dy += 8) {
+      const target = node(400 + dx, 300 + dy, height);
+      checkArrow(source, target, `dx ${dx} dy ${dy} h ${height}`);
+      checkArrow(target, source, `reversed dx ${dx} dy ${dy} h ${height}`);
+      //the widest spread parallel lines get
+      if ((dx + dy) % 48 === 0) {
+        checkArrow(source, target, `spread ports dx ${dx} dy ${dy} h ${height}`, -18, 18);
+        checkArrow(target, source, `spread ports reversed dx ${dx} dy ${dy} h ${height}`, 18, -18);
+      }
+    }
+  }
+}
+
+//side by side with a small gap: over the top, never under one node and over the other
+const left = node(300, 300);
+const rightClose = node(300 + NODE_SIZE.w + 20, 300);
+const over = flowGeometry(left, rightClose)!;
+assert.ok(over.start.y < left.y - left.h / 2 && over.end.y < rightClose.y - rightClose.h / 2, "close side-by-side nodes loop over the top");
+assert.ok(over.mid.y < over.start.y, "the loop rises between them");
+//stacked with a small gap: around the right side
+const upper = node(300, 300);
+const lower = node(300, 300 + NODE_SIZE.h + 10);
+const round = flowGeometry(upper, lower)!;
+assert.ok(round.start.x > upper.x + upper.w / 2 && round.end.x > lower.x + lower.w / 2, "close stacked nodes loop around the side");
+//close but offset: an elbow out of the side and down into the top
+const offset = node(300 + 180, 300 + 90);
+const elbow = flowGeometry(upper, offset)!;
+assert.ok(elbow.start.x > upper.x + upper.w / 2 && elbow.end.y < offset.y - offset.h / 2, "close diagonal nodes take an elbow");
+//a loop that would leave the canvas or cross another node takes the other side
+const atTop = flowGeometry(node(300, 40), node(300 + NODE_SIZE.w + 20, 40), [], { width: 1000, height: 600 })!;
+assert.ok(atTop.start.y > 40, "nodes at the top edge loop underneath instead");
+const blocker = node(300 + NODE_SIZE.w / 2 + 10, 300 - NODE_SIZE.h - 6);
+const under = flowGeometry(left, rightClose, [left, rightClose, blocker])!;
+assert.ok(under.start.y > left.y, "a node above sends the loop underneath");
+//nodes with room keep the straight port-to-port arrow
+const direct = flowGeometry(left, node(300 + NODE_SIZE.w + DIRECT_MIN, 300))!;
+assert.equal(direct.start.y, 300, "a gap big enough for an arrow keeps the direct line");
+
+console.log("Map arrows between close nodes passed.");
