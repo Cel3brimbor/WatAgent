@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { BOX_ROW, boxesOverlap, canvasHeight, centreBounds, defaultLayout, edgeGeometry, exitPoint, MIN_CANVAS_WIDTH, NODE_SIZE, nodeAt, nodeSize, segmentHitsBox, toPx, toUnit } from "./geometry";
+import { BOX_ROW, boxesOverlap, canvasHeight, centreBounds, defaultLayout, edgeGeometry, flowGeometry, exitPoint, MIN_CANVAS_WIDTH, NODE_SIZE, nodeAt, nodeSize, segmentHitsBox, toPx, toUnit } from "./geometry";
 
 const wide = { width: 800, height: 500 };
 const nodes = [
@@ -90,3 +90,23 @@ assert.equal(nodeAt(boxes, { x: 170, y: 100 }, 28), "a", "the margin catches nea
 assert.equal(nodeAt(boxes, { x: 120, y: 110 }, 0, "a"), null, "an excluded node is skipped");
 
 console.log("Map geometry checks passed.");
+
+//Function nodes stay compact even when they have many source controls in the inspector.
+const fn = { id: "merge-fn", group: "hub" as const, variant: "function" as const, ...big };
+assert.deepEqual(nodeSize(fn), NODE_SIZE);
+const manyFunctions = Array.from({ length: 12 }, (_, index) => ({ ...fn, id: `fn-${index}` }));
+const functionCanvas = { width: MIN_CANVAS_WIDTH, height: canvasHeight(manyFunctions) };
+const functionLayout = defaultLayout(manyFunctions, functionCanvas);
+for (let index = 1; index < manyFunctions.length; index++) {
+  assert.ok(toPx(functionLayout[`fn-${index}`], functionCanvas).y - toPx(functionLayout[`fn-${index - 1}`], functionCanvas).y > NODE_SIZE.h);
+}
+
+
+const flow = flowGeometry(a, b, [], undefined, -5, 5)!;
+assert.ok(flow.path.includes(" C"), "open routes use smooth port-to-port curves");
+assert.equal(flow.start.x, a.x + a.w / 2 + 6);
+assert.equal(flow.end.x, b.x - b.w / 2 - 9, "arrowheads stop before the destination card");
+assert.equal(flow.start.y, a.y - 5);
+assert.equal(flow.end.y, b.y + 5, "parallel inputs receive distinct ports");
+assert.equal(flowGeometry(a, a), null, "overlapping cards don't draw misleading arrows");
+assert.ok(flowGeometry(top, low, [top, middle, low], lane)?.path.includes(" Q"), "blocked routes retain obstacle avoidance");

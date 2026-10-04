@@ -6,13 +6,13 @@ export type Size = { width: number; height: number };
 export type Box = Pt & { w: number; h: number };
 
 /** Narrower frames pan across a canvas this wide instead of squeezing the map. */
-export const MIN_CANVAS_WIDTH = 640;
+export const MIN_CANVAS_WIDTH = 820;
 /** Kept clear at the top for breathing room and at the bottom for the floating palette. */
-export const TOP_CLEARANCE = 32;
+export const TOP_CLEARANCE = 64;
 //room for the palette, which can wrap onto a second row
 export const PALETTE_CLEARANCE = 120;
-const LANE_GAP = 72;
-export const NODE_SIZE = { w: 186, h: 56 };
+const LANE_GAP = 96;
+export const NODE_SIZE = { w: 218, h: 68 };
 //the space between nodes in a lane; a plain node plus this is LANE_GAP
 const NODE_GAP = LANE_GAP - NODE_SIZE.h;
 /** A box node: the usual header, then a row per item. Same width, so it fits any lane. */
@@ -20,13 +20,13 @@ export const BOX_ROW = 34;
 const BOX_PAD = 8;
 
 /** A node's size in px. Box nodes grow a row per item, with room for one when empty. */
-export function nodeSize(node: Pick<MapNode, "box">): { w: number; h: number } {
-  if (!node.box) return NODE_SIZE;
+export function nodeSize(node: Pick<MapNode, "box" | "variant">): { w: number; h: number } {
+  if (!node.box || node.variant === "function") return NODE_SIZE;
   return { w: NODE_SIZE.w, h: NODE_SIZE.h + Math.max(1, node.box.rows.length) * BOX_ROW + BOX_PAD };
 }
 
 //a lane's nodes stacked with NODE_GAP between them
-function laneHeight(lane: Pick<MapNode, "box">[]): number {
+function laneHeight(lane: Pick<MapNode, "box" | "variant">[]): number {
   return lane.reduce((sum, node) => sum + nodeSize(node).h, 0) + NODE_GAP * Math.max(0, lane.length - 1);
 }
 
@@ -35,16 +35,19 @@ export function clamp(value: number, min: number, max: number): number {
 }
 
 //tall enough that the longest lane keeps its nodes NODE_GAP apart (plain nodes: LANE_GAP between centres)
-export function canvasHeight(nodes: Pick<MapNode, "group" | "box">[]): number {
+export function canvasHeight(nodes: Pick<MapNode, "group" | "box" | "variant">[]): number {
   const longest = Math.max(
     NODE_SIZE.h,
-    ...(["left", "right"] as const).map((group) => laneHeight(nodes.filter((node) => node.group === group))),
+    ...(["left", "hub", "right"] as const).map((group) => laneHeight(nodes.filter((node) => node.group === group))),
   );
-  return Math.max(460, TOP_CLEARANCE + PALETTE_CLEARANCE + longest + NODE_GAP);
+  return Math.max(400, TOP_CLEARANCE + PALETTE_CLEARANCE + longest + NODE_GAP);
 }
 
 //hub in the middle with a column either side, in the order given, spread evenly from top to bottom
-export function defaultLayout(nodes: Pick<MapNode, "id" | "group" | "box">[], size: Size): Record<string, MapPoint> {
+export function defaultLayout(
+  nodes: Pick<MapNode, "id" | "group" | "box" | "variant" | "variant">[],
+  size: Size,
+): Record<string, MapPoint> {
   const height = Math.max(1, size.height);
   const top = TOP_CLEARANCE;
   const bottom = Math.max(top, height - PALETTE_CLEARANCE);
@@ -56,8 +59,8 @@ export function defaultLayout(nodes: Pick<MapNode, "id" | "group" | "box">[], si
       return;
     }
     const filled = lane.reduce((sum, node) => sum + nodeSize(node).h, 0);
-    const gap = Math.max(NODE_GAP, (bottom - top - filled) / Math.max(1, lane.length - 1));
-    let edge = top;
+    const gap = NODE_GAP;
+    let edge = top + Math.max(0, (bottom - top - filled - gap * (lane.length - 1)) / 2);
     for (const node of lane) {
       const h = nodeSize(node).h;
       out[node.id] = { x, y: (edge + h / 2) / height };
@@ -65,8 +68,8 @@ export function defaultLayout(nodes: Pick<MapNode, "id" | "group" | "box">[], si
     }
   };
   place("hub", 0.5);
-  place("left", 0.15);
-  place("right", 0.85);
+  place("left", 0.16);
+  place("right", 0.84);
   return out;
 }
 
@@ -182,7 +185,7 @@ export function edgeGeometry(from: Box, to: Box, obstacles: Box[] = [], canvas?:
   const nx = -dy / length;
   const ny = dx / length;
   //a quadratic curve reaches half its control offset, so double what the widest blocker needs
-  const clearance = Math.max(...blocking.map((box) => Math.abs(nx) * box.w / 2 + Math.abs(ny) * box.h / 2)) + 18;
+  const clearance = Math.max(...blocking.map((box) => (Math.abs(nx) * box.w) / 2 + (Math.abs(ny) * box.h) / 2)) + 18;
   const others = obstacles.filter((box) => box !== from && box !== to);
   const bend = (sign: 1 | -1) => {
     const control = { x: centre.x + sign * nx * clearance * 2, y: centre.y + sign * ny * clearance * 2 };
@@ -201,8 +204,7 @@ export function edgeGeometry(from: Box, to: Box, obstacles: Box[] = [], canvas?:
     }
     return { sign, control, start, end, mid: at(0.5), hits };
   };
-  const towardMiddle: 1 | -1 =
-    canvas && nx * (canvas.width / 2 - centre.x) + ny * (canvas.height / 2 - centre.y) < 0 ? -1 : 1;
+  const towardMiddle: 1 | -1 = canvas && nx * (canvas.width / 2 - centre.x) + ny * (canvas.height / 2 - centre.y) < 0 ? -1 : 1;
   const first = bend(towardMiddle);
   const second = bend(towardMiddle === 1 ? -1 : 1);
   const best = second.hits < first.hits ? second : first;
@@ -229,4 +231,40 @@ export function nodeAt(boxes: Array<Box & { id: string }>, point: Pt, margin = 0
     }
   }
   return best;
+}
+
+/** Curved port-to-port arrows; crowded routes keep the obstacle-aware fallback. */
+export function flowGeometry(
+  from: Box,
+  to: Box,
+  obstacles: Box[] = [],
+  canvas?: Size,
+  fromOffset = 0,
+  toOffset = 0,
+): (EdgeGeometry & { path: string }) | null {
+  const fallback = edgeGeometry(from, to, obstacles, canvas, 8);
+  if (!fallback) return null;
+  if (fallback.control)
+    return {
+      ...fallback,
+      path: `M${fallback.start.x} ${fallback.start.y} Q${fallback.control.x} ${fallback.control.y} ${fallback.end.x} ${fallback.end.y}`,
+    };
+  const horizontal = Math.abs(to.x - from.x) > (from.w + to.w) / 2 + 24;
+  const sign = horizontal ? Math.sign(to.x - from.x) : Math.sign(to.y - from.y) || 1;
+  const start = horizontal
+    ? { x: from.x + sign * (from.w / 2 + 6), y: from.y + fromOffset }
+    : { x: from.x + fromOffset, y: from.y + sign * (from.h / 2 + 6) };
+  const end = horizontal
+    ? { x: to.x - sign * (to.w / 2 + 9), y: to.y + toOffset }
+    : { x: to.x + toOffset, y: to.y - sign * (to.h / 2 + 9) };
+  const mid = { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 };
+  const c1 = horizontal ? { x: mid.x, y: start.y } : { x: start.x, y: mid.y };
+  const c2 = horizontal ? { x: mid.x, y: end.y } : { x: end.x, y: mid.y };
+  return {
+    start,
+    end,
+    mid,
+    label: { x: mid.x, y: mid.y - 12, align: "middle" },
+    path: `M${start.x} ${start.y} C${c1.x} ${c1.y} ${c2.x} ${c2.y} ${end.x} ${end.y}`,
+  };
 }

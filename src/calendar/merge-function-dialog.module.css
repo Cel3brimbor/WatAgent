@@ -1,0 +1,97 @@
+.dialog {
+  background: var(--panel-solid, var(--paper));
+  width: min(480px, calc(100vw - 32px));
+  max-height: 85vh;
+  overflow: auto;
+}
+.field {
+  display: grid;
+  gap: 8px;
+  font-size: 0.85rem;
+}
+.field input {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font: inherit;
+  color: var(--ink);
+  background: var(--paper);
+}
+.flow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 24px 0;
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+}
+.flow strong {
+  color: var(--ink);
+  border: 1px solid var(--line);
+  padding: 8px 14px;
+  border-radius: 6px;
+  font-weight: 550;
+}
+.flow span:last-child {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.sources {
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+.sources legend {
+  font-size: 0.85rem;
+  margin-bottom: 12px;
+}
+.sources legend span {
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+  margin-left: 10px;
+}
+.source {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.source input {
+  accent-color: var(--accent);
+}
+.source small {
+  display: block;
+  color: var(--ink-soft);
+  margin-top: 3px;
+}
+.priority {
+  display: grid;
+  gap: 8px;
+  margin: 20px 0;
+  font-size: 0.8rem;
+}
+.priority > span {
+  color: var(--ink-soft);
+}
+.priority > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.priority button {
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--ink);
+  border-radius: 5px;
+  width: 30px;
+  height: 30px;
+  cursor: pointer;
+}
+.priority button:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
