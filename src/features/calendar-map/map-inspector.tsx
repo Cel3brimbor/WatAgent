@@ -1,4 +1,5 @@
 import type { MapChange, MapEdge, MapFunction, MapNode, MapNodeDrop } from "./types";
+import { SyncMeter } from "./sync-meter";
 import styles from "./calendar-map.module.css";
 
 type Props = {
@@ -21,7 +22,14 @@ export function MapInspector({ node, nodes, edges, functions, nodeDrop, run, sel
       <div className={styles.inspectorText}>
         <span className={styles.eyebrow}>{node.variant === "function" ? "Function" : "Calendar details"}</span>
         <h3 className={styles.inspectorTitle}>{node.label}</h3>
-        {node.caption ? <p className={styles.hint}>{node.caption}</p> : null}
+        {node.sync ? (
+          <div className={styles.syncStatus} role="status">
+            <SyncMeter sync={node.sync} />
+            <p className={styles.hint}>{node.sync.label}</p>
+          </div>
+        ) : node.caption ? (
+          <p className={styles.hint}>{node.caption}</p>
+        ) : null}
         <ul className={styles.inspectorLines}>
           {node.details?.map((line) => (
             <li key={line}>{line}</li>

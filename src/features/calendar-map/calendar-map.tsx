@@ -37,6 +37,7 @@ import { capturePointer } from "./pointer";
 import { useFunctionDrag } from "./use-function-drag";
 import { useNodeDrag } from "./use-node-drag";
 import { MapInspector } from "./map-inspector";
+import { SyncMeter } from "./sync-meter";
 import { DEFAULT_VIEW, parseView, type ViewPreferences } from "./view-preferences";
 import styles from "./calendar-map.module.css";
 
@@ -1016,6 +1017,7 @@ export function CalendarMap({
                             data-selected={selected || undefined}
                             data-pressed={pressed === node.id || undefined}
                             data-dimmed={node.dimmed || undefined}
+                            data-sync={node.sync ? true : undefined}
                             data-toggle={node.toggle ? true : undefined}
                             data-box={node.box && node.variant !== "function" ? true : undefined}
                             data-node={node.id}
@@ -1045,8 +1047,11 @@ export function CalendarMap({
                                 </span>
                                 {node.caption ? <span className={styles.caption}>{node.caption}</span> : null}
                               </span>
-                              {node.busy ? <span className={styles.spinner} aria-hidden="true" /> : null}
+                              {node.busy && !node.sync ? (
+                                <span className={styles.spinner} aria-hidden="true" />
+                              ) : null}
                             </span>
+                            {node.sync ? <SyncMeter sync={node.sync} onNode /> : null}
                             {/*the handle that's drawing must stay mounted, or its pointer capture goes with it*/}
                             {(gesture.kind === "idle" || (gesture.kind === "linking" && gesture.held && gesture.from === node.id)) &&
                             canDrawFrom(node.id) ? (

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CAMPUS_CALENDAR_NAME, type CampusCategory } from "@/campus/campus-events";
+import type { CampusCategory } from "@/campus/campus-events";
 import { ChevronIcon } from "@/calendar/sidebar-icons";
 import { Disclosure } from "@/shared/disclosure";
 import { Switch } from "@/shared/switch";
@@ -23,10 +23,10 @@ export function CampusSubscriptions({ categories, counts, subscribed, busy, onTo
   const [copied, setCopied] = useState(false);
   const names = categories.filter((category) => subscribed.includes(category.id)).map((category) => category.label);
   const summary = busy
-    ? `Updating your ${CAMPUS_CALENDAR_NAME} calendar…`
+    ? "Updating your UWaterloo Events calendars…"
     : names.length === 0
-      ? "Pick categories and their events stay on your calendar, new ones included."
-      : `${names.length > 2 ? `${names.slice(0, 2).join(", ")} +${names.length - 2}` : names.join(" and ")} on your ${CAMPUS_CALENDAR_NAME} calendar`;
+      ? "Turn a category on and it gets its own calendar."
+      : `${names.length > 2 ? `${names.slice(0, 2).join(", ")} +${names.length - 2}` : names.join(" and ")} ${names.length === 1 ? "has its own calendar" : "each have their own calendar"}`;
 
   async function copyLink() {
     if (!feedLink) return;
@@ -53,7 +53,7 @@ export function CampusSubscriptions({ categories, counts, subscribed, busy, onTo
       <Disclosure open={open} id="campus-subscriptions-body">
         <div className={styles.subBody}>
           <p className={styles.subNote}>
-            Subscribed events go on a read-only calendar called {CAMPUS_CALENDAR_NAME}. It keeps itself up to date as events are added, moved or called off.
+            Each category you turn on is its own read-only calendar under UWaterloo Events. It stays up to date as events are added, moved or called off. When LEARN or Portal has the same event, that copy is the one on your calendar.
           </p>
           <ul className={styles.subList}>
             {categories.map((category) => {

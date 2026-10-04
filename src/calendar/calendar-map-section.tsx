@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import { flushSync } from "react-dom";
 import { configureMerge } from "./merge-function";
 import { MergeFunctionDialog } from "./merge-function-dialog";
 import { RuleEditor } from "@/agent/rules/rule-editor";
@@ -14,8 +15,9 @@ import {
   type RuleFeed,
 } from "@/agent/rules/rules-client";
 import type { AgentRulesState } from "@/agent/rules/use-agent-rules";
+import { campusFeedCategories } from "@/campus/campus-events";
 import { sharedEventCounts } from "@/calendar/calendar-merge";
-import { formatFeedSyncSummary, syncImportedFeed } from "@/calendar/calendar-sync";
+import { feedSyncProgressLabel, formatFeedSyncSummary, syncImportedFeed } from "@/calendar/calendar-sync";
 import { calendarIdForMeta } from "@/calendar/calendar-ownership";
 import {
   CalendarsBoard,
@@ -73,7 +75,7 @@ const VIEW_KEY = "watagent.calendars.view.v1";
 const layoutStore = createLocalLayoutStore("watagent.calendarMap.layout.v2");
 const UNDO_DEPTH = 10;
 const TOAST_MS = 6000;
-const GROUP_KEYS: CalGroup[] = ["watagent", "imported", "google"];
+const GROUP_KEYS: CalGroup[] = ["watagent", "imported", "campus", "google"];
 
 type Change = { message: string; undo?: () => void };
 type Toast = { key: number; message: string; change?: Change };
@@ -131,7 +133,7 @@ function ago(at: number): string {
 }
 
 function readView(): { segment: CalSegment; groups: Record<CalGroup, boolean>; presentation: CalPresentation } {
-  const groups: Record<CalGroup, boolean> = { watagent: true, imported: true, google: true };
+  const groups: Record<CalGroup, boolean> = { watagent: true, imported: true, campus: true, google: true };
   const presentation: CalPresentation = "list";
   try {
     const raw = JSON.parse(localStorage.getItem(VIEW_KEY) ?? "");
@@ -174,6 +176,7 @@ export function CalendarMapSection({
 }: Props) {
   const [mergeEditor, setMergeEditor] = useState<{ id?: string; source?: string } | null>(null);
   const [syncing, setSyncing] = useState<string[]>([]);
+  const [syncProgress, setSyncProgress] = useState<Record<string, { done: number; total: number | null; label: string }>>({});
   const [editor, setEditor] = useState<{ rule?: AgentRule; initial?: Partial<AgentRuleDraft> } | null>(null);
   const [deleting, setDeleting] = useState<AgentRule | null>(null);
   const [deletingBox, setDeletingBox] = useState<MergeBox | null>(null);
@@ -182,7 +185,7 @@ export function CalendarMapSection({
   const [runningRuleId, setRunningRuleId] = useState<string | null>(null);
   const [segment, setSegment] = useState<CalSegment>("calendars");
   const [presentation, setPresentation] = useState<CalPresentation>("list");
-  const [groupsOpen, setGroupsOpen] = useState<Record<CalGroup, boolean>>({ watagent: true, imported: true, google: true });
+  const [groupsOpen, setGroupsOpen] = useState<Record<CalGroup, boolean>>({ watagent: true, imported: true, campus: true, google: true });
   const [viewReady, setViewReady] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
@@ -238,6 +241,10 @@ export function CalendarMapSection({
 
   const groups = calendarGroupsOf(sources.groups);
   const feeds = useMemo(() => externalCalendarsOf(items, importedCalendars), [items, importedCalendars]);
+  const campusSources = useMemo(
+    () => new Set(importedCalendars.filter((calendar) => campusFeedCategories(calendar.url) != null).map((calendar) => calendar.id)),
+    [importedCalendars],
+  );
   const showGoogle = googleConnected === true || overlayEvents.length > 0;
   const memberOf = useMemo(() => mergedByMember(mergedCalendars), [mergedCalendars]);
   const isMerged = (id: string) => mergedCalendars.some((calendar) => calendar.id === id);
@@ -294,13 +301,16 @@ export function CalendarMapSection({
       { id: "", title: "", createdAt: 0, updatedAt: 0, calendar: { ...calendar, startUTC: 1, endUTC: 2, allDay: false } },
       sources,
       mergedCalendars,
+      campusSources,
     );
   }
 
   function hiddenElsewhere(id: string): boolean {
     if (id === GOOGLE) return !groups.other;
     if (sources.hiddenIds.includes(id) && !groups.hidden) return true;
-    return feedSourceOf(id) || isMerged(id) ? !groups.external : !groups.watagent;
+    const feed = feedSourceOf(id);
+    if (feed && campusSources.has(feed)) return !groups.campus;
+    return feed || isMerged(id) ? !groups.external : !groups.watagent;
   }
 
   const agentHidden = (id: string) => isAgentCalendarHidden(agentHiddenIds, id);
@@ -470,8 +480,24 @@ export function CalendarMapSection({
     };
   }
 
+  function meter(id: string, progress: { done: number; total: number | null; label: string } | null) {
+    //ndjson can deliver many progress lines in one read; flush so the graph and merge panes paint between them
+    flushSync(() => {
+      setSyncProgress((current) => {
+        if (!progress) {
+          if (!(id in current)) return current;
+          const next = { ...current };
+          delete next[id];
+          return next;
+        }
+        return { ...current, [id]: progress };
+      });
+    });
+  }
+
   async function sync(id: string): Promise<Change> {
     setSyncing((current) => [...current, id]);
+    meter(id, { done: 0, total: null, label: `Syncing ${nameOf(id)}…` });
     try {
       if (id === GOOGLE) {
         await onSyncGoogle();
@@ -481,11 +507,16 @@ export function CalendarMapSection({
       if (targets.length === 0) throw new Error(`${nameOf(id)} has no calendars to sync yet.`);
       if (targets.some((target) => !target)) throw new Error(`${nameOf(id)} has no calendar link to sync.`);
       const lines: string[] = [];
-      for (const target of targets as ImportedCalendar[]) lines.push(formatFeedSyncSummary(target.name, await syncImportedFeed(target)));
+      for (const target of targets as ImportedCalendar[]) {
+        meter(id, { done: 0, total: null, label: `Opening ${target.name}…` });
+        const result = await syncImportedFeed(target, (progress) => meter(id, { ...progress, label: feedSyncProgressLabel(target.name, progress) }));
+        lines.push(formatFeedSyncSummary(target.name, result));
+      }
       await onRefresh();
       return { message: lines.join(" ") };
     } finally {
       setSyncing((current) => current.filter((entry) => entry !== id));
+      meter(id, null);
     }
   }
 
@@ -586,13 +617,14 @@ export function CalendarMapSection({
       const unseen = agentHidden(feed.id);
       const visibility = showState(feed.id);
       const amount = plural(counts.saved.get(feed.id) ?? 0, "event");
+      const campus = campusSources.has(feed.source);
       list.push({
         id: feed.id,
         name: feed.name,
         color: calendarSwatchColor(feed.id, colors, colorOverrides),
-        group: "imported",
+        group: campus ? "campus" : "imported",
         caption: [
-          "Imported",
+          campus ? "UWaterloo Events" : "Imported",
           merged ? `In ${merged.name}` : waiting ? `Waiting in ${waiting.name}` : visibility.shown === false ? "Hidden" : null,
           unseen ? "Agent can’t see" : null,
           syncing.includes(feed.id) ? "Syncing…" : null,
@@ -611,6 +643,7 @@ export function CalendarMapSection({
         approvalOn: requireAiApproval,
         canAsk: false,
         ...syncState(feed.id),
+        ...(syncProgress[feed.id] ? { syncProgress: syncProgress[feed.id] } : {}),
         mergeLink: merged
           ? { id: merged.id, name: merged.name, waiting: false }
           : waiting
@@ -647,6 +680,7 @@ export function CalendarMapSection({
         approvalOn: requireAiApproval,
         canAsk: false,
         ...syncState(GOOGLE),
+        ...(syncProgress[GOOGLE] ? { syncProgress: syncProgress[GOOGLE] } : {}),
       });
     }
     return list;
@@ -669,6 +703,7 @@ export function CalendarMapSection({
     googleConnected,
     overlayEvents.length,
     mergedCalendars,
+    syncProgress,
   ]);
 
   useEffect(() => {
@@ -696,6 +731,7 @@ export function CalendarMapSection({
             : missingLink
               ? `${box.name} has no calendar link to sync.`
               : undefined,
+        sync: syncProgress[box.id],
         members: members.map((member) => ({
           id: member,
           name: nameOf(member),
@@ -705,7 +741,7 @@ export function CalendarMapSection({
       };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [boxList, savedBoxes, sources, syncing, shared, colorOverrides, colors, mergedCalendars]);
+  }, [boxList, savedBoxes, sources, syncing, shared, colorOverrides, colors, mergedCalendars, syncProgress]);
 
   const hasAgentLink = (id: string) => id !== AGENT && !isBox(id) && names.has(id);
 
@@ -777,13 +813,14 @@ export function CalendarMapSection({
       const amount = plural(counts.saved.get(id) ?? 0, "event");
       const merged = memberOf.get(id);
       const waiting = merged ? undefined : boxHolding(id);
+      const campus = campusSources.has(feed.source);
       list.push({
         id,
         label: feed.name,
         color: calendarSwatchColor(id, colors, colorOverrides),
         group: "left",
         caption: [
-          "Imported",
+          campus ? "UWaterloo Events" : "Imported",
           merged ? `In ${merged.name}` : waiting ? `Waiting in ${waiting.name}` : hidden ? "Hidden" : null,
           agentHidden(id) ? "No Agent" : null,
           amount,
@@ -793,10 +830,14 @@ export function CalendarMapSection({
         locked,
         dimmed: hidden,
         busy: syncing.includes(id),
+        sync: syncProgress[id],
+        ...(syncProgress[id] ? { caption: syncProgress[id].label } : {}),
         details: [
           merged
             ? `Shows on the calendar as part of ${merged.name}, which keeps one copy of each shared event.`
-            : "An imported calendar. All of its events show.",
+            : campus
+              ? "A UWaterloo Events calendar. When LEARN or Portal has the same event, that copy shows."
+              : "An imported calendar. All of its events show.",
           "Read only: its events change only when it syncs.",
           ...(hidden && !merged ? ["Hidden from the calendar."] : []),
           ...(agentHidden(id) ? ["The Agent can't see it. Draw a line from the Agent to give it access again."] : []),
@@ -816,7 +857,9 @@ export function CalendarMapSection({
         caption: merged ? `${members.length} sources · Merged` : "Merge not configured",
         locked: merged,
         dimmed: hidden,
-        busy: members.some((member) => syncing.includes(member)),
+        busy: syncing.includes(box.id) || members.some((member) => syncing.includes(member)),
+        sync: syncProgress[box.id],
+        ...(syncProgress[box.id] ? { caption: syncProgress[box.id].label } : {}),
         actions: [
           { id: "rename", label: "Rename", run: () => setRenamingBox(box) },
           { id: "delete", label: "Remove calendar", run: () => setDeletingBox(box) },
@@ -873,6 +916,8 @@ export function CalendarMapSection({
         locked: true,
         dimmed: hidden,
         busy: syncing.includes(GOOGLE),
+        sync: syncProgress[GOOGLE],
+        ...(syncProgress[GOOGLE] ? { caption: syncProgress[GOOGLE].label } : {}),
         details: [
           "The Agent reads Google events but never changes them.",
           "Google calendars aren't merged; all of their events show.",
@@ -903,6 +948,7 @@ export function CalendarMapSection({
     shared,
     memberOf,
     counts,
+    syncProgress,
     overlayEvents.length,
     sources,
     colors,

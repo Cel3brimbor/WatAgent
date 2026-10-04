@@ -15,12 +15,13 @@ import { CSS as dndCSS } from "@dnd-kit/utilities";
 import { GripIcon } from "@/shared/icons";
 import { SegmentedControl } from "@/shared/segmented-control";
 import { Switch } from "@/shared/switch";
+import { CalendarSyncStatus } from "@/calendar/calendar-sync-status";
 import { useDialog } from "@/shared/use-dialog";
 import { usePresence } from "@/shared/use-presence";
 
 export type CalSegment = "calendars" | "merged" | "rules";
 export type CalPresentation = "list" | "graph";
-export type CalGroup = "watagent" | "imported" | "google";
+export type CalGroup = "watagent" | "imported" | "campus" | "google";
 
 export type CalendarRowModel = {
   id: string;
@@ -41,6 +42,7 @@ export type CalendarRowModel = {
   canAsk: boolean;
   askBlocked?: string;
   sync: "hidden" | "ready" | "busy" | "blocked";
+  syncProgress?: { done: number; total: number | null; label: string };
   syncBlocked?: string;
   connection?: string;
   landing?: string;
@@ -63,6 +65,8 @@ export type MergeModel = {
   busy: boolean;
   canSync: boolean;
   syncBlocked?: string;
+  /**set while this merge (or its box id) is syncing*/
+  sync?: { done: number; total: number | null; label: string };
   members: MergeMemberModel[];
 };
 
@@ -132,6 +136,7 @@ type Props = {
 const GROUPS: { id: CalGroup; label: string }[] = [
   { id: "watagent", label: "WatAgent" },
   { id: "imported", label: "Imported" },
+  { id: "campus", label: "UWaterloo Events" },
   { id: "google", label: "Google" },
 ];
 
@@ -245,7 +250,15 @@ export function CalendarsBoard(props: Props) {
                 open={props.groupsOpen[group.id]}
                 onToggle={() => props.onToggleGroup(group.id)}
                 rows={props.rows.filter((row) => row.group === group.id)}
-                empty={group.id === "imported" ? "No imported calendars yet. Add a link in Settings." : group.id === "google" ? props.googleEmpty ?? "Google Calendar isn’t linked. Link it in Settings." : undefined}
+                empty={
+                  group.id === "imported"
+                    ? "No imported calendars yet. Add a link in Settings."
+                    : group.id === "campus"
+                      ? "No UWaterloo calendars yet. Turn categories on under Events."
+                      : group.id === "google"
+                        ? props.googleEmpty ?? "Google Calendar isn’t linked. Link it in Settings."
+                        : undefined
+                }
                 selectedId={props.selectedId}
                 onActivate={activate}
                 onShown={props.onShown}
@@ -465,6 +478,7 @@ function Detail({
         ) : null}
       </div>
       {row.askBlocked ? <p className="calendars-note">{row.askBlocked}</p> : null}
+      {row.syncProgress ? <CalendarSyncStatus label={row.syncProgress.label} progress={row.syncProgress} /> : null}
       {row.syncBlocked && row.sync === "blocked" ? <p className="calendars-note">{row.syncBlocked}</p> : null}
     </div>
   );
@@ -619,6 +633,7 @@ function MergedPane({
               {merge.busy ? "Syncing…" : "Sync"}
             </button>
           </div>
+          {merge.sync ? <CalendarSyncStatus label={merge.sync.label} progress={merge.sync} /> : null}
           {merge.syncBlocked && !merge.canSync ? <p className="calendars-note">{merge.syncBlocked}</p> : null}
         </article>
       ))}

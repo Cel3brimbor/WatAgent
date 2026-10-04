@@ -83,6 +83,7 @@ function sidePanelSectionsOf(raw: unknown, fallbacks: SidePanelSectionsOpen): Si
   const rec = raw as Record<string, unknown>;
   return {
     watagent: typeof rec.watagent === "boolean" ? rec.watagent : fallbacks.watagent,
+    campus: typeof rec.campus === "boolean" ? rec.campus : fallbacks.campus,
     other: typeof rec.other === "boolean" ? rec.other : fallbacks.other,
     hidden: typeof rec.hidden === "boolean" ? rec.hidden : fallbacks.hidden,
     smartTags: typeof rec.smartTags === "boolean" ? rec.smartTags : fallbacks.smartTags,

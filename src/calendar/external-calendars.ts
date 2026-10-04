@@ -24,19 +24,25 @@ export function externalCalendarsOf(items: CalendarItemDoc[], imported: Imported
 }
 
 //the per-calendar part of visibility, shared by imported and merged calendars
-export function externalCalendarShown(id: string, filter: CalendarSourceFilter): boolean {
+export function externalCalendarShown(id: string, filter: CalendarSourceFilter, group: "external" | "campus" = "external"): boolean {
   const groups = calendarGroupsOf(filter.groups);
   if (groups.hidden && filter.hiddenIds.includes(id)) return true;
-  if (!groups.external) return false;
+  if (!(group === "campus" ? groups.campus : groups.external)) return false;
   return !filter.hiddenIds.includes(id) && !filter.mutedGoogleIds.includes(id);
 }
 
-/** Members of a merged calendar show or hide with it, not on their own. */
-export function calendarItemVisible(item: CalendarItemDoc, filter: CalendarSourceFilter, merged: MergedCalendar[] = []): boolean {
+/** Members of a merged calendar show or hide with it, not on their own. campusSources are feed ids, not ics: ids. */
+export function calendarItemVisible(
+  item: CalendarItemDoc,
+  filter: CalendarSourceFilter,
+  merged: MergedCalendar[] = [],
+  campusSources?: ReadonlySet<string>,
+): boolean {
   if (item.calendar.importSource) {
     const id = externalCalendarId(item.calendar.importSource);
     const owner = merged.find((calendar) => calendar.members.includes(id));
-    return externalCalendarShown(owner?.id ?? id, filter);
+    const campus = !owner && (campusSources?.has(item.calendar.importSource) ?? false);
+    return externalCalendarShown(owner?.id ?? id, filter, campus ? "campus" : "external");
   }
   const groups = calendarGroupsOf(filter.groups);
   const id = localCalendarIdOf(item.calendar) ?? "events";

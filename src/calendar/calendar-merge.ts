@@ -1,5 +1,6 @@
-import { importedCalendarId, mergedByMember } from "@/calendar/imported-calendars";
-import type { MergedCalendar, TimelineItem } from "@/calendar/types";
+import { campusFeedCategories } from "@/campus/campus-events";
+import { detectCalendarLink, importedCalendarId, mergedByMember } from "@/calendar/imported-calendars";
+import type { ImportedCalendar, MergedCalendar, TimelineItem } from "@/calendar/types";
 
 export function normalizedCalendarTitle(title: string): string {
   return title.normalize("NFKC").replace(/\s+/g, " ").trim().toLowerCase();
@@ -68,6 +69,54 @@ function isGoogleEvent(item: TimelineItem): boolean {
   return item.kind === "gcal_event";
 }
 
+type FeedRole = "learn" | "portal" | "campus";
+
+//learn and portal win by the feed id, the link, or a google calendar's name. campus is the uwaterloo events feed
+function feedRole(item: TimelineItem, imported: ImportedCalendar[]): FeedRole | undefined {
+  const google = googleFeedOf(item);
+  if (google) return google;
+  const source = item.importSource;
+  if (!source) return undefined;
+  if (source === "learn" || source === "portal") return source;
+  const calendar = imported.find((entry) => entry.id === source);
+  if (!calendar) return undefined;
+  const detected = detectCalendarLink(calendar.url);
+  if (detected === "learn" || detected === "portal") return detected;
+  return campusFeedCategories(calendar.url) != null ? "campus" : undefined;
+}
+
+//learn and portal always keep the copy. extra uwaterloo calendars collapse to the earliest one
+function campusCopiesToHide(items: TimelineItem[], imported: ImportedCalendar[]): Set<TimelineItem> {
+  const pool = items.filter(competes);
+  const find = groupDuplicates(pool);
+  const groups = new Map<number, TimelineItem[]>();
+  pool.forEach((item, index) => {
+    const root = find(index);
+    const group = groups.get(root);
+    if (group) group.push(item);
+    else groups.set(root, [item]);
+  });
+  const order = new Map(imported.map((calendar, index) => [calendar.id, index]));
+  const hidden = new Set<TimelineItem>();
+  for (const group of groups.values()) {
+    const campus = group.filter((item) => feedRole(item, imported) === "campus");
+    if (campus.length === 0) continue;
+    const school = group.some((item) => {
+      const role = feedRole(item, imported);
+      return role === "learn" || role === "portal";
+    });
+    if (school) {
+      for (const item of campus) hidden.add(item);
+      continue;
+    }
+    if (campus.length < 2) continue;
+    const rank = (item: TimelineItem) => (item.importSource == null ? 1e9 : order.get(item.importSource) ?? 1e9);
+    const keep = campus.slice().sort((a, b) => rank(a) - rank(b))[0];
+    for (const item of campus) if (item !== keep) hidden.add(item);
+  }
+  return hidden;
+}
+
 //a feed can list one event twice under different UIDs; identical copies from one imported calendar show once
 function dropSameFeedCopies(items: TimelineItem[]): TimelineItem[] {
   const copies = new Set<string>();
@@ -110,9 +159,12 @@ function googleCopiesToHide(items: TimelineItem[]): Set<TimelineItem> {
  * Members of a merged calendar show as that calendar: each duplicate once, the copy from its earliest member.
  * Google is last: its copy hides when the event is also on another calendar.
  * Between Google's own LEARN and Portal subscriptions, the Portal copy hides.
+ * UWaterloo event calendars lose to LEARN and Portal, and their own copies of one event show once.
  */
-export function mergeTimeline(items: TimelineItem[], merged: MergedCalendar[]): TimelineItem[] {
-  const distinct = dropSameFeedCopies(items);
+export function mergeTimeline(items: TimelineItem[], merged: MergedCalendar[], imported: ImportedCalendar[] = []): TimelineItem[] {
+  const copies = dropSameFeedCopies(items);
+  const campusHidden = campusCopiesToHide(copies, imported);
+  const distinct = copies.filter((item) => !campusHidden.has(item));
   const byMember = mergedByMember(merged);
   const kept = new Set<TimelineItem>();
   for (const calendar of merged) {

@@ -3,11 +3,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { fetchCampusEvents } from "@/campus/campus-client";
 import {
+  campusCategoryLabel,
   campusDays,
   campusEventIcs,
   campusFeedUrl,
   campusPlacements,
-  CAMPUS_CALENDAR_NAME,
   googleCalendarLink,
   icsFileName,
   localSpan,
@@ -30,10 +30,10 @@ type Props = {
   /** WatAgent calendars an event can be added to. */
   calendars: Array<{ id: string; name: string }>;
   onAdd: (event: CampusEvent, calendarId: string) => void;
-  /** The imported calendar holding subscribed categories, if there is one. */
-  subscription: { feedId: string; categories: string[] } | null;
-  /** Saves the new set of subscribed categories; none removes the calendar. */
-  onSubscribe: (categories: string[]) => Promise<void>;
+  /** One imported calendar per enabled category. */
+  subscriptions: Array<{ feedId: string; categories: string[] }>;
+  /** Saves the categories that should each have a calendar. None removes them. */
+  onSubscribe: (categories: Array<{ id: string; label: string }>) => Promise<void>;
 };
 
 //rows rendered at first; the rest wait behind "Show more" so a busy term doesn't build hundreds of cards
@@ -131,7 +131,7 @@ function useMinute(): number {
   return now;
 }
 
-export function CampusEventsSection({ items, calendars, onAdd, subscription, onSubscribe }: Props) {
+export function CampusEventsSection({ items, calendars, onAdd, subscriptions, onSubscribe }: Props) {
   const { data, error, loading, reload } = useCampusEvents();
   const [category, setCategory] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -141,9 +141,10 @@ export function CampusEventsSection({ items, calendars, onAdd, subscription, onS
   const now = useMinute();
   //the switches move at once and settle when the calendar has synced
   const [pendingCategories, setPendingCategories] = useState<string[] | null>(null);
-  const subscribed = pendingCategories ?? subscription?.categories ?? [];
-  const feedId = subscription?.feedId ?? null;
-  const placementOf = useMemo(() => campusPlacements(items, feedId), [items, feedId]);
+  const savedCategories = subscriptions.flatMap((entry) => entry.categories);
+  const subscribed = pendingCategories ?? savedCategories;
+  const feedIds = subscriptions.map((entry) => entry.feedId);
+  const placementOf = useMemo(() => campusPlacements(items, feedIds), [items, feedIds]);
 
   const labels = useMemo(() => new Map((data?.categories ?? []).map((entry) => [entry.id, entry.label])), [data]);
   const sourceNames = useMemo(() => new Map((data?.sources ?? []).map((entry) => [entry.id, entry.name])), [data]);
@@ -210,13 +211,19 @@ export function CampusEventsSection({ items, calendars, onAdd, subscription, onS
 
   async function toggleSubscription(id: string, on: boolean) {
     if (!data || pendingCategories) return;
-    const next = toggledCategories(subscription?.categories ?? [], id, on, data.categories);
+    const next = toggledCategories(savedCategories, id, on, data.categories);
     setPendingCategories(next);
     try {
-      await onSubscribe(next);
+      await onSubscribe(next.map((categoryId) => ({ id: categoryId, label: labels.get(categoryId) ?? campusCategoryLabel(categoryId) })));
     } finally {
       setPendingCategories(null);
     }
+  }
+
+  function subscribedTitle(event: CampusEvent): string {
+    const categoryId = event.categories.find((id) => subscribed.includes(id));
+    const name = categoryId ? labels.get(categoryId) ?? campusCategoryLabel(categoryId) : "UWaterloo Events";
+    return `On your ${name} calendar`;
   }
 
   function toggleExpanded(key: string) {
@@ -248,7 +255,7 @@ export function CampusEventsSection({ items, calendars, onAdd, subscription, onS
           {next.summary ? <p className={styles.summary}>{next.summary}</p> : null}
           <div className={styles.tags}>
             {placementOf(next) === "subscribed" ? (
-              <span className={styles.onCalendar} title={`On your ${CAMPUS_CALENDAR_NAME} calendar`}>
+              <span className={styles.onCalendar} title={subscribedTitle(next)}>
                 <CheckIcon />
                 Subscribed
               </span>

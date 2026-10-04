@@ -7,8 +7,9 @@ import {
   campusEventsOf,
   campusFeedCategories,
   campusFeedUrl,
+  campusCalendarsOf,
+  campusCategoryLabel,
   campusPlacements,
-  campusSubscriptionOf,
   googleCalendarLink,
   icsFileName,
   localSpan,
@@ -87,8 +88,9 @@ const imported: ImportedCalendar[] = [
   { id: "learn", name: "LEARN", url: "https://learn.uwaterloo.ca/d2l/le/calendar/feed/user/feed.ics?token=x" },
   { id: "feed-11111111-1111-4111-8111-111111111111", name: "UWaterloo events", url: "webcal://localhost:43117/api/campus-events/feed.ics?categories=talks" },
 ];
-assert.deepEqual(campusSubscriptionOf(imported)?.categories, ["talks"]);
-assert.equal(campusSubscriptionOf(imported.slice(0, 1)), null);
+assert.deepEqual(campusCalendarsOf(imported).map((entry) => entry.categories), [["talks"]]);
+assert.deepEqual(campusCalendarsOf(imported.slice(0, 1)), []);
+assert.equal(campusCategoryLabel("talks"), "Talks & seminars");
 assert.deepEqual(toggledCategories(["talks"], "academic", true, categories), ["academic", "talks"]);
 assert.deepEqual(toggledCategories(["academic", "talks"], "talks", false, categories), ["academic"]);
 
@@ -111,11 +113,11 @@ const item = (title: string, startUTC: number, importSource?: string): CalendarI
 const feed = "feed-11111111-1111-4111-8111-111111111111";
 const placed = campusPlacements(
   [item("hallman lecture:  rights, health; and policy", lecture.startUTC, feed), item("Reading Week", localSpan(readingWeek).startUTC, "learn")],
-  feed,
+  [feed],
 );
 assert.equal(placed(lecture), "subscribed");
 assert.equal(placed(readingWeek), null);
-assert.equal(campusPlacements([item("Hallman Lecture: rights, health; and policy", lecture.startUTC, feed), item("Hallman Lecture: rights, health; and policy", lecture.startUTC)], feed)(lecture), "added");
+assert.equal(campusPlacements([item("Hallman Lecture: rights, health; and policy", lecture.startUTC, feed), item("Hallman Lecture: rights, health; and policy", lecture.startUTC)], [feed])(lecture), "added");
 
 //search: every word, any field, accents ignored
 assert.equal(matchesCampusQuery(lecture, "hallman HAGEY"), true);

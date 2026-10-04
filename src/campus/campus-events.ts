@@ -35,7 +35,33 @@ export type CampusEventsPayload = {
 
 /** The backend path that serves campus events as an .ics feed. A calendar link to it is a subscription. */
 export const CAMPUS_FEED_PATH = "/api/campus-events/feed.ics";
+/** The name a combined subscription used before each category had its own calendar. */
 export const CAMPUS_CALENDAR_NAME = "UWaterloo events";
+
+/** Sidebar and calendar names. The events page still prefers the labels the server sends. */
+export const CAMPUS_CATEGORY_LABELS: Record<string, string> = {
+  academic: "Academic dates",
+  careers: "Careers & co-op",
+  talks: "Talks & seminars",
+  workshops: "Workshops",
+  "info-sessions": "Info sessions",
+  startups: "Startups & innovation",
+  arts: "Arts & culture",
+  social: "Social & community",
+  wellness: "Health & wellness",
+  athletics: "Warriors home games",
+  "open-house": "Open houses & tours",
+  defences: "Thesis defences",
+  other: "Other",
+};
+
+export function campusCategoryLabel(id: string): string {
+  return CAMPUS_CATEGORY_LABELS[id] ?? "Other";
+}
+
+export function isDefaultCampusCalendarName(name: string): boolean {
+  return name === CAMPUS_CALENDAR_NAME || name.startsWith(`${CAMPUS_CALENDAR_NAME}:`);
+}
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const CATEGORY_ID = /^[a-z][a-z-]{0,39}$/;
@@ -139,15 +165,14 @@ export function campusFeedCategories(link: string): string[] | null {
   return [...new Set((url.searchParams.get("categories") ?? "").split(",").map((part) => part.trim()).filter((id) => CATEGORY_ID.test(id)))];
 }
 
-export type CampusSubscription = { calendar: ImportedCalendar; categories: string[] };
+export type CampusCalendar = { calendar: ImportedCalendar; categories: string[] };
 
-/** The imported calendar that holds subscribed campus events. The first one wins if there are several. */
-export function campusSubscriptionOf(imported: ImportedCalendar[]): CampusSubscription | null {
-  for (const calendar of imported) {
+/** Every imported calendar that subscribes to the campus feed, in the order they were saved. */
+export function campusCalendarsOf(imported: ImportedCalendar[]): CampusCalendar[] {
+  return imported.flatMap((calendar) => {
     const categories = campusFeedCategories(calendar.url);
-    if (categories) return { calendar, categories };
-  }
-  return null;
+    return categories ? [{ calendar, categories }] : [];
+  });
 }
 
 /** The categories a subscription toggle leaves behind, in the server's order. */
@@ -195,16 +220,17 @@ export function campusEventMeta(event: CampusEvent, calendarId: string): Calenda
 export type CampusPlacement = "added" | "subscribed" | null;
 
 /**
- * Where an occurrence already is on your calendars: copied into one of your own ("added"), or on the subscription
- * calendar ("subscribed"). Items match on title and start, the way the importer recognizes them.
+ * Where an occurrence already is on your calendars: copied into one of your own ("added"), or on one of the
+ * category calendars ("subscribed"). Items match on title and start, the way the importer recognizes them.
  */
-export function campusPlacements(items: CalendarItemDoc[], subscriptionFeed: string | null): (event: CampusEvent) => CampusPlacement {
+export function campusPlacements(items: CalendarItemDoc[], subscriptionFeeds: readonly string[]): (event: CampusEvent) => CampusPlacement {
+  const feeds = new Set(subscriptionFeeds);
   const found = new Map<string, CampusPlacement>();
   for (const item of items) {
     if (item.calendar.kind !== "event" || item.pendingApproval) continue;
     const key = `${plain(item.title)}\0${item.calendar.startUTC}`;
     if (!item.calendar.importSource) found.set(key, "added");
-    else if (item.calendar.importSource === subscriptionFeed && !found.has(key)) found.set(key, "subscribed");
+    else if (feeds.has(item.calendar.importSource) && !found.has(key)) found.set(key, "subscribed");
   }
   return (event) => found.get(`${plain(event.title.slice(0, 200))}\0${localSpan(event).startUTC}`) ?? null;
 }

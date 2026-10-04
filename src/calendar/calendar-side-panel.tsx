@@ -7,6 +7,7 @@ import { formatFeedSyncSummary, syncImportedFeed } from "@/calendar/calendar-syn
 import type { CalendarView, ImportedCalendar, ImportedCalendarSource } from "@/calendar/types";
 import { addDays, addMonths, isToday, monthCells, startOfLocalDay, startOfWeek, startOfWorkWeek } from "@/calendar/date-utils";
 import type { GoogleCalendarRef } from "@/calendar/google-calendar-client";
+import { campusFeedCategories } from "@/campus/campus-events";
 import { isExcludedGoogleCalendarName } from "@/calendar/calendar-lists";
 import {
   CALENDAR_PALETTE,
@@ -189,9 +190,16 @@ export function CalendarSidePanel({
     onSources({ ...sources, groups: { ...groups, [key]: on } });
   }
   const externalById = (id: string) => externalCalendars.find((calendar) => calendar.id === id);
+  const campusRow = (row: Row) => {
+    const calendar = externalById(row.id);
+    return Boolean(calendar && isCampusSideCalendar(calendar));
+  };
   const visible = (row: Row) => !isSidebarHidden(sources, row.id);
   const watagentRows = localRows.filter(visible);
   const otherRows = googleRows.filter(visible);
+  const shownExternal = externalRows.filter(visible);
+  const campusRows = shownExternal.filter(campusRow);
+  const importedRows = shownExternal.filter((row) => !campusRow(row));
   const hiddenRows = allRows.filter((row) => isSidebarHidden(sources, row.id));
   const smartTagCalendars = allRows.map((row) => ({ id: row.id, name: row.name, google: Boolean(row.google) }));
 
@@ -414,10 +422,23 @@ export function CalendarSidePanel({
           onAdd={localCalendars.length < 50 ? () => setCreating(true) : undefined}
           addLabel="New calendar"
         />
-        {externalRows.filter(visible).length > 0 ? <CalendarGroup title="External calendars" open={externalOpen}
-          onToggle={() => setExternalOpen((open) => !open)} rows={externalRows.filter(visible)}
+        {importedRows.length > 0 ? <CalendarGroup title="External calendars" open={externalOpen}
+          onToggle={() => setExternalOpen((open) => !open)} rows={importedRows}
           groupOn={groups.external} onToggleGroup={(on) => setGroup("external", on)}
           menuId={menu?.id} onToggleRow={toggle} onOpenMenu={openRowMenu} /> : null}
+        {campusRows.length > 0 ? (
+          <CalendarGroup
+            title="UWaterloo Events"
+            open={sidePanelSections.campus}
+            onToggle={() => onSidePanelSections({ ...sidePanelSections, campus: !sidePanelSections.campus })}
+            rows={campusRows}
+            groupOn={groups.campus}
+            onToggleGroup={(on) => setGroup("campus", on)}
+            menuId={menu?.id}
+            onToggleRow={toggle}
+            onOpenMenu={openRowMenu}
+          />
+        ) : null}
         {removeError ? <p role="alert" className="calendar-import-error">{removeError}</p> : null}
         {removeBusy ? <p role="status" className="modal-hint">Removing calendar…</p> : null}
         {deleteBusy ? <p role="status" className="modal-hint">Deleting calendar…</p> : null}
@@ -512,6 +533,11 @@ export function CalendarSidePanel({
         }} /> : null}
     </div>
   );
+}
+
+/** A category calendar under UWaterloo Events, not a merge and not LEARN or Portal. */
+export function isCampusSideCalendar(calendar: SideExternalCalendar): boolean {
+  return !calendar.merged && calendar.feeds.length > 0 && calendar.feeds.every((feed) => campusFeedCategories(feed.url) != null);
 }
 
 /** A row under External calendars: one imported calendar, or a merged calendar standing in for its members. */

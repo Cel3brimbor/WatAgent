@@ -34,6 +34,8 @@ const SOURCES_KEY = "watagent.calendar.sources.v1";
 export type CalendarGroups = {
   watagent: boolean;
   external: boolean;
+  /** UWaterloo Events, one calendar per enabled category. */
+  campus: boolean;
   other: boolean;
   smartTags: boolean;
   /** True shows hidden calendars on the grid and leaves the Hidden list as it was. */
@@ -59,6 +61,7 @@ export function calendarGroupsOf(raw: unknown): CalendarGroups {
   return {
     watagent: rec.watagent !== false,
     external: rec.external !== false,
+    campus: rec.campus !== false,
     other: rec.other !== false,
     smartTags: rec.smartTags !== false,
     hidden: rec.hidden === true,
@@ -299,6 +302,7 @@ const SIDE_PANEL_SECTIONS_KEY = "watagent.calendar.sidePanelSections.v1";
 
 export type SidePanelSectionsOpen = {
   watagent: boolean;
+  campus: boolean;
   other: boolean;
   hidden: boolean;
   smartTags: boolean;
@@ -306,6 +310,7 @@ export type SidePanelSectionsOpen = {
 
 export const DEFAULT_SIDE_PANEL_SECTIONS: SidePanelSectionsOpen = {
   watagent: true,
+  campus: true,
   other: true,
   hidden: true,
   smartTags: true,
@@ -323,6 +328,7 @@ export function readSidePanelSections(): SidePanelSectionsOpen {
     const parsed = JSON.parse(raw) as Partial<SidePanelSectionsOpen>;
     return {
       watagent: sidePanelSectionBool(parsed.watagent, DEFAULT_SIDE_PANEL_SECTIONS.watagent),
+      campus: sidePanelSectionBool(parsed.campus, DEFAULT_SIDE_PANEL_SECTIONS.campus),
       other: sidePanelSectionBool(parsed.other, DEFAULT_SIDE_PANEL_SECTIONS.other),
       hidden: sidePanelSectionBool(parsed.hidden, DEFAULT_SIDE_PANEL_SECTIONS.hidden),
       smartTags: sidePanelSectionBool(parsed.smartTags, DEFAULT_SIDE_PANEL_SECTIONS.smartTags),

@@ -24,6 +24,8 @@ export type MapNode = {
   locked?: boolean;
   /** An action on this node is running. */
   busy?: boolean;
+  /** Sync progress. total null leaves the bar indeterminate, the way a feed opens. */
+  sync?: { done: number; total: number | null; label: string };
   /** Lines the inspector shows when the node is selected. */
   details?: string[];
   /** Buttons the inspector shows when the node is selected. */

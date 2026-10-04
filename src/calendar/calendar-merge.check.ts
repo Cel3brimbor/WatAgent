@@ -90,6 +90,29 @@ assert.deepEqual(legacyMergedCalendars(undefined, undefined, "portal", both)[0].
 assert.deepEqual(legacyMergedCalendars(["learn", "portal"], true, null, both), [], "showing both copies meant no merge");
 assert.deepEqual(legacyMergedCalendars(["learn", "portal"], false, null, both.slice(0, 1)), [], "one feed has nothing to merge");
 
+//uwaterloo event calendars lose to learn and portal, and two category copies show once
+const talksFeed = "feed-11111111-1111-4111-8111-111111111111" as const;
+const careersFeed = "feed-22222222-2222-4222-8222-222222222222" as const;
+const talksUrl = "webcal://localhost/api/campus-events/feed.ics?categories=talks";
+const careersUrl = "webcal://localhost/api/campus-events/feed.ics?categories=careers";
+const campusTalks: TimelineItem = { ...learn, id: "campus-talks", importSource: talksFeed };
+const campusCareers: TimelineItem = { ...learn, id: "campus-careers", importSource: careersFeed };
+const campusImported = [
+  { id: "learn" as const, name: "LEARN", url: learnUrl },
+  { id: "portal" as const, name: "Portal", url: "https://portal.example/a.ics" },
+  { id: talksFeed, name: "Talks & seminars", url: talksUrl },
+  { id: careersFeed, name: "Careers & co-op", url: careersUrl },
+];
+assert.deepEqual(ids(mergeTimeline([campusTalks, learn], [], campusImported)), ["learn"], "learn beats a uwaterloo events calendar");
+assert.deepEqual(ids(mergeTimeline([campusTalks, portal], [], campusImported)), ["portal"], "portal beats a uwaterloo events calendar");
+assert.deepEqual(ids(mergeTimeline([campusTalks, googleLearn], [], campusImported)), ["g-learn"], "a google learn calendar beats uwaterloo events");
+assert.deepEqual(ids(mergeTimeline([campusTalks, googlePortal], [], campusImported)), ["g-portal"], "a google portal calendar beats uwaterloo events");
+assert.deepEqual(ids(mergeTimeline([campusTalks], [], campusImported)), ["campus-talks"], "a uwaterloo event with no school copy still shows");
+assert.deepEqual(ids(mergeTimeline([campusCareers, campusTalks], [], campusImported)), ["campus-talks"], "two uwaterloo calendars show the event once");
+const campusFirst: MergedCalendar = { ...school, members: [`ics:${talksFeed}`, "ics:learn"] };
+assert.deepEqual(ids(mergeTimeline([campusTalks, learn], [campusFirst], campusImported)), ["learn"], "learn still wins when the uwaterloo calendar is ranked first");
+assert.deepEqual(ids(mergeTimeline([campusTalks, manual], [], campusImported)), ["campus-talks", "manual"], "a watagent event is not a learn or portal copy");
+
 assert.equal(detectCalendarLink(learnUrl), "learn");
 assert.equal(defaultImportedName(learnUrl, []), "LEARN / Brightspace");
 assert.equal(defaultImportedName(learnUrl, [{ name: "LEARN / Brightspace" }, { name: "LEARN / Brightspace 2" }]), "LEARN / Brightspace 3");

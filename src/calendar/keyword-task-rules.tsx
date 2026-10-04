@@ -17,7 +17,7 @@ import { Disclosure } from "@/shared/disclosure";
 import { CheckIcon, PlusIcon } from "@/shared/icons";
 import { Switch } from "@/shared/switch";
 
-export type KeywordTaskCalendarOption = { id: string; name: string; group: "WatAgent" | "Imported" | "Google" };
+export type KeywordTaskCalendarOption = { id: string; name: string; group: "WatAgent" | "Imported" | "UWaterloo Events" | "Google" };
 
 type Props = {
   config: KeywordTasks;
@@ -158,7 +158,7 @@ function RuleEditor({
   onDelete: () => void;
 }) {
   const matches = useMemo(() => sources.filter((source) => matchedKeyword(rule, source)).length, [rule, sources]);
-  const groups = (["Imported", "Google", "WatAgent"] as const)
+  const groups = (["Imported", "UWaterloo Events", "Google", "WatAgent"] as const)
     .map((group) => ({ group, options: calendars.filter((calendar) => calendar.group === group) }))
     .filter((entry) => entry.options.length > 0);
   //a calendar that was removed stays picked until you clear it, so the rule doesn't silently change
