@@ -1,5 +1,6 @@
-import { API_BASE_URL } from "@/shared/config";
+import { accessErrorFrom, reportAccessError } from "@/auth/access";
 import { authUserOf, type AuthDriver, type AuthUser } from "@/auth/types";
+import { API_BASE_URL } from "@/shared/config";
 
 type MemorySession = { accessToken: string; expiresAt: number; user: AuthUser };
 
@@ -14,6 +15,15 @@ async function refresh(): Promise<MemorySession | null> {
     credentials: "include",
     headers: { "X-WF-CSRF": "1" },
   }).catch(() => null);
+  if (res && res.status === 403) {
+    const access = accessErrorFrom(await res.json().catch(() => null), 403);
+    session = null;
+    if (access) {
+      reportAccessError(access);
+      throw access;
+    }
+    return null;
+  }
   if (!res || !res.ok) {
     session = null;
     return null;

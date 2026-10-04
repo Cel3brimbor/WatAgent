@@ -88,6 +88,7 @@ import { CalendarMapSection } from "@/calendar/calendar-map-section";
 import { onRulesRan, ruleRunSummary } from "@/agent/rules/rules-client";
 import { useAgentRules } from "@/agent/rules/use-agent-rules";
 import { TodoList } from "@/calendar/todo-list";
+import { AccessError } from "@/auth/access";
 import { CalendarChatPanel } from "@/agent/calendar-chat-panel";
 import type { PendingAiChange } from "@/calendar/approval-client";
 import { attachedIdsOf } from "@/agent/calendar-mention";
@@ -96,7 +97,7 @@ import { requestChatTitle } from "@/agent/chat-title";
 import { readAgentStream } from "@/agent/stream";
 import { cloneActivity } from "@/agent/agent-activity";
 import type { ActivityPart, ChatMessage, ThoughtSegment, ToolEventRecord } from "@/agent/types";
-import { apiFetch } from "@/shared/api-base";
+import { apiFetch, errorFromResponse } from "@/shared/api-base";
 import { uid } from "@/shared/ids";
 import { ChevronLeftIcon, ChevronRightIcon, CloseIcon } from "@/shared/icons";
 import { SegmentedControl, type SegmentOption } from "@/shared/segmented-control";
@@ -341,6 +342,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
   const [draft, setDraft] = useState<CalendarDraft | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [restriction, setRestriction] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const { refresh: refreshCalendar, refreshPending } = calendar;
   const reloadRules = agentRules.reload;
@@ -1076,6 +1078,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
     setStreamingAssistantId(assistantId);
     setBusy(true);
     setError(null);
+    setRestriction(null);
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
@@ -1160,12 +1163,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
             })),
         }),
       });
-      if (!res.ok) {
-        const errPayload = (await res.json().catch(() => null)) as { error?: unknown } | null;
-        throw new Error(
-          typeof errPayload?.error === "string" ? errPayload.error : "An unexpected error occurred",
-        );
-      }
+      if (!res.ok) throw await errorFromResponse(res, "An unexpected error occurred");
       let rafId = 0;
       const schedule = () => {
         if (!rafId) {
@@ -1250,6 +1248,11 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
       }
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") return;
+      if (err instanceof AccessError && err.code === "ai_restricted") {
+        setRestriction(err.message);
+        return;
+      }
+      if (err instanceof AccessError) return;
       setError(err instanceof Error ? err.message : "An unexpected error occurred");
     } finally {
       closeThought();
@@ -1524,6 +1527,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
           messages={calendar.activeChat?.messages ?? []}
           busy={busy}
           error={error}
+          restriction={restriction}
           streamingAssistantId={streamingAssistantId}
           onSend={(payload) => void handleSend(payload)}
           onStop={() => abortRef.current?.abort()}

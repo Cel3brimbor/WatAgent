@@ -836,6 +836,22 @@ select {
   font-size: 0.95rem;
 }
 
+.login-shell.login-shell--center {
+  grid-template-columns: minmax(0, 24rem);
+  justify-content: center;
+  align-content: center;
+}
+
+.login-shell--center .login-card {
+  justify-self: stretch;
+  width: 100%;
+  text-align: center;
+}
+
+.login-shell--center .login-error {
+  line-height: 1.45;
+}
+
 @media (max-width: 760px) {
   .login-shell {
     grid-template-columns: 1fr;
@@ -4891,6 +4907,16 @@ select {
   background: var(--danger-soft);
   color: var(--danger);
   font-size: 0.8rem;
+}
+
+.ai-restriction {
+  margin: 0 0.85rem 0.55rem;
+  padding: 0.55rem 0.7rem;
+  border-radius: 8px;
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: 0.82rem;
+  line-height: 1.45;
 }
 
 .composer-box {

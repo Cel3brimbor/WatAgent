@@ -35,6 +35,7 @@ type Props = {
   messages: ChatMessage[];
   busy: boolean;
   error: string | null;
+  restriction: string | null;
   streamingAssistantId: string | null;
   onSend: (payload: SendPayload) => void;
   onStop: () => void;
@@ -69,6 +70,7 @@ export function CalendarChatPanel({
   messages,
   busy,
   error,
+  restriction,
   streamingAssistantId,
   onSend,
   onStop,
@@ -314,9 +316,14 @@ export function CalendarChatPanel({
           onInspect={onInspectPending}
           ruleNames={ruleNames}
         />
+        {restriction ? (
+          <p className="ai-restriction" role="alert">
+            {restriction}
+          </p>
+        ) : null}
         <ChatComposer
           busy={busy}
-          error={error}
+          error={restriction ? null : error}
           effort={effort}
           calendars={calendars}
           items={items}

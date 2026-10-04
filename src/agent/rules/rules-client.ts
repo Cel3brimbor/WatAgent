@@ -1,5 +1,5 @@
 import { isFeedId, type ImportedCalendarSource } from "@/calendar/types";
-import { ApiError, apiFetch, apiJson } from "@/shared/api-base";
+import { ApiError, apiFetch, apiJson, errorFromResponse } from "@/shared/api-base";
 
 export type RuleFeed = ImportedCalendarSource;
 
@@ -294,8 +294,7 @@ export async function runAgentRules(
   if (res.status === 404) throw "id" in target ? new Error(GONE) : new RulesUnavailableError();
   const type = res.headers.get("content-type") ?? "";
   if (!res.ok || !type.includes("ndjson") || !res.body) {
-    const payload = (await res.json().catch(() => null)) as { error?: unknown } | null;
-    throw new ApiError(typeof payload?.error === "string" ? payload.error : "The rules didn't run. Try again.", res.status);
+    throw await errorFromResponse(res, "The rules didn't run. Try again.");
   }
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
