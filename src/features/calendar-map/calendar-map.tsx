@@ -63,6 +63,9 @@ export type CalendarMapProps = {
   hint?: string;
   /** Shown when there are no nodes. */
   empty?: ReactNode;
+  /** When set, results and undo belong to the parent so a second view shares them. */
+  onResult?: (change: MapChange) => void;
+  onUndo?: () => void;
 };
 
 type Selection = { kind: "node" | "edge"; id: string } | null;
@@ -106,7 +109,7 @@ function spokenNode(node: MapNode): string {
   return [node.badge, node.label, node.caption].filter(Boolean).join(", ");
 }
 
-export function CalendarMap({ label, nodes, edges, functions, nodeDrop, layoutStore, toolbar, hint, empty }: CalendarMapProps) {
+export function CalendarMap({ label, nodes, edges, functions, nodeDrop, layoutStore, toolbar, hint, empty, onResult, onUndo }: CalendarMapProps) {
   const rootRef = useRef<HTMLElement>(null);
   const frameRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -223,15 +226,21 @@ export function CalendarMap({ label, nodes, edges, functions, nodeDrop, layoutSt
       try {
         change = await action();
       } catch (err) {
-        tell(err instanceof Error && err.message ? err.message : FAILED);
+        const message = err instanceof Error && err.message ? err.message : FAILED;
+        if (onResult) onResult({ message });
+        else tell(message);
         return;
       }
       if (pulseId) setPulse({ id: pulseId, key: Date.now() });
       if (!change) return;
+      if (onResult) {
+        onResult(change);
+        return;
+      }
       if (change.undo) undoStack.current = [...undoStack.current, change].slice(-UNDO_DEPTH);
       tell(change.message, change.undo ? change : undefined);
     },
-    [tell],
+    [onResult, tell],
   );
 
   const undo = useCallback(
@@ -351,12 +360,12 @@ export function CalendarMap({ label, nodes, edges, functions, nodeDrop, layoutSt
     setSelection(null);
     const moved = nodes.filter((node) => layout[node.id] && defaults[node.id]);
     if (moved.length === 0) {
-      announce("The map is already tidy");
+      announce("Already arranged");
       return;
     }
     tidying.current = moved.length;
     for (const node of moved) nodeDrag.settle(node.id, toPx(defaults[node.id], size));
-    announce("Map tidied");
+    announce("Calendars arranged");
   }
 
   const nodeDrag = useNodeDrag({
@@ -610,6 +619,12 @@ export function CalendarMap({ label, nodes, edges, functions, nodeDrop, layoutSt
     }
     if ((event.metaKey || event.ctrlKey) && !event.shiftKey && event.key.toLowerCase() === "z") {
       if ((event.target as HTMLElement).closest("input, textarea, select, [contenteditable='true']")) return;
+      if (onUndo) {
+        event.preventDefault();
+        event.stopPropagation();
+        onUndo();
+        return;
+      }
       if (undoStack.current.length === 0) return;
       event.preventDefault();
       undo();
@@ -673,9 +688,14 @@ export function CalendarMap({ label, nodes, edges, functions, nodeDrop, layoutSt
       <div className={styles.toolbar}>
         <div className={styles.toolbarSlot}>{toolbar}</div>
         <button type="button" className={styles.button} onClick={tidy}>
-          Tidy up
+          Arrange
         </button>
       </div>
+      <ul className={styles.legend} aria-label="What the lines mean">
+        <li><i data-kind="write" /> Agent can change</li>
+        <li><i data-kind="read" /> Agent can read</li>
+        <li><i data-kind="rule" /> Rule</li>
+      </ul>
 
       <div className={styles.stage}>
         <div ref={frameRef} className={styles.frame}>
@@ -755,25 +775,6 @@ export function CalendarMap({ label, nodes, edges, functions, nodeDrop, layoutSt
               }
               if (!edge.label) return null;
               const spoken = `${nodeLabel(edge.from)} to ${nodeLabel(edge.to)}: ${edge.label}`;
-              //a label wider than the gap it sits in shrinks to a dot; the inspector still has the words
-              const roomy =
-                geo.label.align !== "middle" || Math.hypot(geo.end.x - geo.start.x, geo.end.y - geo.start.y) >= edge.label.length * 6.4 + 28;
-              if (!roomy) {
-                return (
-                  <button
-                    key={edge.id}
-                    type="button"
-                    className={styles.edgeDot}
-                    style={{ transform: `translate(${geo.mid.x}px, ${geo.mid.y}px) translate(-50%, -50%)` }}
-                    data-tone={edge.tone ?? "neutral"}
-                    data-selected={selected || undefined}
-                    aria-pressed={selected}
-                    aria-label={spoken}
-                    title={edge.label}
-                    onClick={pick}
-                  />
-                );
-              }
               const shift = { start: "translate(0, -50%)", middle: "translate(-50%, -50%)", end: "translate(-100%, -50%)" }[geo.label.align];
               return (
                 <button
@@ -949,12 +950,10 @@ export function CalendarMap({ label, nodes, edges, functions, nodeDrop, layoutSt
         ) : null}
 
         {functions.length > 0 ? (
-          <div className={styles.palette} role="group" aria-label="Functions">
+          <div className={styles.palette} role="group" aria-label="Actions">
             {groups.map(([group, list]) => (
               <div key={group} className={styles.paletteGroup} role="group" aria-label={group}>
-                <span className={styles.paletteHeading} aria-hidden="true">
-                  {group}
-                </span>
+                <span className={styles.paletteHeading}>{group}</span>
                 {list.map((fn) => (
                   <button
                     key={fn.id}
@@ -1041,7 +1040,7 @@ export function CalendarMap({ label, nodes, edges, functions, nodeDrop, layoutSt
             </div>
           </>
         ) : (
-          <p className={styles.hint}>{status ?? hint ?? "Drag a function onto the map, or drag from a node’s handle to connect two nodes."}</p>
+          <p className={styles.hint}>{status ?? hint ?? "Select a calendar, or drag an action onto one. Drag from the dot on a calendar to connect it to another. Delete removes the selected line."}</p>
         )}
       </div>
 

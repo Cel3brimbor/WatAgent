@@ -83,7 +83,7 @@ export function ImportedCalendarsPanel({ calendars, mergedCalendars, googleConne
       <h3 id="settings-imported-calendars">Imported calendars</h3>
       <p className="modal-hint">
         Every calendar link you&apos;ve imported. Their events are read only and change only when the calendar syncs.
-        When two list the same events, link them on the Map to merge them into one calendar.
+        When two list the same events, combine them in Calendars so they show as one.
       </p>
       <ol className="calendar-priority-list" aria-label="Imported calendars">
         {calendars.map((calendar) => {
@@ -167,8 +167,8 @@ function CalendarRow({ label, note, busy, removing, menuOpen, syncing, syncProgr
   );
 }
 
-export function RenameCalendarDialog({ name, onCancel, onSave, title = "Rename calendar", submitLabel = "Save name" }: {
-  name: string; onCancel: () => void; onSave: (name: string) => void; title?: string; submitLabel?: string;
+export function RenameCalendarDialog({ name, onCancel, onSave, title = "Rename calendar", fieldLabel = "Calendar name", submitLabel = "Save name" }: {
+  name: string; onCancel: () => void; onSave: (name: string) => void; title?: string; fieldLabel?: string; submitLabel?: string;
 }) {
   const [value, setValue] = useState(name);
   const ref = useRef<HTMLDivElement>(null);
@@ -180,7 +180,7 @@ export function RenameCalendarDialog({ name, onCancel, onSave, title = "Rename c
     <div ref={ref} className="modal" role="dialog" aria-modal="true" aria-labelledby={titleId} onClick={(event) => event.stopPropagation()}>
       <h2 id={titleId}>{title}</h2>
       <form onSubmit={(event) => { event.preventDefault(); if (value.trim()) onSave(value.trim()); }}>
-        <label htmlFor={inputId}>Calendar name</label>
+        <label htmlFor={inputId}>{fieldLabel}</label>
         <input ref={inputRef} id={inputId} value={value} onChange={(event) => setValue(event.target.value)} maxLength={80} required autoComplete="off" />
         <div className="modal-actions">
           <button type="button" className="ghost-btn" onClick={onCancel}>Cancel</button>

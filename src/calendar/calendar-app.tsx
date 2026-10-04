@@ -143,7 +143,7 @@ const VIEW_OPTIONS: SegmentOption<CalendarView>[] = [
 ];
 
 const VIEW_DEPTH: Record<CalendarView, number> = { year: 0, month: 1, week: 2, workweek: 2, day: 3 };
-const SECTION_TITLES: Record<Exclude<AppSection, "calendar">, string> = { tasks: "To-do list", map: "Map", settings: "Settings" };
+const SECTION_TITLES: Record<Exclude<AppSection, "calendar">, string> = { tasks: "To-do list", map: "Calendars", settings: "Settings" };
 
 //which way the stage should move: sideways through time, or zooming between granularities
 type NavDirection = "next" | "prev" | "in" | "out" | "none";
@@ -913,7 +913,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
     setColorOverrides((overrides) => ({ ...overrides, [created.id]: color }));
     setLocalCalendars((list) => [...list, created]);
     setSources((current) => withNewCalendar(current, created.id, newCalendarsShown));
-    setNotice(newCalendarsShown ? `Created ${created.name}.` : `Created ${created.name}. It starts hidden; show it from the side panel or the Map.`);
+    setNotice(newCalendarsShown ? `Created ${created.name}.` : `Created ${created.name}. It starts hidden; show it from the side panel or Calendars.`);
   }
 
   function renameLocalCalendar(id: string, name: string) {
@@ -1438,11 +1438,11 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
                   setChatOpen(true);
                   setAttachRequest({ id, nonce: Date.now() });
                 }}
+                onReviewPending={() => setChatOpen(true)}
                 rules={agentRules.rules}
                 rulesStatus={agentRules.status}
                 onRulesChanged={agentRules.reload}
                 onRefreshPending={calendar.refreshPending}
-                onNotice={setNotice}
               />
             ) : null}
             {section === "settings" ? (

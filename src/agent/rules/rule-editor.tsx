@@ -12,6 +12,7 @@ import {
   type RuleProposal,
 } from "@/agent/rules/rules-client";
 import { Switch } from "@/shared/switch";
+import { externalCalendarId } from "@/calendar/external-calendars";
 import { useDialog } from "@/shared/use-dialog";
 
 export type RuleEditorCalendar = { id: string; name: string; kind: "event" | "task"; readOnly: boolean };
@@ -23,6 +24,9 @@ type Props = {
   initial?: Partial<AgentRuleDraft>;
   feeds: Array<{ feed: RuleFeed; name: string }>;
   calendars: RuleEditorCalendar[];
+  /** False when the Agent can't see that calendar yet. */
+  agentCanSee?: (calendarId: string) => boolean;
+  onAllowAccess?: (calendarId: string) => void;
   //false while the exit transition plays
   open?: boolean;
   onCancel: () => void;
@@ -51,7 +55,7 @@ function previewHeadline(preview: RulePreview): string {
 }
 
 //a draft can be previewed before it's saved: the Agent runs it once and nothing is written
-export function RuleEditor({ rule, initial, feeds, calendars, open = true, onCancel, onSaved }: Props) {
+export function RuleEditor({ rule, initial, feeds, calendars, agentCanSee, onAllowAccess, open = true, onCancel, onSaved }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const nameRef = useRef<HTMLInputElement>(null);
   const titleId = useId();
@@ -86,6 +90,14 @@ export function RuleEditor({ rule, initial, feeds, calendars, open = true, onCan
   const draftKey = JSON.stringify(draft);
   const stale = preview != null && preview.draft !== draftKey;
   const target = calendars.find((calendar) => calendar.id === targetCalendarId);
+  const blocked = [
+    agentCanSee && !agentCanSee(externalCalendarId(sourceFeed))
+      ? { id: externalCalendarId(sourceFeed), name: feeds.find((feed) => feed.feed === sourceFeed)?.name ?? "the watched calendar" }
+      : null,
+    agentCanSee && !agentCanSee(targetCalendarId)
+      ? { id: targetCalendarId, name: target?.name ?? "the destination" }
+      : null,
+  ].filter((entry): entry is { id: string; name: string } => entry != null);
   const moved = rule != null && (rule.sourceFeed !== sourceFeed || rule.targetCalendarId !== targetCalendarId);
 
   function check(): boolean {
@@ -97,7 +109,7 @@ export function RuleEditor({ rule, initial, feeds, calendars, open = true, onCan
   }
 
   async function runPreview() {
-    if (!check() || previewing) return;
+    if (!check() || previewing || blocked.length > 0) return;
     setPreviewing(true);
     setError(null);
     try {
@@ -111,7 +123,7 @@ export function RuleEditor({ rule, initial, feeds, calendars, open = true, onCan
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!check() || saving) return;
+    if (!check() || saving || blocked.length > 0) return;
     setSaving(true);
     setError(null);
     try {
@@ -186,6 +198,18 @@ export function RuleEditor({ rule, initial, feeds, calendars, open = true, onCan
               </select>
             </label>
           </div>
+          {blocked.length > 0 ? (
+            <div className="rule-editor-access">
+              <p className="modal-hint">
+                The Agent can’t see {blocked.map((entry) => entry.name).join(" or ")}. Allow access before this rule can be saved.
+              </p>
+              {blocked.map((entry) => (
+                <button key={entry.id} type="button" className="ghost-btn" onClick={() => onAllowAccess?.(entry.id)}>
+                  Allow access to {entry.name}
+                </button>
+              ))}
+            </div>
+          ) : null}
           <label className="calendar-editor-field" htmlFor={`${fieldId}-instruction`}>
             What should the Agent do?
             <textarea
@@ -298,10 +322,10 @@ export function RuleEditor({ rule, initial, feeds, calendars, open = true, onCan
             <button type="button" className="ghost-btn" onClick={onCancel}>
               Cancel
             </button>
-            <button type="button" className="ghost-btn" disabled={previewing} onClick={() => void runPreview()}>
+            <button type="button" className="ghost-btn" disabled={previewing || blocked.length > 0} onClick={() => void runPreview()}>
               {previewing ? "Previewing…" : preview && !stale ? "Preview again" : "Preview"}
             </button>
-            <button type="submit" className="primary-btn" disabled={saving}>
+            <button type="submit" className="primary-btn" disabled={saving || blocked.length > 0}>
               {saving ? "Saving…" : rule ? "Save" : "Create rule"}
             </button>
           </div>

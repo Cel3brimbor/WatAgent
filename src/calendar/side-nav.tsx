@@ -15,7 +15,7 @@ type Props = {
 const BARS: Array<{ id: AppSection; label: string }> = [
   { id: "calendar", label: "Calendar" },
   { id: "tasks", label: "To-do list" },
-  { id: "map", label: "Map" },
+  { id: "map", label: "Calendars" },
 ];
 
 export function SideNav({ section, collapsed, onSection, onToggle, children }: Props) {

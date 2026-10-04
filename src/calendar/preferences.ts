@@ -330,7 +330,7 @@ export function writeMergedCalendars(calendars: MergedCalendar[]): void {
 
 const AGENT_HIDDEN_KEY = "watagent.calendar.agent-hidden.v1";
 
-/** Calendars whose link to the Agent was deleted on the Map. */
+/** Calendars whose link to the Agent was removed in Calendars. */
 export function agentHiddenIdsOf(raw: unknown): string[] {
   if (!Array.isArray(raw)) return [];
   return [...new Set(raw.filter((id): id is string => typeof id === "string" && id.length > 0 && id.length <= 1024))].slice(0, 200);
