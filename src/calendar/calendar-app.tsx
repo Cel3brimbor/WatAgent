@@ -90,6 +90,7 @@ import { CalendarMapSection } from "@/calendar/calendar-map-section";
 import { onRulesRan, ruleRunSummary } from "@/agent/rules/rules-client";
 import { useAgentRules } from "@/agent/rules/use-agent-rules";
 import { TodoList } from "@/calendar/todo-list";
+import { CampusEventsSection } from "@/campus/campus-events-section";
 import { keywordTasksOf, readKeywordTasks, withKeywordTaskDone, type KeywordTasks, type KeywordTaskSource } from "@/calendar/keyword-tasks";
 import { KeywordTaskRules, type KeywordTaskCalendarOption } from "@/calendar/keyword-task-rules";
 import { AccessError, plainReason } from "@/auth/access";
@@ -148,7 +149,7 @@ const VIEW_OPTIONS: SegmentOption<CalendarView>[] = [
 ];
 
 const VIEW_DEPTH: Record<CalendarView, number> = { year: 0, month: 1, week: 2, workweek: 2, day: 3 };
-const SECTION_TITLES: Record<Exclude<AppSection, "calendar">, string> = { tasks: "Tasks", map: "Calendars", settings: "Settings" };
+const SECTION_TITLES: Record<Exclude<AppSection, "calendar">, string> = { tasks: "Tasks", events: "Events", map: "Calendars", settings: "Settings" };
 
 //which way the stage should move: sideways through time, or zooming between granularities
 type NavDirection = "next" | "prev" | "in" | "out" | "none";
@@ -1515,6 +1516,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
                 }
               />
             ) : null}
+            {section === "events" ? <CampusEventsSection /> : null}
             {section === "map" ? (
               <CalendarMapSection
                 items={itemsForUi}

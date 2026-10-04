@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 
-export type AppSection = "calendar" | "tasks" | "map" | "settings";
+export type AppSection = "calendar" | "tasks" | "events" | "map" | "settings";
 
 type Props = {
   section: AppSection;
@@ -15,6 +15,7 @@ type Props = {
 const BARS: Array<{ id: AppSection; label: string }> = [
   { id: "calendar", label: "Calendar" },
   { id: "tasks", label: "Tasks" },
+  { id: "events", label: "Events" },
   { id: "map", label: "Calendars" },
 ];
 
@@ -89,6 +90,14 @@ function BarIcon({ id }: { id: AppSection }) {
         <circle cx="12.25" cy="4" r="1.75" />
         <circle cx="8" cy="12" r="1.75" />
         <path d="M5.5 4h5M4.6 5.6l2.5 4.8M11.4 5.6l-2.5 4.8" />
+      </svg>
+    );
+  }
+  if (id === "events") {
+    return (
+      <svg viewBox="0 0 16 16" aria-hidden="true">
+        <path d="M2.25 4.25h11.5v2.2a1.55 1.55 0 0 0 0 3.1v2.2H2.25v-2.2a1.55 1.55 0 0 0 0-3.1z" />
+        <path d="M10 4.75v1.1M10 7.45v1.1M10 10.15v1.1" />
       </svg>
     );
   }
