@@ -233,7 +233,125 @@ export function nodeAt(boxes: Array<Box & { id: string }>, point: Pt, margin = 0
   return best;
 }
 
-/** Curved port-to-port arrows; crowded routes keep the obstacle-aware fallback. */
+//room a straight arrow needs between two nodes: the gap at each end plus a shaft the arrowhead doesn't swallow
+export const DIRECT_MIN = 36;
+//a line leaves its node this far out, and stops this far short of the next so the arrowhead fits
+const START_GAP = 6;
+const END_GAP = 9;
+//a loop leaves and lands this far in from the near corners, and rises this far past the nodes
+const LOOP_INSET = 34;
+const LOOP_INSET_Y = 20;
+const LOOP_LIFT = 30;
+//each leg of an elbow gets at least this much, so the arrowhead never sits on the bend
+const ELBOW_LEG = 22;
+
+export type FlowGeometry = EdgeGeometry & { path: string };
+
+function cubicAt(p0: Pt, p1: Pt, p2: Pt, p3: Pt, t: number): Pt {
+  const u = 1 - t;
+  return {
+    x: u * u * u * p0.x + 3 * u * u * t * p1.x + 3 * u * t * t * p2.x + t * t * t * p3.x,
+    y: u * u * u * p0.y + 3 * u * u * t * p1.y + 3 * u * t * t * p2.y + t * t * t * p3.y,
+  };
+}
+
+//how often a curve runs through another node or off the canvas, sampled along its length
+function crossings(points: Pt[], others: Box[], canvas?: Size): number {
+  let hits = 0;
+  for (const point of points) {
+    if (others.some((box) => Math.abs(point.x - box.x) < box.w / 2 + 6 && Math.abs(point.y - box.y) < box.h / 2 + 6)) hits += 1;
+    if (canvas && (point.x < 0 || point.y < 0 || point.x > canvas.width || point.y > canvas.height)) hits += 1;
+  }
+  return hits;
+}
+
+/**
+ * Two nodes too close for a straight arrow: an arc around the outside. Side by side it leaves the source's top (or
+ * bottom) near the gap, rises clear of both and comes down into the target. Stacked, it does the same around the
+ * right (or left) side. The arrowhead always points into the target.
+ */
+function loopGeometry(from: Box, to: Box, sideways: boolean, side: 1 | -1, fromOffset: number, toOffset: number): FlowGeometry & { samples: Pt[] } {
+  let start: Pt;
+  let end: Pt;
+  let c1: Pt;
+  let c2: Pt;
+  if (sideways) {
+    const sign = Math.sign(to.x - from.x) || 1;
+    const fromEdge = from.y + (side * from.h) / 2;
+    const toEdge = to.y + (side * to.h) / 2;
+    start = { x: from.x + sign * (from.w / 2 - LOOP_INSET) + fromOffset, y: fromEdge + side * START_GAP };
+    end = { x: to.x - sign * (to.w / 2 - LOOP_INSET) + toOffset, y: toEdge + side * END_GAP };
+    const peak = side < 0 ? Math.min(start.y, end.y) - LOOP_LIFT : Math.max(start.y, end.y) + LOOP_LIFT;
+    c1 = { x: start.x, y: peak };
+    c2 = { x: end.x, y: peak };
+  } else {
+    const sign = Math.sign(to.y - from.y) || 1;
+    const fromEdge = from.x + (side * from.w) / 2;
+    const toEdge = to.x + (side * to.w) / 2;
+    start = { x: fromEdge + side * START_GAP, y: from.y + sign * (from.h / 2 - LOOP_INSET_Y) + fromOffset };
+    end = { x: toEdge + side * END_GAP, y: to.y - sign * (to.h / 2 - LOOP_INSET_Y) + toOffset };
+    const peak = side > 0 ? Math.max(start.x, end.x) + LOOP_LIFT : Math.min(start.x, end.x) - LOOP_LIFT;
+    c1 = { x: peak, y: start.y };
+    c2 = { x: peak, y: end.y };
+  }
+  const mid = cubicAt(start, c1, c2, end, 0.5);
+  const label: EdgeGeometry["label"] = sideways
+    ? { x: mid.x, y: mid.y + side * 12, align: "middle" }
+    : { x: mid.x + side * 12, y: mid.y, align: side > 0 ? "start" : "end" };
+  const samples: Pt[] = [];
+  for (let t = 0.1; t < 0.95; t += 0.1) samples.push(cubicAt(start, c1, c2, end, t));
+  return { start, end, mid, label, path: `M${start.x} ${start.y} C${c1.x} ${c1.y} ${c2.x} ${c2.y} ${end.x} ${end.y}`, samples };
+}
+
+/**
+ * Two close nodes offset diagonally: an L that leaves the source's side and turns into the target's top or bottom
+ * (or leaves the top or bottom and turns into a side). Null when the nodes line up too squarely for the turn to clear
+ * them, which is when a loop takes over.
+ */
+function elbowGeometry(from: Box, to: Box, sideFirst: boolean, fromOffset: number, toOffset: number): (FlowGeometry & { samples: Pt[] }) | null {
+  const sx = Math.sign(to.x - from.x);
+  const sy = Math.sign(to.y - from.y);
+  if (sx === 0 || sy === 0) return null;
+  let start: Pt;
+  let end: Pt;
+  let corner: Pt;
+  if (sideFirst) {
+    start = { x: from.x + sx * (from.w / 2 + START_GAP), y: from.y + fromOffset };
+    //land on the target's facing edge, a turn's length past the source and clear of the target's corners
+    const x = clamp(start.x + sx * ELBOW_LEG, to.x - to.w / 2 + LOOP_INSET, to.x + to.w / 2 - LOOP_INSET) + toOffset;
+    end = { x, y: to.y - sy * (to.h / 2 + END_GAP) };
+    corner = { x: end.x, y: start.y };
+  } else {
+    start = { x: from.x + fromOffset, y: from.y + sy * (from.h / 2 + START_GAP) };
+    const y = clamp(start.y + sy * ELBOW_LEG, to.y - to.h / 2 + LOOP_INSET_Y, to.y + to.h / 2 - LOOP_INSET_Y) + toOffset;
+    end = { x: to.x - sx * (to.w / 2 + END_GAP), y };
+    corner = { x: start.x, y: end.y };
+  }
+  //both legs must run forward, far enough to read as a turn
+  const firstLeg = sideFirst ? sx * (corner.x - start.x) : sy * (corner.y - start.y);
+  const secondLeg = sideFirst ? sy * (end.y - corner.y) : sx * (end.x - corner.x);
+  if (firstLeg < ELBOW_LEG || secondLeg < ELBOW_LEG) return null;
+  const mid = cubicAt(start, corner, corner, end, 0.5);
+  const samples: Pt[] = [];
+  for (let t = 0.1; t < 0.95; t += 0.1) samples.push(cubicAt(start, corner, corner, end, t));
+  //the label sits on the outside of the bend
+  const out = sideFirst ? { x: sx, y: -sy } : { x: -sx, y: sy };
+  return {
+    start,
+    end,
+    mid,
+    label: { x: mid.x + out.x * 10, y: mid.y + out.y * 10, align: out.x > 0 ? "start" : "end" },
+    path: `M${start.x} ${start.y} C${corner.x} ${corner.y} ${corner.x} ${corner.y} ${end.x} ${end.y}`,
+    samples,
+  };
+}
+
+/**
+ * Curved port-to-port arrows. Each line leaves through the sides of the two nodes that face each other across the
+ * wider gap, so it never doubles back through them. Nodes too close for a straight arrow get an elbow when they're
+ * offset, or a loop around the outside when they line up, whichever runs into fewer other nodes. Routes a third
+ * node blocks keep the obstacle-aware fallback.
+ */
 export function flowGeometry(
   from: Box,
   to: Box,
@@ -241,22 +359,47 @@ export function flowGeometry(
   canvas?: Size,
   fromOffset = 0,
   toOffset = 0,
-): (EdgeGeometry & { path: string }) | null {
+): FlowGeometry | null {
   const fallback = edgeGeometry(from, to, obstacles, canvas, 8);
   if (!fallback) return null;
+  //the clear space between the two nodes on each axis; boxes that don't overlap have room on at least one
+  const gapX = Math.abs(to.x - from.x) - (from.w + to.w) / 2;
+  const gapY = Math.abs(to.y - from.y) - (from.h + to.h) / 2;
+  //lanes run left to right, so sideways wins whenever it has room for a proper arrow
+  const horizontal = gapX >= DIRECT_MIN || gapX >= gapY;
+  if ((horizontal ? gapX : gapY) < DIRECT_MIN) {
+    const others = obstacles.filter((box) => box !== from && box !== to);
+    //in order of preference: the elbows, then over the top or down the right, then the other side; the first clearest wins
+    const candidates = [
+      elbowGeometry(from, to, true, fromOffset, toOffset),
+      elbowGeometry(from, to, false, fromOffset, toOffset),
+      loopGeometry(from, to, horizontal, horizontal ? -1 : 1, fromOffset, toOffset),
+      loopGeometry(from, to, horizontal, horizontal ? 1 : -1, fromOffset, toOffset),
+    ].filter((candidate): candidate is FlowGeometry & { samples: Pt[] } => candidate != null);
+    let best = candidates[0]!;
+    let fewest = crossings(best.samples, others, canvas);
+    for (const candidate of candidates.slice(1)) {
+      const hits = crossings(candidate.samples, others, canvas);
+      if (hits < fewest) {
+        best = candidate;
+        fewest = hits;
+      }
+    }
+    const { samples: _samples, ...geometry } = best;
+    return geometry;
+  }
   if (fallback.control)
     return {
       ...fallback,
       path: `M${fallback.start.x} ${fallback.start.y} Q${fallback.control.x} ${fallback.control.y} ${fallback.end.x} ${fallback.end.y}`,
     };
-  const horizontal = Math.abs(to.x - from.x) > (from.w + to.w) / 2 + 24;
   const sign = horizontal ? Math.sign(to.x - from.x) : Math.sign(to.y - from.y) || 1;
   const start = horizontal
-    ? { x: from.x + sign * (from.w / 2 + 6), y: from.y + fromOffset }
-    : { x: from.x + fromOffset, y: from.y + sign * (from.h / 2 + 6) };
+    ? { x: from.x + sign * (from.w / 2 + START_GAP), y: from.y + fromOffset }
+    : { x: from.x + fromOffset, y: from.y + sign * (from.h / 2 + START_GAP) };
   const end = horizontal
-    ? { x: to.x - sign * (to.w / 2 + 9), y: to.y + toOffset }
-    : { x: to.x + toOffset, y: to.y - sign * (to.h / 2 + 9) };
+    ? { x: to.x - sign * (to.w / 2 + END_GAP), y: to.y + toOffset }
+    : { x: to.x + toOffset, y: to.y - sign * (to.h / 2 + END_GAP) };
   const mid = { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 };
   const c1 = horizontal ? { x: mid.x, y: start.y } : { x: start.x, y: mid.y };
   const c2 = horizontal ? { x: mid.x, y: end.y } : { x: end.x, y: mid.y };
