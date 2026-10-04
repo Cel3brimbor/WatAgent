@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import {
   KEYWORD_TASK_LIMITS,
   keywordTaskRuleLabel,
+  keywordTasksOf,
   matchedKeyword,
   newKeywordTaskRule,
   type KeywordTaskRule,
@@ -11,6 +12,8 @@ import {
   type KeywordTaskSource,
 } from "@/calendar/keyword-tasks";
 import { smartTagTerms } from "@/calendar/smart-tags";
+import { ChevronIcon } from "@/calendar/sidebar-icons";
+import { Disclosure } from "@/shared/disclosure";
 import { CheckIcon, PlusIcon } from "@/shared/icons";
 import { Switch } from "@/shared/switch";
 
@@ -24,11 +27,20 @@ type Props = {
 };
 
 export function KeywordTaskRules({ config, onChange, calendars, sources }: Props) {
-  const [editingId, setEditingId] = useState<string | null>(null);
   const { rules } = config;
+  const [open, setOpen] = useState(rules.length === 0);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  //a deleted rule can come back until the next change
+  const [removed, setRemoved] = useState<{ rule: KeywordTaskRule; index: number } | null>(null);
+  const taskCount = useMemo(() => keywordTasksOf(config, sources).length, [config, sources]);
+
+  function update(next: KeywordTaskRule[]) {
+    setRemoved(null);
+    onChange({ ...config, rules: next });
+  }
 
   function patch(id: string, next: Partial<KeywordTaskRule>) {
-    onChange({ ...config, rules: rules.map((rule) => (rule.id === id ? { ...rule, ...next } : rule)) });
+    update(rules.map((rule) => (rule.id === id ? { ...rule, ...next } : rule)));
   }
 
   function add() {
@@ -36,67 +48,98 @@ export function KeywordTaskRules({ config, onChange, calendars, sources }: Props
     //imported school calendars are the usual place assignments come from
     const imported = calendars.filter((calendar) => calendar.group === "Imported").map((calendar) => calendar.id);
     const rule = newKeywordTaskRule(imported);
-    onChange({ ...config, rules: [...rules, rule] });
+    update([...rules, rule]);
+    setOpen(true);
     setEditingId(rule.id);
   }
 
   function remove(id: string) {
+    const index = rules.findIndex((rule) => rule.id === id);
+    if (index < 0) return;
     onChange({ ...config, rules: rules.filter((rule) => rule.id !== id) });
+    setRemoved({ rule: rules[index], index });
     setEditingId(null);
   }
 
+  function undoRemove() {
+    if (!removed) return;
+    const next = [...rules];
+    next.splice(Math.min(removed.index, next.length), 0, removed.rule);
+    update(next);
+  }
+
   const nameOf = (id: string) => calendars.find((calendar) => calendar.id === id)?.name ?? "Removed calendar";
+  const watched = [...new Set(rules.filter((rule) => rule.enabled).flatMap((rule) => rule.calendarIds))].map(nameOf);
+  const summary =
+    rules.length === 0
+      ? "Turn assignments and quizzes on your calendars into tasks."
+      : watched.length === 0
+        ? "Every rule is paused."
+        : `Watching ${watched.slice(0, 2).join(", ")}${watched.length > 2 ? ` +${watched.length - 2}` : ""} · ${taskCount} match${taskCount === 1 ? "" : "es"}`;
 
   return (
-    <section className="ktask-rules" aria-labelledby="ktask-rules-heading">
+    <section className={`ktask-rules${open ? " is-open" : ""}`} aria-labelledby="ktask-rules-heading">
       <div className="ktask-rules-head">
-        <div>
-          <h3 id="ktask-rules-heading">From your calendars</h3>
-          <p>Events on your chosen calendars that hold a keyword become tasks with due dates.</p>
-        </div>
-        <button type="button" className="ghost-btn" disabled={rules.length >= KEYWORD_TASK_LIMITS.rules} onClick={add}>
-          <PlusIcon />
-          New rule
+        <button type="button" className="ktask-rules-toggle" aria-expanded={open} aria-controls="ktask-rules-body" onClick={() => setOpen((current) => !current)}>
+          <span className="ktask-rules-text">
+            <span id="ktask-rules-heading" className="ktask-rules-title">From your calendars</span>
+            <span>{summary}</span>
+          </span>
+          <ChevronIcon open={open} />
         </button>
       </div>
-      {rules.length === 0 ? (
-        <p className="ktask-empty">
-          Pick calendars like LEARN and keywords like “assignment” or “quiz”, and each matching event shows up here as a task.
-        </p>
-      ) : (
-        <ul className="ktask-rule-list">
-          {rules.map((rule) => {
-            const editing = editingId === rule.id;
-            const label = keywordTaskRuleLabel(rule);
-            const terms = smartTagTerms(rule.keywords);
-            return (
-              <li key={rule.id} className={`ktask-rule${editing ? " is-editing" : ""}${rule.enabled ? "" : " is-paused"}`}>
-                <div className="ktask-rule-row">
-                  <Switch checked={rule.enabled} onChange={(enabled) => patch(rule.id, { enabled })} aria-label={`${rule.enabled ? "Pause" : "Turn on"} ${label}`} />
-                  <button type="button" className="ktask-rule-summary" aria-expanded={editing} onClick={() => setEditingId(editing ? null : rule.id)}>
-                    <span className="ktask-rule-name">{label}</span>
-                    <small>
-                      {terms.length > 0 ? terms.slice(0, 4).join(", ") + (terms.length > 4 ? ` +${terms.length - 4}` : "") : "No keywords yet"}
-                      {" · "}
-                      {rule.calendarIds.length === 0
-                        ? "no calendars picked"
-                        : rule.calendarIds.length === 1
-                          ? nameOf(rule.calendarIds[0])
-                          : `${rule.calendarIds.length} calendars`}
-                    </small>
-                  </button>
-                  <button type="button" className="ghost-btn ktask-edit" aria-expanded={editing} onClick={() => setEditingId(editing ? null : rule.id)}>
-                    {editing ? "Done" : "Edit"}
-                  </button>
-                </div>
-                {editing ? (
-                  <RuleEditor rule={rule} calendars={calendars} sources={sources} onPatch={(next) => patch(rule.id, next)} onDelete={() => remove(rule.id)} />
-                ) : null}
-              </li>
-            );
-          })}
-        </ul>
-      )}
+      <Disclosure open={open} id="ktask-rules-body">
+        <div className="ktask-rules-body">
+          {rules.length === 0 ? (
+            <p className="ktask-empty">
+              Pick calendars like LEARN and keywords like “assignment” or “quiz”. Each matching event shows up as a task, due when it starts.
+            </p>
+          ) : (
+            <ul className="ktask-rule-list">
+              {rules.map((rule) => {
+                const editing = editingId === rule.id;
+                const label = keywordTaskRuleLabel(rule);
+                const terms = smartTagTerms(rule.keywords);
+                return (
+                  <li key={rule.id} className={`ktask-rule${editing ? " is-editing" : ""}${rule.enabled ? "" : " is-paused"}`}>
+                    <div className="ktask-rule-row">
+                      <Switch checked={rule.enabled} onChange={(enabled) => patch(rule.id, { enabled })} aria-label={`${rule.enabled ? "Pause" : "Turn on"} ${label}`} />
+                      <button type="button" className="ktask-rule-summary" aria-expanded={editing} onClick={() => setEditingId(editing ? null : rule.id)}>
+                        <span className="ktask-rule-name">{label}</span>
+                        <small>
+                          {terms.length > 0 ? terms.slice(0, 4).join(", ") + (terms.length > 4 ? ` +${terms.length - 4}` : "") : "No keywords yet"}
+                          {" · "}
+                          {rule.calendarIds.length === 0
+                            ? "no calendars picked"
+                            : rule.calendarIds.length === 1
+                              ? nameOf(rule.calendarIds[0])
+                              : `${rule.calendarIds.length} calendars`}
+                        </small>
+                      </button>
+                      <ChevronIcon open={editing} />
+                    </div>
+                    <Disclosure open={editing}>
+                      <RuleEditor rule={rule} calendars={calendars} sources={sources} onPatch={(next) => patch(rule.id, next)} onDelete={() => remove(rule.id)} />
+                    </Disclosure>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          <div className="ktask-rules-foot">
+            {removed ? (
+              <p className="ktask-undo" role="status">
+                Deleted {keywordTaskRuleLabel(removed.rule)}.
+                <button type="button" className="smart-tag-link" onClick={undoRemove}>Undo</button>
+              </p>
+            ) : <span />}
+            <button type="button" className="ghost-btn" disabled={rules.length >= KEYWORD_TASK_LIMITS.rules} onClick={add}>
+              <PlusIcon />
+              New rule
+            </button>
+          </div>
+        </div>
+      </Disclosure>
     </section>
   );
 }
