@@ -3749,16 +3749,67 @@ select {
   font-size: 0.78rem;
 }
 
-/*keyword tasks: rules that turn calendar events into tasks*/
+/*tasks: grouped by when they're due*/
+.todo-groups {
+  display: grid;
+  gap: 1.35rem;
+}
+
+.todo-group-title {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0 0 0.5rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: 1.02rem;
+  font-weight: 560;
+  letter-spacing: -0.01em;
+}
+
+.todo-group-count {
+  color: var(--ink-soft);
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 450;
+  font-variant-numeric: tabular-nums;
+}
+
+.todo-group.is-overdue .todo-group-title {
+  color: var(--danger);
+}
+
+.todo-group-toggle {
+  min-height: 2rem;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.todo-group-toggle svg {
+  width: 0.9rem;
+  height: 0.9rem;
+  fill: none;
+  stroke: var(--ink-soft);
+  stroke-width: 1.6;
+  transition: transform var(--dur-spring) var(--ease-spring);
+}
+
+.todo-group-toggle svg.is-open {
+  transform: rotate(180deg);
+}
+
 .todo-main small {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.15rem 0.5rem;
+  gap: 0.1rem 0.45rem;
 }
 
-.todo-main small > span,
-.todo-list li.is-done .todo-main small > span {
+.todo-main small > .todo-origin,
+.todo-list li.is-done .todo-main small > .todo-origin {
   overflow: visible;
   color: inherit;
   font-weight: 400;
@@ -3766,68 +3817,92 @@ select {
   white-space: normal;
 }
 
-.todo-main small > .todo-overdue {
-  color: var(--danger);
-  font-weight: 600;
-}
-
-.todo-main small > .todo-origin {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-}
-
-.todo-keyword {
-  padding: 0.05rem 0.4rem;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--task-color) 16%, transparent);
-  color: var(--ink);
-  font-size: 0.72rem;
-  font-style: normal;
+.todo-origin::before {
+  content: "·";
+  margin-right: 0.45rem;
 }
 
 .todo-older {
-  margin-top: 0.75rem;
+  margin-top: 1rem;
 }
 
+/*keyword task rules: a one-line summary that opens into the editor*/
 .ktask-rules {
-  margin-bottom: 1.25rem;
-  padding: 0.85rem 0.9rem;
+  margin-bottom: 1.5rem;
   border: 1px solid var(--line);
   border-radius: 12px;
   background: var(--panel-solid);
 }
 
-.ktask-rules-head {
+.ktask-rules-toggle {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  min-height: 3.25rem;
+  padding: 0.65rem 0.9rem;
+  border: 0;
+  border-radius: 12px;
+  background: none;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease-out);
 }
 
-.ktask-rules-head h3 {
-  margin: 0;
+.ktask-rules-toggle:active {
+  background: var(--press);
+}
+
+.ktask-rules-text {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  gap: 0.1rem;
+}
+
+.ktask-rules-title {
   font-family: var(--font-display);
-  font-size: 1.05rem;
+  font-size: 1.02rem;
   font-weight: 560;
-  letter-spacing: -0.015em;
+  letter-spacing: -0.01em;
 }
 
-.ktask-rules-head p,
-.ktask-empty {
-  margin: 0.2rem 0 0;
+.ktask-rules-text > span:last-child {
+  overflow: hidden;
   color: var(--ink-soft);
   font-size: 0.82rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.ktask-rules-head .ghost-btn {
+.ktask-rules svg:not(.glyph) {
+  width: 0.95rem;
+  height: 0.95rem;
   flex-shrink: 0;
+  fill: none;
+  stroke: var(--ink-soft);
+  stroke-width: 1.6;
+  transition: transform var(--dur-spring) var(--ease-spring);
+}
+
+.ktask-rules svg.is-open {
+  transform: rotate(180deg);
+}
+
+.ktask-rules-body {
+  padding: 0 0.9rem 0.75rem;
+}
+
+.ktask-empty {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+  line-height: 1.45;
 }
 
 .ktask-rule-list {
-  display: grid;
-  gap: 0.35rem;
-  margin: 0.75rem 0 0;
+  margin: 0;
   padding: 0;
   list-style: none;
 }
@@ -3835,7 +3910,7 @@ select {
 /*the rules sit inside .todo-list, whose li rule draws task cards*/
 .todo-list .ktask-rule {
   display: block;
-  padding: 0.45rem 0 0;
+  padding: 0;
   border: 0;
   border-top: 1px solid var(--line);
   border-radius: 0;
@@ -3846,7 +3921,8 @@ select {
 .ktask-rule-row {
   display: flex;
   align-items: center;
-  gap: 0.65rem;
+  gap: 0.75rem;
+  min-height: 3rem;
 }
 
 .ktask-rule-summary {
@@ -3854,16 +3930,17 @@ select {
   flex: 1;
   min-width: 0;
   gap: 0.05rem;
-  padding: 0;
+  padding: 0.45rem 0;
   border: 0;
   background: transparent;
   color: var(--ink);
   text-align: left;
+  cursor: pointer;
 }
 
 .ktask-rule-name {
   overflow: hidden;
-  font-weight: 650;
+  font-weight: 620;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -3877,35 +3954,28 @@ select {
 }
 
 .ktask-rule.is-paused .ktask-rule-summary {
-  opacity: 0.55;
-}
-
-.ktask-edit {
-  flex-shrink: 0;
+  opacity: 0.5;
 }
 
 .ktask-editor {
   display: grid;
-  gap: 0.7rem;
-  margin: 0.65rem 0 0.35rem;
-  padding: 0.75rem;
-  border-radius: 10px;
-  background: var(--surface-sunken, var(--paper));
+  gap: 0.85rem;
+  padding: 0.25rem 0 0.9rem 3.1rem;
 }
 
 .ktask-field {
   display: grid;
-  gap: 0.25rem;
+  gap: 0.3rem;
   min-width: 0;
-  font-size: 0.78rem;
+  font-size: 0.8rem;
 }
 
 .ktask-field > span,
-.ktask-calendars legend,
-.ktask-calendar-group-label {
+.ktask-calendars legend {
   color: var(--ink-soft);
-  font-size: 0.74rem;
+  font-size: 0.75rem;
   font-weight: 600;
+  letter-spacing: 0.01em;
 }
 
 .ktask-field small {
@@ -3916,12 +3986,12 @@ select {
 .ktask-field-row {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
-  gap: 0.7rem;
+  gap: 0.85rem;
 }
 
 .ktask-calendars {
   display: grid;
-  gap: 0.5rem;
+  gap: 0.55rem;
   min-width: 0;
   margin: 0;
   padding: 0;
@@ -3929,19 +3999,30 @@ select {
 }
 
 .ktask-calendars legend {
-  margin-bottom: 0.25rem;
+  margin-bottom: 0.3rem;
   padding: 0;
 }
 
 .ktask-calendar-group {
-  display: grid;
-  gap: 0.3rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.ktask-calendar-group-label {
+  width: 4.75rem;
+  flex-shrink: 0;
+  color: var(--ink-soft);
+  font-size: 0.75rem;
 }
 
 .ktask-chips {
   display: flex;
+  flex: 1;
   flex-wrap: wrap;
   gap: 0.35rem;
+  min-width: 0;
 }
 
 .ktask-chip {
@@ -3949,8 +4030,8 @@ select {
   align-items: center;
   gap: 0.25rem;
   max-width: 100%;
-  min-height: 1.75rem;
-  padding: 0.2rem 0.65rem;
+  min-height: 1.85rem;
+  padding: 0.2rem 0.7rem;
   border: 1px solid var(--line);
   border-radius: 999px;
   background: var(--panel-solid);
@@ -3958,7 +4039,13 @@ select {
   font-size: 0.78rem;
   transition:
     background-color var(--dur-fast) var(--ease-out),
-    border-color var(--dur-fast) var(--ease-out);
+    border-color var(--dur-fast) var(--ease-out),
+    transform var(--dur-spring) var(--ease-spring);
+}
+
+.ktask-chip:active {
+  transform: scale(0.95);
+  transition-duration: var(--dur-press);
 }
 
 .ktask-chip .glyph {
@@ -3977,16 +4064,41 @@ select {
   }
 }
 
-.ktask-editor-foot {
+.ktask-editor-foot,
+.ktask-rules-foot {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
 }
 
-.ktask-matches {
+.ktask-rules-foot {
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--line);
+}
+
+.ktask-rule-list:empty + .ktask-rules-foot,
+.ktask-empty + .ktask-rules-foot {
+  margin-top: 0.75rem;
+}
+
+.ktask-matches,
+.ktask-undo {
+  margin: 0;
   color: var(--ink-soft);
-  font-size: 0.78rem;
+  font-size: 0.8rem;
+}
+
+.ktask-undo {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+@media (max-width: 520px) {
+  .ktask-editor {
+    padding-left: 0;
+  }
 }
 
 .ghost-btn.is-syncing,
