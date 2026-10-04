@@ -40,12 +40,20 @@ import { ChatIcon, EyeIcon, EyeOffIcon, LockIcon, RouteIcon, ShieldCheckIcon, Sy
 import { calendarItemVisible, externalCalendarId, externalCalendarShown, externalCalendarsOf } from "@/calendar/external-calendars";
 import { feedOfCalendarId, mergedByMember, newMergedCalendarId } from "@/calendar/imported-calendars";
 import { RenameCalendarDialog } from "@/calendar/imported-calendars-panel";
-import { calendarIdField, isBuiltinLocalCalendarId, isPrimaryEventCalendarId, type LocalCalendar } from "@/calendar/local-calendars";
+import {
+  calendarIdField,
+  isBuiltinLocalCalendarId,
+  isPrimaryEventCalendarId,
+  isPrimaryTaskCalendarId,
+  type LocalCalendar,
+} from "@/calendar/local-calendars";
 import { boxesOf, commitBoxes, moveInBoxes, newBoxName, TRAY, type Boxes, type MergeBox } from "@/calendar/merge-board";
 import {
   calendarGroupsOf,
   calendarSwatchColor,
   isCalendarReadOnly,
+  isAgentCalendarHidden,
+  protectAgentHiddenIds,
   readMergeDrafts,
   setCalendarReadOnly,
   withNewCalendar,
@@ -295,7 +303,7 @@ export function CalendarMapSection({
     return feedSourceOf(id) || isMerged(id) ? !groups.external : !groups.watagent;
   }
 
-  const agentHidden = (id: string) => agentHiddenIds.includes(id);
+  const agentHidden = (id: string) => isAgentCalendarHidden(agentHiddenIds, id);
   const readOnly = (id: string) => id !== AGENT && id !== GOOGLE && isCalendarReadOnly(sources, id);
   const linkOf = (id: string) => importedCalendars.find((calendar) => externalCalendarId(calendar.id) === id);
 
@@ -328,8 +336,11 @@ export function CalendarMapSection({
   }
 
   function setAgentAccess(id: string, access: boolean): Change {
+    if (!access && isBuiltinLocalCalendarId(id)) return { message: "Nothing changed" };
     const before = agentHiddenIds;
-    onAgentHiddenIds((current) => (access ? current.filter((entry) => entry !== id) : [...new Set([...current, id])]));
+    onAgentHiddenIds((current) =>
+      protectAgentHiddenIds(access ? current.filter((entry) => entry !== id) : [...new Set([...current, id])]),
+    );
     return {
       message: access ? `The Agent can see ${nameOf(id)} again` : `The Agent can no longer see ${nameOf(id)}`,
       undo: () => onAgentHiddenIds(before),
@@ -549,7 +560,10 @@ export function CalendarMapSection({
           .join(" · "),
         ...visibility,
         agent: !unseen,
-        agentSentence: accessSentence(unseen, locked),
+        agentEditable: !isBuiltinLocalCalendarId(calendar.id),
+        agentSentence: isBuiltinLocalCalendarId(calendar.id)
+          ? "The Agent always sees this calendar."
+          : accessSentence(unseen, locked),
         lock: locked,
         lockEditable: !isBuiltinLocalCalendarId(calendar.id),
         lockSentence: locked ? "You and the Agent can’t change its events." : "You and the Agent can change its events.",
@@ -558,7 +572,11 @@ export function CalendarMapSection({
         canAsk: true,
         askBlocked: unseen ? `The Agent can’t see ${calendar.name}. Turn on Agent can see this first.` : undefined,
         sync: "hidden",
-        landing: isPrimaryEventCalendarId(calendar.id) ? "New Agent events land here unless you name another calendar." : undefined,
+        landing: isPrimaryEventCalendarId(calendar.id)
+          ? "New Agent events land here unless you name another calendar."
+          : isPrimaryTaskCalendarId(calendar.id)
+            ? "New Agent tasks land here by default."
+            : undefined,
       });
     }
     for (const feed of feeds) {
@@ -584,6 +602,7 @@ export function CalendarMapSection({
           .join(" · "),
         ...visibility,
         agent: !unseen,
+        agentEditable: true,
         agentSentence: accessSentence(unseen, locked),
         lock: true,
         lockEditable: false,
@@ -618,6 +637,7 @@ export function CalendarMapSection({
           .join(" · "),
         ...visibility,
         agent: !unseen,
+        agentEditable: true,
         agentSentence: accessSentence(unseen, true),
         lock: true,
         lockEditable: false,
@@ -740,10 +760,13 @@ export function CalendarMapSection({
         details: [
           isPrimaryEventCalendarId(calendar.id)
             ? "New Agent events land here unless you name another calendar."
-            : `A WatAgent calendar with ${amount}.`,
+            : isPrimaryTaskCalendarId(calendar.id)
+              ? "New Agent tasks land here by default."
+              : `A WatAgent calendar with ${amount}.`,
           locked ? "Read only: you and the Agent can't change its events." : "You and the Agent can change its events.",
           ...(hidden ? ["Hidden from the calendar."] : []),
           ...(agentHidden(calendar.id) ? ["The Agent can't see it. Draw a line from the Agent to give it access again."] : []),
+          ...(isBuiltinLocalCalendarId(calendar.id) ? ["The Agent always sees this calendar."] : []),
         ],
       });
     }
@@ -917,7 +940,9 @@ export function CalendarMapSection({
     for (const node of nodes) {
       if (!hasAgentLink(node.id) || agentHidden(node.id)) continue;
       const pending = counts.pending.get(node.id) ?? 0;
-      const revoke = { label: "Remove Agent access", run: () => setAgentAccess(node.id, false) };
+      const revoke = isBuiltinLocalCalendarId(node.id)
+        ? undefined
+        : { label: "Remove Agent access", run: () => setAgentAccess(node.id, false) };
       if (node.id === GOOGLE || readOnly(node.id)) {
         list.push({
           id: `agent:${node.id}`,
@@ -927,7 +952,10 @@ export function CalendarMapSection({
           directed: true,
           dash: "dashed",
           tone: "accent",
-          details: [`The Agent can read ${node.label} but can't change it.`, "Delete this link to hide it from the Agent."],
+          details: [
+            `The Agent can read ${node.label} but can't change it.`,
+            ...(revoke ? ["Delete this link to hide it from the Agent."] : []),
+          ],
           remove: revoke,
         });
         continue;
@@ -940,9 +968,11 @@ export function CalendarMapSection({
         directed: true,
         tone: "accent",
         details: [
-          `The Agent can add, change and delete events in ${node.label}.`,
+          isPrimaryTaskCalendarId(node.id)
+            ? `The Agent can add, change, and delete to-dos in ${node.label}.`
+            : `The Agent can add, change and delete events in ${node.label}.`,
           ...(pending > 0 ? [`${plural(pending, "change")} ${pending === 1 ? "waits" : "wait"} for your approval.`] : []),
-          "Delete this link to hide it from the Agent.",
+          ...(revoke ? ["Delete this link to hide it from the Agent."] : []),
         ],
         remove: revoke,
       });

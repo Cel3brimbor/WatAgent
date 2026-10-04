@@ -20,6 +20,10 @@ export function isPrimaryEventCalendarId(id: string): boolean {
   return id === PRIMARY_EVENT_CALENDAR_ID;
 }
 
+export function isPrimaryTaskCalendarId(id: string): boolean {
+  return id === PRIMARY_TASK_CALENDAR_ID;
+}
+
 /** Agent Main and Tasks can't be deleted, renamed, hidden, or locked read-only. */
 export function isBuiltinLocalCalendarId(id: string): boolean {
   return id === PRIMARY_EVENT_CALENDAR_ID || id === PRIMARY_TASK_CALENDAR_ID;

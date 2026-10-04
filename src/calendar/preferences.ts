@@ -384,10 +384,22 @@ export function writeMergedCalendars(calendars: MergedCalendar[]): void {
 
 const AGENT_HIDDEN_KEY = "watagent.calendar.agent-hidden.v1";
 
+/** Agent Main and Tasks always stay linked to the Agent. */
+export function protectAgentHiddenIds(ids: string[]): string[] {
+  return ids.filter((id) => !isBuiltinLocalCalendarId(id));
+}
+
+export function isAgentCalendarHidden(ids: string[], id: string): boolean {
+  if (isBuiltinLocalCalendarId(id)) return false;
+  return ids.includes(id);
+}
+
 /** Calendars whose link to the Agent was removed in Calendars. */
 export function agentHiddenIdsOf(raw: unknown): string[] {
   if (!Array.isArray(raw)) return [];
-  return [...new Set(raw.filter((id): id is string => typeof id === "string" && id.length > 0 && id.length <= 1024))].slice(0, 200);
+  return protectAgentHiddenIds(
+    [...new Set(raw.filter((id): id is string => typeof id === "string" && id.length > 0 && id.length <= 1024))].slice(0, 200),
+  );
 }
 
 export function readAgentHiddenIds(): string[] {
@@ -397,7 +409,7 @@ export function readAgentHiddenIds(): string[] {
 }
 
 export function writeAgentHiddenIds(ids: string[]): void {
-  try { window.localStorage.setItem(AGENT_HIDDEN_KEY, JSON.stringify(ids)); }
+  try { window.localStorage.setItem(AGENT_HIDDEN_KEY, JSON.stringify(protectAgentHiddenIds(ids))); }
   catch { return; }
 }
 

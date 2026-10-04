@@ -31,6 +31,7 @@ export type CalendarRowModel = {
   shown: boolean | null;
   showBlocked?: string;
   agent: boolean;
+  agentEditable: boolean;
   agentSentence: string;
   lock: boolean;
   lockEditable: boolean;
@@ -417,7 +418,11 @@ function Detail({
         />
       )}
 
-      <Setting label="Agent can see this" hint={row.agentSentence} checked={row.agent} onChange={(access) => onAgent(row.id, access)} />
+      {row.agentEditable ? (
+        <Setting label="Agent can see this" hint={row.agentSentence} checked={row.agent} onChange={(access) => onAgent(row.id, access)} />
+      ) : (
+        <p className="calendars-note">{row.agentSentence}</p>
+      )}
 
       {row.lockEditable ? (
         <Setting label="Read only" hint={row.lockSentence} checked={row.lock} onChange={(locked) => onLock(row.id, locked)} />

@@ -26,6 +26,7 @@ import {
   readCalendarView,
   readImportedCalendars,
   readMergedCalendars,
+  isAgentCalendarHidden,
   readAgentHiddenIds,
   readNewCalendarsShown,
   withNewCalendar,
@@ -469,7 +470,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
   const shownCalendars = useMemo(() => shownLocalCalendars(localCalendars, calendar.items), [localCalendars, calendar.items]);
   const mentionCalendars = useMemo(
     () =>
-      shownCalendars.filter((calendar) => !agentHiddenCalendarIds.includes(calendar.id)).map((calendar) => ({
+      shownCalendars.filter((calendar) => !isAgentCalendarHidden(agentHiddenCalendarIds, calendar.id)).map((calendar) => ({
         id: calendar.id,
         name: calendar.name,
         kind: calendar.kind,
@@ -710,9 +711,9 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
       timelineFor(focus, ALL_SOURCES)
         //calendars whose Map link to the Agent was deleted stay out of what the Agent is sent
         .filter((item) => {
-          if (item.kind === "gcal_event" || item.kind === "gcal_busy") return !agentHiddenCalendarIds.includes("google");
+          if (item.kind === "gcal_event" || item.kind === "gcal_busy") return !isAgentCalendarHidden(agentHiddenCalendarIds, "google");
           const id = timelineItemCalendarId(item);
-          return !id || !agentHiddenCalendarIds.includes(id);
+          return !id || !isAgentCalendarHidden(agentHiddenCalendarIds, id);
         })
         .slice(0, 80)
         .map((item) => {
