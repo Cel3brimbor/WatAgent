@@ -14,7 +14,7 @@ type Props = {
 
 const BARS: Array<{ id: AppSection; label: string }> = [
   { id: "calendar", label: "Calendar" },
-  { id: "tasks", label: "To-do list" },
+  { id: "tasks", label: "Tasks" },
   { id: "map", label: "Calendars" },
 ];
 

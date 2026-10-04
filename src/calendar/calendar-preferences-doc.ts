@@ -20,6 +20,7 @@ import {
   type SidePanelSectionsOpen,
 } from "@/calendar/preferences";
 import { parseSmartTagsFromUnknown, readSmartTags, type SmartTag } from "@/calendar/smart-tags";
+import { parseKeywordTasksFromUnknown, readKeywordTasks, type KeywordTasks } from "@/calendar/keyword-tasks";
 import type { CalendarView, ImportedCalendar, MergedCalendar } from "@/calendar/types";
 import { BUILTIN_CALENDARS, localCalendarsOf, readLocalCalendars, type LocalCalendar } from "@/calendar/local-calendars";
 
@@ -35,6 +36,7 @@ export type UserCalendarPreferencesV1 = {
   colors: CalendarColors;
   colorOverrides: Record<string, string>;
   smartTags: SmartTag[];
+  keywordTasks: KeywordTasks;
   navCollapsed: boolean;
   sidePanelSections: SidePanelSectionsOpen;
 };
@@ -116,6 +118,7 @@ export function readLocalCalendarPreferences(): UserCalendarPreferencesV1 {
     colors: readCalendarColors(),
     colorOverrides: readColorOverrides(),
     smartTags: readSmartTags(),
+    keywordTasks: readKeywordTasks(),
     navCollapsed,
     sidePanelSections: readSidePanelSections(),
   };
@@ -155,6 +158,7 @@ export function parseUserCalendarPreferencesDoc(
     colors,
     colorOverrides: rec.colorOverrides !== undefined ? overridesOf(rec.colorOverrides) : fallbacks.colorOverrides,
     smartTags: rec.smartTags !== undefined ? parseSmartTagsFromUnknown(rec.smartTags) : fallbacks.smartTags,
+    keywordTasks: rec.keywordTasks !== undefined ? parseKeywordTasksFromUnknown(rec.keywordTasks) : fallbacks.keywordTasks,
     navCollapsed: typeof rec.navCollapsed === "boolean" ? rec.navCollapsed : fallbacks.navCollapsed,
     sidePanelSections:
       rec.sidePanelSections !== undefined
@@ -167,6 +171,7 @@ export function preferencesDocHasContent(doc: UserCalendarPreferencesV1): boolea
   if (doc.importedCalendars.length > 0 || doc.mergedCalendars.length > 0 || doc.agentHiddenCalendarIds.length > 0) return true;
   if (!doc.newCalendarsShown) return true;
   if (doc.smartTags.length > 0) return true;
+  if (doc.keywordTasks.rules.length > 0 || doc.keywordTasks.doneKeys.length > 0) return true;
   if (JSON.stringify(doc.localCalendars) !== JSON.stringify(BUILTIN_CALENDARS)) return true;
   if (doc.navCollapsed) return true;
   if (JSON.stringify(doc.sidePanelSections) !== JSON.stringify(DEFAULT_SIDE_PANEL_SECTIONS)) return true;
