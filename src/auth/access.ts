@@ -26,7 +26,7 @@ export function accessErrorFrom(payload: unknown, status: number): AccessError |
   const rec = payload as { code?: unknown; error?: unknown; reason?: unknown };
   if (rec.code !== "account_banned" && rec.code !== "ai_restricted") return null;
   const supplied = typeof rec.error === "string" ? rec.error.replace(/\s+/g, " ").trim().slice(0, 700) : "";
-  const reason = rec.code === "account_banned" ? plainReason(typeof rec.reason === "string" ? rec.reason : null) : "";
+  const reason = plainReason(typeof rec.reason === "string" ? rec.reason : null);
   return new AccessError(rec.code, supplied || FALLBACK[rec.code], reason || null);
 }
 

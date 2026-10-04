@@ -69,6 +69,7 @@ export function ChatBubbleTools({
   content,
   busy,
   streaming,
+  locked = false,
   onRegenerate,
   onStartEdit,
 }: {
@@ -76,6 +77,7 @@ export function ChatBubbleTools({
   content: string;
   busy: boolean;
   streaming: boolean;
+  locked?: boolean;
   onRegenerate: () => void;
   onStartEdit: () => void;
 }) {
@@ -88,7 +90,7 @@ export function ChatBubbleTools({
           type="button"
           className="bubble-tool"
           aria-label="Regenerate"
-          disabled={!hasContent || busy}
+          disabled={!hasContent || busy || locked}
           onClick={onRegenerate}
         >
           <RegenerateIcon />
@@ -103,7 +105,7 @@ export function ChatBubbleTools({
         type="button"
         className="bubble-tool"
         aria-label="Edit message"
-        disabled={busy || streaming}
+        disabled={busy || streaming || locked}
         onClick={onStartEdit}
       >
         <EditIcon />

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState, type MouseEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type MouseEvent } from "react";
 import {
   DndContext,
   PointerSensor,
@@ -30,6 +30,7 @@ export type ChatTabSession = {
   id: string;
   title: string;
   open: boolean;
+  createdAt?: number;
   updatedAt?: number;
 };
 
@@ -44,6 +45,7 @@ type Props = {
   onReopenChat: (chatId: string) => void;
   onReorderChats: (orderedIds: string[]) => void;
   onStop: () => void;
+  restricted?: boolean;
 };
 
 export function ChatTabStrip({
@@ -57,6 +59,7 @@ export function ChatTabStrip({
   onReopenChat,
   onReorderChats,
   onStop,
+  restricted = false,
 }: Props) {
   const historyBtnRef = useRef<HTMLButtonElement>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -68,6 +71,10 @@ export function ChatTabStrip({
   const [renameDraft, setRenameDraft] = useState("");
   const skipRenameCommit = useRef(false);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
+
+  useEffect(() => {
+    if (restricted) setPendingDelete(null);
+  }, [restricted]);
 
   const openChats = chats.filter((chat) => chat.open);
   const closedChats = chats
@@ -115,7 +122,16 @@ export function ChatTabStrip({
     if (!chat) return [];
     return [
       { id: "rename", label: "Rename", onSelect: () => startRename(chat) },
-      { id: "delete", label: "Delete", danger: true, onSelect: () => setPendingDelete(chat) },
+      {
+        id: "delete",
+        label: "Delete",
+        danger: true,
+        disabled: restricted,
+        onSelect: () => {
+          if (restricted) return;
+          setPendingDelete(chat);
+        },
+      },
     ];
   }
 
@@ -162,8 +178,10 @@ export function ChatTabStrip({
             type="button"
             className="chat-tab-add"
             aria-label="New chat"
-            title="New chat"
+            title={restricted ? "AI features are restricted" : "New chat"}
+            disabled={restricted}
             onClick={() => {
+              if (restricted) return;
               closeMenus();
               setHistoryOpen(false);
               onStop();
@@ -231,9 +249,11 @@ export function ChatTabStrip({
           onCancel={() => setPendingDelete(null)}
           onConfirm={() => {
             const chat = pendingDelete;
-            if (!chat) return;
             setPendingDelete(null);
+            if (!chat || restricted) return;
             onStop();
+            setHistoryOpen(false);
+            setHistoryRowMenu(null);
             onDeleteChat(chat.id);
           }}
         />

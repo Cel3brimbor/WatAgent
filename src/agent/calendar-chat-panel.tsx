@@ -35,7 +35,7 @@ type Props = {
   messages: ChatMessage[];
   busy: boolean;
   error: string | null;
-  restriction: string | null;
+  restriction: { message: string; reason: string | null } | null;
   streamingAssistantId: string | null;
   onSend: (payload: SendPayload) => void;
   onStop: () => void;
@@ -109,6 +109,10 @@ export function CalendarChatPanel({
   const [editCalendars, setEditCalendars] = useState<string[]>([]);
   const [openBadge, setOpenBadge] = useState<string | null>(null);
   const { effort, setEffort } = useAgentEffort();
+
+  useEffect(() => {
+    if (restriction) setEditingId(null);
+  }, [restriction]);
 
   useEffect(() => {
     onResizingChange(chatResize.resizing);
@@ -189,6 +193,7 @@ export function CalendarChatPanel({
             onReopenChat={onReopenChat}
             onStop={onStop}
             onReorderChats={onReorderChats}
+            restricted={Boolean(restriction)}
           />
           <div className="chat-head-row">
             <p>Ask about this day, or add, edit, delete, and complete events and tasks.</p>
@@ -292,6 +297,7 @@ export function CalendarChatPanel({
                         content={m.content}
                         busy={busy}
                         streaming={streaming}
+                        locked={Boolean(restriction)}
                         onRegenerate={() => send({ text: "", branch: { kind: "regenerate", messageId: m.id } })}
                         onStartEdit={() => {
                           setEditingId(m.id);
@@ -317,12 +323,16 @@ export function CalendarChatPanel({
           ruleNames={ruleNames}
         />
         {restriction ? (
-          <p className="ai-restriction" role="alert">
-            {restriction}
-          </p>
+          <div className="ai-restriction-stack">
+            <p className="ai-restriction" role="alert">
+              {restriction.message}
+            </p>
+            {restriction.reason ? <p className="ai-restriction">Restriction reason: {restriction.reason}</p> : null}
+          </div>
         ) : null}
         <ChatComposer
           busy={busy}
+          restricted={Boolean(restriction)}
           error={restriction ? null : error}
           effort={effort}
           calendars={calendars}

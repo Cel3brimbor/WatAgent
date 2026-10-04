@@ -88,7 +88,7 @@ import { CalendarMapSection } from "@/calendar/calendar-map-section";
 import { onRulesRan, ruleRunSummary } from "@/agent/rules/rules-client";
 import { useAgentRules } from "@/agent/rules/use-agent-rules";
 import { TodoList } from "@/calendar/todo-list";
-import { AccessError } from "@/auth/access";
+import { AccessError, plainReason } from "@/auth/access";
 import { CalendarChatPanel } from "@/agent/calendar-chat-panel";
 import type { PendingAiChange } from "@/calendar/approval-client";
 import { attachedIdsOf } from "@/agent/calendar-mention";
@@ -97,7 +97,7 @@ import { requestChatTitle } from "@/agent/chat-title";
 import { readAgentStream } from "@/agent/stream";
 import { cloneActivity } from "@/agent/agent-activity";
 import type { ActivityPart, ChatMessage, ThoughtSegment, ToolEventRecord } from "@/agent/types";
-import { apiFetch, errorFromResponse } from "@/shared/api-base";
+import { apiFetch, apiJson, errorFromResponse } from "@/shared/api-base";
 import { uid } from "@/shared/ids";
 import { ChevronLeftIcon, ChevronRightIcon, CloseIcon } from "@/shared/icons";
 import { SegmentedControl, type SegmentOption } from "@/shared/segmented-control";
@@ -342,7 +342,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
   const [draft, setDraft] = useState<CalendarDraft | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [restriction, setRestriction] = useState<string | null>(null);
+  const [restriction, setRestriction] = useState<{ message: string; reason: string | null } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const { refresh: refreshCalendar, refreshPending } = calendar;
   const reloadRules = agentRules.reload;
@@ -357,6 +357,46 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
       }),
     [refreshCalendar, refreshPending, reloadRules],
   );
+
+  //a restriction should be on screen before the first message, and lift as soon as it is removed
+  useEffect(() => {
+    let cancelled = false;
+    async function loadAccess() {
+      try {
+        const payload = await apiJson<{ aiRestricted?: unknown; message?: unknown; reason?: unknown }>("/api/account/access");
+        if (cancelled) return;
+        if (payload?.aiRestricted !== true) {
+          setRestriction((current) => (current ? null : current));
+          return;
+        }
+        const message =
+          typeof payload.message === "string" && payload.message.trim()
+            ? payload.message.trim()
+            : "Your account is restricted from AI features. If you believe this was a mistake, please appeal.";
+        const reason = plainReason(typeof payload.reason === "string" ? payload.reason : null) || null;
+        setRestriction((current) =>
+          current && current.message === message && current.reason === reason ? current : { message, reason },
+        );
+      } catch (err) {
+        if (err instanceof AccessError && err.code === "ai_restricted") {
+          if (!cancelled) setRestriction({ message: err.message, reason: err.reason });
+        }
+      }
+    }
+    void loadAccess();
+    function onVisible() {
+      if (document.visibilityState === "visible") void loadAccess();
+    }
+    document.addEventListener("visibilitychange", onVisible);
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") void loadAccess();
+    }, 4000);
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", onVisible);
+      window.clearInterval(timer);
+    };
+  }, [chatOpen]);
   const [streamingAssistantId, setStreamingAssistantId] = useState<string | null>(null);
   const [googlePeek, setGooglePeek] = useState<{ item: TimelineItem; anchor: DOMRect } | null>(null);
   const [googleDelete, setGoogleDelete] = useState<(GoogleDraftTarget & { title: string }) | null>(null);
@@ -739,8 +779,8 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
   }, [setAfterWrite]);
 
   useEffect(() => {
-    if (chatOpen && calendar.chats.length === 0) createChat();
-  }, [chatOpen, calendar.chats.length, createChat]);
+    if (chatOpen && !restriction && calendar.chats.length === 0) createChat();
+  }, [chatOpen, calendar.chats.length, createChat, restriction]);
 
   useEffect(() => {
     if (!chatOpen) pruneEmptyChats();
@@ -1029,7 +1069,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
   }
 
   async function handleSend(payload: SendPayload) {
-    if (busy) return;
+    if (busy || restriction) return;
     const existing = currentMessages();
     let text = payload.text.trim();
     let calendarIds = attachedIdsOf(payload.calendarIds);
@@ -1078,7 +1118,6 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
     setStreamingAssistantId(assistantId);
     setBusy(true);
     setError(null);
-    setRestriction(null);
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
@@ -1249,7 +1288,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") return;
       if (err instanceof AccessError && err.code === "ai_restricted") {
-        setRestriction(err.message);
+        setRestriction({ message: err.message, reason: err.reason });
         return;
       }
       if (err instanceof AccessError) return;
@@ -1532,8 +1571,14 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
           onSend={(payload) => void handleSend(payload)}
           onStop={() => abortRef.current?.abort()}
           onError={setError}
-          onNewChat={calendar.createChat}
-          onDeleteChat={calendar.deleteChat}
+          onNewChat={() => {
+            if (restriction) return;
+            calendar.createChat();
+          }}
+          onDeleteChat={(chatId) => {
+            if (restriction) return;
+            calendar.deleteChat(chatId);
+          }}
           onRenameChat={calendar.renameChat}
           onCloseChat={calendar.closeChat}
           onReopenChat={calendar.reopenChat}
