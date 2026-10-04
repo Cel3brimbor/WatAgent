@@ -5,15 +5,19 @@ import { fetchCampusEvents } from "@/campus/campus-client";
 import {
   campusDays,
   campusEventIcs,
+  campusFeedUrl,
   campusPlacements,
+  CAMPUS_CALENDAR_NAME,
   googleCalendarLink,
   icsFileName,
   localSpan,
   matchesCampusQuery,
+  toggledCategories,
   type CampusEvent,
   type CampusEventsPayload,
   type CampusSeries,
 } from "@/campus/campus-events";
+import { CampusSubscriptions } from "@/campus/campus-subscriptions";
 import { formatTime } from "@/calendar/date-utils";
 import type { CalendarItemDoc } from "@/calendar/types";
 import { ContextMenu, menuStateFromElement, type ContextMenuItem, type ContextMenuPosition } from "@/shared/context-menu";
@@ -26,6 +30,10 @@ type Props = {
   /** WatAgent calendars an event can be added to. */
   calendars: Array<{ id: string; name: string }>;
   onAdd: (event: CampusEvent, calendarId: string) => void;
+  /** The imported calendar holding subscribed categories, if there is one. */
+  subscription: { feedId: string; categories: string[] } | null;
+  /** Saves the new set of subscribed categories; none removes the calendar. */
+  onSubscribe: (categories: string[]) => Promise<void>;
 };
 
 //rows rendered at first; the rest wait behind "Show more" so a busy term doesn't build hundreds of cards
@@ -123,7 +131,7 @@ function useMinute(): number {
   return now;
 }
 
-export function CampusEventsSection({ items, calendars, onAdd }: Props) {
+export function CampusEventsSection({ items, calendars, onAdd, subscription, onSubscribe }: Props) {
   const { data, error, loading, reload } = useCampusEvents();
   const [category, setCategory] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -131,7 +139,11 @@ export function CampusEventsSection({ items, calendars, onAdd }: Props) {
   const [limit, setLimit] = useState(PAGE);
   const [menu, setMenu] = useState<{ position: ContextMenuPosition; event: CampusEvent } | null>(null);
   const now = useMinute();
-  const placementOf = useMemo(() => campusPlacements(items, null), [items]);
+  //the switches move at once and settle when the calendar has synced
+  const [pendingCategories, setPendingCategories] = useState<string[] | null>(null);
+  const subscribed = pendingCategories ?? subscription?.categories ?? [];
+  const feedId = subscription?.feedId ?? null;
+  const placementOf = useMemo(() => campusPlacements(items, feedId), [items, feedId]);
 
   const labels = useMemo(() => new Map((data?.categories ?? []).map((entry) => [entry.id, entry.label])), [data]);
   const sourceNames = useMemo(() => new Map((data?.sources ?? []).map((entry) => [entry.id, entry.name])), [data]);
@@ -196,6 +208,17 @@ export function CampusEventsSection({ items, calendars, onAdd }: Props) {
     );
   }
 
+  async function toggleSubscription(id: string, on: boolean) {
+    if (!data || pendingCategories) return;
+    const next = toggledCategories(subscription?.categories ?? [], id, on, data.categories);
+    setPendingCategories(next);
+    try {
+      await onSubscribe(next);
+    } finally {
+      setPendingCategories(null);
+    }
+  }
+
   function toggleExpanded(key: string) {
     setExpanded((current) => {
       const next = new Set(current);
@@ -224,6 +247,12 @@ export function CampusEventsSection({ items, calendars, onAdd }: Props) {
           {meta ? <p className={styles.meta}>{meta}</p> : null}
           {next.summary ? <p className={styles.summary}>{next.summary}</p> : null}
           <div className={styles.tags}>
+            {placementOf(next) === "subscribed" ? (
+              <span className={styles.onCalendar} title={`On your ${CAMPUS_CALENDAR_NAME} calendar`}>
+                <CheckIcon />
+                Subscribed
+              </span>
+            ) : null}
             {next.categories.map((id) => (
               <span key={id} className={styles.tag}>
                 {labels.get(id) ?? "Other"}
@@ -314,6 +343,11 @@ export function CampusEventsSection({ items, calendars, onAdd }: Props) {
   }
 
   const chips = (data?.categories ?? []).filter((entry) => (counts.get(entry.id) ?? 0) > 0);
+  //calendar apps can only reach a public https server, so development has no link to share
+  const feedLink = (() => {
+    const link = campusFeedUrl(subscribed);
+    return link.startsWith("https://") ? link : null;
+  })();
   const subtitle = [
     data ? `${upcoming.length} upcoming` : "",
     data ? updatedLabel(data.updatedAt, now) : "",
@@ -338,6 +372,16 @@ export function CampusEventsSection({ items, calendars, onAdd }: Props) {
           }}
         />
       </div>
+      {data && data.categories.length > 0 ? (
+        <CampusSubscriptions
+          categories={data.categories}
+          counts={counts}
+          subscribed={subscribed}
+          busy={pendingCategories != null}
+          onToggle={(id, on) => void toggleSubscription(id, on)}
+          feedLink={feedLink}
+        />
+      ) : null}
       {chips.length > 0 ? (
         <div className={styles.chips} role="group" aria-label="Filter by category">
           <button type="button" className={styles.chip} aria-pressed={category == null} onClick={() => setCategory(null)}>

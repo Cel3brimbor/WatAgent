@@ -17,7 +17,8 @@ import {
 import { removeImportedCalendar } from "@/calendar/client";
 import { calendarItemVisible, externalCalendarId, externalCalendarsOf } from "@/calendar/external-calendars";
 import { mergeTimeline } from "@/calendar/calendar-merge";
-import { mergedByMember } from "@/calendar/imported-calendars";
+import { mergedByMember, newFeedId } from "@/calendar/imported-calendars";
+import { formatFeedSyncSummary, syncImportedFeed } from "@/calendar/calendar-sync";
 import type { SideExternalCalendar } from "@/calendar/calendar-side-panel";
 import { aggregateTimeline, overlayTimelineItemOf, rangesOverlap, timelineItemOf, type BusyBlock, type OverlayEvent } from "@/calendar/timeline";
 import {
@@ -91,7 +92,7 @@ import { onRulesRan, ruleRunSummary } from "@/agent/rules/rules-client";
 import { useAgentRules } from "@/agent/rules/use-agent-rules";
 import { TodoList } from "@/calendar/todo-list";
 import { CampusEventsSection } from "@/campus/campus-events-section";
-import { campusEventMeta, type CampusEvent } from "@/campus/campus-events";
+import { CAMPUS_CALENDAR_NAME, campusEventMeta, campusFeedUrl, campusSubscriptionOf, type CampusEvent } from "@/campus/campus-events";
 import { keywordTasksOf, readKeywordTasks, withKeywordTaskDone, type KeywordTasks, type KeywordTaskSource } from "@/calendar/keyword-tasks";
 import { KeywordTaskRules, type KeywordTaskCalendarOption } from "@/calendar/keyword-task-rules";
 import { AccessError, plainReason } from "@/auth/access";
@@ -302,6 +303,25 @@ function applySmartTags(items: TimelineItem[], matcher: SmartTagMatcher): Timeli
 
 function timeZone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+}
+
+const CAMPUS_SYNC_KEY = "watagent.campus.syncedAt";
+const CAMPUS_SYNC_EVERY_MS = 60 * 60 * 1000;
+
+function readCampusSyncedAt(): number {
+  try {
+    return Number(window.localStorage.getItem(CAMPUS_SYNC_KEY)) || 0;
+  } catch {
+    return 0;
+  }
+}
+
+function writeCampusSyncedAt(at: number): void {
+  try {
+    window.localStorage.setItem(CAMPUS_SYNC_KEY, String(at));
+  } catch {
+    return;
+  }
 }
 
 //start of the period the stage is showing, so moving within the same week/month isn't a "navigation"
@@ -589,6 +609,59 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
     if (isNew) setSources((current) => withNewCalendar(current, externalCalendarId(added.id), newCalendarsShown));
     await calendar.refresh();
   }, [calendar, importedCalendars, newCalendarsShown]);
+
+  //subscribed UWaterloo event categories live on one imported calendar, its link listing the categories
+  const campusSubscription = useMemo(() => campusSubscriptionOf(importedCalendars), [importedCalendars]);
+
+  const subscribeCampus = useCallback(
+    async (categories: string[]) => {
+      const current = campusSubscriptionOf(importedCalendars);
+      try {
+        if (categories.length === 0) {
+          if (current) await removeImported(current.calendar.id);
+          setNotice(`Unsubscribed. ${current?.calendar.name ?? CAMPUS_CALENDAR_NAME} is off your calendars.`);
+          return;
+        }
+        const url = campusFeedUrl(categories);
+        //sync first, so a failed sync leaves the saved link and the calendar as they were
+        if (current) {
+          const result = await syncImportedFeed({ id: current.calendar.id, url });
+          setImportedCalendars((list) => list.map((entry) => (entry.id === current.calendar.id ? { ...entry, url } : entry)));
+          await calendar.refresh();
+          setNotice(formatFeedSyncSummary(current.calendar.name, result));
+        } else {
+          const id = newFeedId();
+          const result = await syncImportedFeed({ id, url });
+          await addImported({ id, name: CAMPUS_CALENDAR_NAME, url });
+          setNotice(`Subscribed. ${result.imported} event${result.imported === 1 ? " is" : "s are"} on your ${CAMPUS_CALENDAR_NAME} calendar.`);
+        }
+        writeCampusSyncedAt(Date.now());
+      } catch (err) {
+        setNotice(err instanceof Error ? err.message : "Unable to update your UWaterloo event subscriptions.");
+      }
+    },
+    [importedCalendars, removeImported, addImported, calendar],
+  );
+
+  //new events are scraped every few hours; the subscription catches up when the app opens or Events does, hourly at most
+  const campusSyncUrl = campusSubscription?.calendar.url;
+  const campusSyncId = campusSubscription?.calendar.id;
+  const campusSyncName = campusSubscription?.calendar.name;
+  //opening Events re-runs the check below
+  const onEvents = section === "events";
+  const { refresh: refreshItems, hydrated } = calendar;
+  useEffect(() => {
+    if (!hydrated || !campusSyncUrl || !campusSyncId) return;
+    if (Date.now() - readCampusSyncedAt() < CAMPUS_SYNC_EVERY_MS) return;
+    writeCampusSyncedAt(Date.now());
+    void syncImportedFeed({ id: campusSyncId, url: campusSyncUrl })
+      .then(async (result) => {
+        if (result.added === 0 && result.updated === 0 && result.removed === 0) return;
+        await refreshItems();
+        setNotice(formatFeedSyncSummary(campusSyncName ?? CAMPUS_CALENDAR_NAME, result));
+      })
+      .catch(() => undefined);
+  }, [hydrated, campusSyncUrl, campusSyncId, campusSyncName, onEvents, refreshItems]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1535,7 +1608,15 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
                 }
               />
             ) : null}
-            {section === "events" ? <CampusEventsSection items={calendar.items} calendars={campusTargets} onAdd={addCampusEvent} /> : null}
+            {section === "events" ? (
+              <CampusEventsSection
+                items={calendar.items}
+                calendars={campusTargets}
+                onAdd={addCampusEvent}
+                subscription={campusSubscription ? { feedId: campusSubscription.calendar.id, categories: campusSubscription.categories } : null}
+                onSubscribe={subscribeCampus}
+              />
+            ) : null}
             {section === "map" ? (
               <CalendarMapSection
                 items={itemsForUi}
