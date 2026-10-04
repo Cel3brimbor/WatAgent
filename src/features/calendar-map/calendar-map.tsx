@@ -21,7 +21,7 @@ import {
   centreBounds,
   clamp,
   defaultLayout,
-  edgeGeometry,
+  flowGeometry,
   exitPoint,
   MIN_CANVAS_WIDTH,
   NODE_SIZE,
@@ -32,24 +32,19 @@ import {
   type Box,
   type Pt,
 } from "./geometry";
-import type {
-  LayoutStore,
-  MapChange,
-  MapEdge,
-  MapFunction,
-  MapLinkFunction,
-  MapNode,
-  MapNodeDrop,
-  MapPoint,
-} from "./types";
+import type { LayoutStore, MapChange, MapEdge, MapFunction, MapLinkFunction, MapNode, MapNodeDrop, MapPoint } from "./types";
 import { capturePointer } from "./pointer";
 import { useFunctionDrag } from "./use-function-drag";
 import { useNodeDrag } from "./use-node-drag";
+import { MapInspector } from "./map-inspector";
+import { DEFAULT_VIEW, parseView, type ViewPreferences } from "./view-preferences";
 import styles from "./calendar-map.module.css";
 
 export type CalendarMapProps = {
   /** Accessible name for the whole map. */
   label: string;
+  preferencesKey?: string;
+  groupLabels?: Partial<Record<MapNode["group"], string>>;
   nodes: MapNode[];
   edges: MapEdge[];
   functions: MapFunction[];
@@ -59,11 +54,12 @@ export type CalendarMapProps = {
   layoutStore?: LayoutStore;
   /** Controls above the canvas. */
   toolbar?: ReactNode;
+  settings?: ReactNode;
   /** Inspector text when nothing is selected. */
   hint?: string;
   /** Shown when there are no nodes. */
   empty?: ReactNode;
-  /** When set, results and undo belong to the parent so a second view shares them. */
+  /** Share results and undo with the calendar list view. */
   onResult?: (change: MapChange) => void;
   onUndo?: () => void;
 };
@@ -109,17 +105,62 @@ function spokenNode(node: MapNode): string {
   return [node.badge, node.label, node.caption].filter(Boolean).join(", ");
 }
 
-export function CalendarMap({ label, nodes, edges, functions, nodeDrop, layoutStore, toolbar, hint, empty, onResult, onUndo }: CalendarMapProps) {
+export function CalendarMap({
+  label,
+  nodes,
+  edges,
+  functions,
+  nodeDrop,
+  layoutStore,
+  toolbar,
+  onResult,
+  onUndo,
+  settings,
+  hint,
+  empty,
+  preferencesKey,
+  groupLabels,
+}: CalendarMapProps) {
   const rootRef = useRef<HTMLElement>(null);
   const frameRef = useRef<HTMLDivElement>(null);
+  const inspectorRef = useRef<HTMLElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
   const chipRefs = useRef(new Map<string, HTMLButtonElement>());
   const markerId = `map${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
 
-  const [width, setWidth] = useState(0);
+  const [query, setQuery] = useState("");
+  const [view, setView] = useState<ViewPreferences>(DEFAULT_VIEW);
+  const [viewLoaded, setViewLoaded] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  useEffect(() => {
+    try {
+      setView(parseView(JSON.parse(preferencesKey ? (localStorage.getItem(preferencesKey) ?? "null") : "null")));
+    } catch {
+      setView(DEFAULT_VIEW);
+    }
+    setViewLoaded(true);
+  }, [preferencesKey]);
+  useEffect(() => {
+    if (!viewLoaded || !preferencesKey) return;
+    try {
+      localStorage.setItem(preferencesKey, JSON.stringify(view));
+    } catch {
+      /* Storage is optional. */
+    }
+  }, [view, viewLoaded, preferencesKey]);
+  const [frameWidth, setFrameWidth] = useState(0);
+  const scale = view.zoom ?? Math.min(1, (frameWidth || MIN_CANVAS_WIDTH) / MIN_CANVAS_WIDTH);
+  const width = frameWidth ? Math.max(frameWidth, MIN_CANVAS_WIDTH) : 0;
   const [layout, setLayout] = useState<Record<string, MapPoint>>({});
   const [loaded, setLoaded] = useState(false);
   const [selection, setSelection] = useState<Selection>(null);
+  useEffect(() => {
+    if (!selection || !window.matchMedia("(max-width: 1100px)").matches) return;
+    inspectorRef.current?.scrollIntoView({
+      block: "nearest",
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+    });
+  }, [selection]);
   const [gesture, setGesture] = useState<Gesture>({ kind: "idle" });
   const [ghost, setGhost] = useState<Ghost | null>(null);
   const [over, setOver] = useState<string | null>(null);
@@ -133,7 +174,6 @@ export function CalendarMap({ label, nodes, edges, functions, nodeDrop, layoutSt
   const ghostRef = useRef<Ghost | null>(null);
   const handleDrag = useRef<{ pointerId: number; from: string } | null>(null);
   const retracting = useRef<{ handles: SpringHandle[] }>({ handles: [] });
-  const tidying = useRef(0);
   //nodes gliding to a new default spot (say, after a rank change) rather than placed by hand
   const reflowing = useRef(new Set<string>());
   const lastDefaults = useRef<{ size: { width: number; height: number }; at: Record<string, Pt> } | null>(null);
@@ -148,17 +188,11 @@ export function CalendarMap({ label, nodes, edges, functions, nodeDrop, layoutSt
     for (const node of nodes) out[node.id] = toPx(layout[node.id] ?? defaults[node.id] ?? { x: 0.5, y: 0.5 }, size);
     return out;
   }, [nodes, layout, defaults, size]);
-  const boxes = useMemo(
-    () => nodes.map((node) => ({ id: node.id, ...centres[node.id], ...sizeOf(node.id) })),
-    [nodes, centres, sizeOf],
-  );
+  const boxes = useMemo(() => nodes.map((node) => ({ id: node.id, ...centres[node.id], ...sizeOf(node.id) })), [nodes, centres, sizeOf]);
   const boxById = useMemo(() => new Map(boxes.map((box) => [box.id, box])), [boxes]);
   const nodeById = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes]);
   const fnById = useMemo(() => new Map(functions.map((fn) => [fn.id, fn])), [functions]);
-  const drawables = useMemo(
-    () => functions.filter((fn): fn is MapLinkFunction => fn.kind === "link" && Boolean(fn.drawable)),
-    [functions],
-  );
+  const drawables = useMemo(() => functions.filter((fn): fn is MapLinkFunction => fn.kind === "link" && Boolean(fn.drawable)), [functions]);
   const groups = useMemo(() => {
     const out = new Map<string, MapFunction[]>();
     for (const fn of functions) out.set(fn.group, [...(out.get(fn.group) ?? []), fn]);
@@ -169,7 +203,7 @@ export function CalendarMap({ label, nodes, edges, functions, nodeDrop, layoutSt
   useLayoutEffect(() => {
     const frame = frameRef.current;
     if (!frame) return;
-    const measure = () => setWidth(Math.max(Math.round(frame.clientWidth), MIN_CANVAS_WIDTH));
+    const measure = () => setFrameWidth(Math.round(frame.clientWidth));
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(frame);
@@ -257,7 +291,7 @@ export function CalendarMap({ label, nodes, edges, functions, nodeDrop, layoutSt
 
   function toCanvas(clientX: number, clientY: number): Pt {
     const rect = canvasRef.current?.getBoundingClientRect();
-    return rect ? { x: clientX - rect.left, y: clientY - rect.top } : { x: 0, y: 0 };
+    return rect ? { x: (clientX - rect.left) / scale, y: (clientY - rect.top) / scale } : { x: 0, y: 0 };
   }
 
   function toRoot(clientX: number, clientY: number): Pt {
@@ -269,7 +303,7 @@ export function CalendarMap({ label, nodes, edges, functions, nodeDrop, layoutSt
     const canvas = canvasRef.current?.getBoundingClientRect();
     const root = rootRef.current?.getBoundingClientRect();
     if (!canvas || !root) return point;
-    return { x: point.x + canvas.left - root.left, y: point.y + canvas.top - root.top };
+    return { x: point.x * scale + canvas.left - root.left, y: point.y * scale + canvas.top - root.top };
   }
 
   function verdict(fn: MapFunction, nodeId: string, from?: string): true | string {
@@ -357,15 +391,18 @@ export function CalendarMap({ label, nodes, edges, functions, nodeDrop, layoutSt
   }
 
   function tidy() {
-    setSelection(null);
-    const moved = nodes.filter((node) => layout[node.id] && defaults[node.id]);
-    if (moved.length === 0) {
-      announce("Already arranged");
-      return;
-    }
-    tidying.current = moved.length;
-    for (const node of moved) nodeDrag.settle(node.id, toPx(defaults[node.id], size));
-    announce("Calendars arranged");
+    const previous = { ...layout };
+    for (const node of nodes) nodeDrag.stop(node.id);
+    reflowing.current.clear();
+    setLayout({});
+    layoutStore?.save({});
+    void run(() => ({
+      message: "Map arranged",
+      undo: () => {
+        layoutStore?.save(previous);
+        setLayout(previous);
+      },
+    }));
   }
 
   const nodeDrag = useNodeDrag({
@@ -399,9 +436,6 @@ export function CalendarMap({ label, nodes, edges, functions, nodeDrop, layoutSt
         });
         return;
       }
-      if (tidying.current === 0) return;
-      tidying.current -= 1;
-      if (tidying.current === 0) setLayout({});
     },
   });
 
@@ -580,7 +614,7 @@ export function CalendarMap({ label, nodes, edges, functions, nodeDrop, layoutSt
 
   function onNodeKeyDown(event: ReactKeyboardEvent<HTMLButtonElement>, id: string) {
     const direction = ARROWS[event.key];
-    if (!direction) return;
+    if (!direction || view.locked) return;
     event.preventDefault();
     nodeDrag.stop(id);
     const step = event.shiftKey ? NUDGE_FAR : NUDGE;
@@ -647,12 +681,27 @@ export function CalendarMap({ label, nodes, edges, functions, nodeDrop, layoutSt
   }
 
   const shapes = ready
-    ? edges.flatMap((edge) => {
-        const from = boxById.get(edge.from);
-        const to = boxById.get(edge.to);
-        const geo = from && to ? edgeGeometry(from, to, boxes, size) : null;
-        return geo ? [{ edge, geo }] : [];
-      })
+    ? edges
+        .filter(
+          (edge) =>
+            view.connections !== "none" &&
+            (view.connections !== "selected" ||
+              (selection?.kind === "node" && (edge.from === selection.id || edge.to === selection.id)) ||
+              (selection?.kind === "edge" && edge.id === selection.id)),
+        )
+        .flatMap((edge) => {
+          const from = boxById.get(edge.from);
+          const to = boxById.get(edge.to);
+          const portOffset = (id: string, end: "from" | "to") => {
+            const siblings = edges.filter((entry) => entry[end] === id);
+            return (
+              (siblings.findIndex((entry) => entry.id === edge.id) - (siblings.length - 1) / 2) *
+              Math.min(10, 36 / Math.max(1, siblings.length - 1))
+            );
+          };
+          const geo = from && to ? flowGeometry(from, to, boxes, size, portOffset(edge.from, "from"), portOffset(edge.to, "to")) : null;
+          return geo ? [{ edge, geo }] : [];
+        })
     : [];
 
   //the line being drawn: from its node toward the pointer, snapping onto a node that would take it
@@ -684,364 +733,584 @@ export function CalendarMap({ label, nodes, edges, functions, nodeDrop, layoutSt
   const nodeLabel = (id: string) => nodeById.get(id)?.label ?? id;
 
   return (
-    <section ref={rootRef} className={styles.map} aria-label={label} onKeyDown={onRootKeyDown}>
+    <section
+      ref={rootRef}
+      className={styles.map}
+      data-grid={view.background}
+      data-locked={view.locked}
+      aria-label={label}
+      onKeyDown={onRootKeyDown}
+    >
+      <header className={styles.header}>
+        <div>
+          <h2>{label}</h2>
+          <p>Sources, functions, and calendars.</p>
+        </div>
+        <span className={styles.count}>
+          {nodes.length} nodes · {edges.length} connections
+        </span>
+      </header>
       <div className={styles.toolbar}>
         <div className={styles.toolbarSlot}>{toolbar}</div>
-        <button type="button" className={styles.button} onClick={tidy}>
-          Arrange
-        </button>
-      </div>
-      <ul className={styles.legend} aria-label="What the lines mean">
-        <li><i data-kind="write" /> Agent can change</li>
-        <li><i data-kind="read" /> Agent can read</li>
-        <li><i data-kind="rule" /> Rule</li>
-      </ul>
-
-      <div className={styles.stage}>
-        <div ref={frameRef} className={styles.frame}>
-          <div
-            ref={canvasRef}
-            className={styles.canvas}
-            style={{ width: width || undefined, height }}
-            onPointerDown={onCanvasPointerDown}
-            onPointerMove={onCanvasPointerMove}
+        <div className={styles.toolbarSlot}>
+          <button type="button" className={styles.button} onClick={tidy}>
+            Auto-arrange
+          </button>
+          <button
+            type="button"
+            className={styles.button}
+            aria-expanded={settingsOpen}
+            aria-controls={`${markerId}-settings`}
+            onClick={() => setSettingsOpen(!settingsOpen)}
           >
-            {ready ? (
-              <svg className={styles.edges} width={width} height={height} aria-hidden="true">
-                <defs>
-                  {(["neutral", "accent"] as const).map((tone) => (
-                    <marker
-                      key={tone}
-                      id={`${markerId}-${tone}`}
-                      viewBox="0 0 10 10"
-                      refX="8.5"
-                      refY="5"
-                      markerWidth="9"
-                      markerHeight="9"
-                      markerUnits="userSpaceOnUse"
-                      orient="auto-start-reverse"
-                    >
-                      <path d="M1 1.5 9 5 1 8.5z" className={tone === "accent" ? styles.arrowAccent : styles.arrowNeutral} />
-                    </marker>
-                  ))}
-                </defs>
-                {shapes.map(({ edge, geo }) => (
-                  <path
-                    key={edge.id}
-                    className={styles.edge}
-                    d={
-                      geo.control
-                        ? `M${geo.start.x} ${geo.start.y}Q${geo.control.x} ${geo.control.y} ${geo.end.x} ${geo.end.y}`
-                        : `M${geo.start.x} ${geo.start.y}L${geo.end.x} ${geo.end.y}`
-                    }
-                    strokeWidth={1.25 + clamp(edge.weight ?? 0, 0, 1) * 1.75}
-                    data-tone={edge.tone ?? "neutral"}
-                    data-dash={edge.dash}
-                    data-faint={edge.faint || undefined}
-                    data-selected={(selection?.kind === "edge" && selection.id === edge.id) || undefined}
-                    markerEnd={edge.directed ? `url(#${markerId}-${edge.tone === "accent" ? "accent" : "neutral"})` : undefined}
-                  />
-                ))}
-                {liveLine ? (
-                  <line
-                    className={styles.liveLine}
-                    x1={liveLine.start.x}
-                    y1={liveLine.start.y}
-                    x2={liveLine.end.x}
-                    y2={liveLine.end.y}
-                  />
-                ) : null}
-              </svg>
-            ) : null}
-
-            {shapes.map(({ edge, geo }) => {
-              const selected = selection?.kind === "edge" && selection.id === edge.id;
-              const pick = () => setSelection(selected ? null : { kind: "edge", id: edge.id });
-              if (edge.via) {
-                return (
-                  <button
-                    key={edge.id}
-                    type="button"
-                    className={styles.via}
-                    style={{ transform: `translate(${geo.mid.x}px, ${geo.mid.y}px) translate(-50%, -50%)` }}
-                    data-selected={selected || undefined}
-                    aria-pressed={selected}
-                    aria-label={`${edge.via.label}: ${nodeLabel(edge.from)} to ${nodeLabel(edge.to)}`}
-                    onClick={pick}
-                  >
-                    {edge.via.label}
-                  </button>
-                );
-              }
-              if (!edge.label) return null;
-              const spoken = `${nodeLabel(edge.from)} to ${nodeLabel(edge.to)}: ${edge.label}`;
-              const shift = { start: "translate(0, -50%)", middle: "translate(-50%, -50%)", end: "translate(-100%, -50%)" }[geo.label.align];
-              return (
-                <button
-                  key={edge.id}
-                  type="button"
-                  className={styles.edgeLabel}
-                  style={{ transform: `translate(${geo.label.x}px, ${geo.label.y}px) ${shift}` }}
-                  data-selected={selected || undefined}
-                  aria-pressed={selected}
-                  aria-label={spoken}
-                  onClick={pick}
-                >
-                  {edge.label}
-                </button>
-              );
-            })}
-
-            {ready
-              ? nodes.map((node) => {
-                  const centre = centres[node.id];
-                  const answer = acceptance(node.id);
-                  const selected = selection?.kind === "node" && selection.id === node.id;
-                  const highlighted = over === node.id || (linkOver === node.id && answer === true);
-                  const { w: nodeW, h: nodeH } = sizeOf(node.id);
-                  //the toggle sits in the header row, which is the whole node unless it's a box
-                  const headerY = centre.y - nodeH / 2 + NODE_SIZE.h / 2;
-                  return (
-                    <Fragment key={node.id}>
-                      <button
-                        type="button"
-                        className={styles.node}
-                        style={
-                          {
-                            width: nodeW,
-                            height: nodeH,
-                            transform: `translate3d(${centre.x - nodeW / 2}px, ${centre.y - nodeH / 2}px, 0)`,
-                            "--node-color": node.color,
-                          } as CSSProperties
-                        }
-                        data-hub={node.group === "hub" || undefined}
-                        data-selected={selected || undefined}
-                        data-pressed={pressed === node.id || undefined}
-                        data-dimmed={node.dimmed || undefined}
-                        data-toggle={node.toggle ? true : undefined}
-                      data-box={node.box ? true : undefined}
-                      data-node={node.id}
-                        data-accept={answer === true ? "yes" : typeof answer === "string" ? "no" : undefined}
-                        data-over={highlighted || undefined}
-                        aria-pressed={selected}
-                        aria-disabled={typeof answer === "string" || undefined}
-                        aria-label={spokenNode(node)}
-                        title={typeof answer === "string" ? answer : node.label}
-                        {...nodeDrag.bind(node.id)}
-                        onClick={(event) => {
-                          if (event.detail === 0) activateNode(node.id);
-                        }}
-                        onKeyDown={(event) => onNodeKeyDown(event, node.id)}
-                      >
-                        <span key={pulse?.id === node.id ? pulse.key : "body"} className={styles.nodeBody} data-pulse={pulse?.id === node.id || undefined}>
-                          <span className={styles.swatch} aria-hidden="true" />
-                          <span className={styles.nodeText}>
-                            <span className={styles.nodeLabel}>
-                              {node.badge ? <span className={styles.badge}>{node.badge}</span> : null}
-                              <span>{node.label}</span>
-                              {node.locked ? <LockGlyph /> : null}
-                            </span>
-                            {node.caption ? <span className={styles.caption}>{node.caption}</span> : null}
-                          </span>
-                          {node.busy ? <span className={styles.spinner} aria-hidden="true" /> : null}
-                        </span>
-                        {/*the handle that's drawing must stay mounted, or its pointer capture goes with it*/}
-                        {(gesture.kind === "idle" || (gesture.kind === "linking" && gesture.held && gesture.from === node.id)) &&
-                        canDrawFrom(node.id) ? (
-                          <span className={styles.handle} aria-hidden="true" {...bindHandle(node.id)} />
-                        ) : null}
-                      </button>
-                      {node.toggle ? (
-                        <button
-                          type="button"
-                          className={styles.nodeToggle}
-                          style={{ transform: `translate3d(${centre.x + nodeW / 2 - TOGGLE - 8}px, ${headerY - TOGGLE / 2}px, 0)` }}
-                          aria-pressed={node.toggle.on}
-                          aria-label={node.toggle.label}
-                          title={node.toggle.label}
-                          //keep the press from reaching the canvas, which would clear the selection
-                          onPointerDown={(event) => event.stopPropagation()}
-                          onClick={() => {
-                            const toggle = node.toggle;
-                            if (toggle) void run(toggle.run, node.id);
-                          }}
-                        >
-                          {node.toggle.icon}
-                        </button>
-                      ) : null}
-                      {node.box ? (
-                        <div
-                          className={styles.boxRows}
-                          style={{ width: nodeW, transform: `translate3d(${centre.x - nodeW / 2}px, ${centre.y - nodeH / 2 + NODE_SIZE.h}px, 0)` }}
-                          //rows have their own controls; a press here mustn't drag the box or clear the selection
-                          onPointerDown={(event) => event.stopPropagation()}
-                        >
-                          {node.box.rows.length === 0 ? (
-                            <p className={styles.boxEmpty}>{node.box.empty ?? "Empty"}</p>
-                          ) : (
-                            <ul className={styles.boxList} aria-label={`${node.label}: items`}>
-                              {node.box.rows.map((row) => (
-                                <li key={row.id} className={styles.boxRow}>
-                                  <span className={styles.swatch} style={{ background: row.color }} aria-hidden="true" />
-                                  <span className={styles.boxLabel} title={row.label}>
-                                    {row.label}
-                                  </span>
-                                  {row.choice ? (
-                                    <select
-                                      className={styles.boxChoice}
-                                      aria-label={`${row.choice.label}: ${row.label}`}
-                                      value={row.choice.value}
-                                      onChange={(event) => {
-                                        const choice = row.choice;
-                                        const value = event.target.value;
-                                        if (choice && value !== choice.value) void run(() => choice.onChange(value), node.id);
-                                      }}
-                                    >
-                                      {row.choice.options.map((option) => (
-                                        <option key={option.value} value={option.value}>
-                                          {option.label}
-                                        </option>
-                                      ))}
-                                    </select>
-                                  ) : null}
-                                  {row.remove ? (
-                                    <button
-                                      type="button"
-                                      className={styles.boxRemove}
-                                      aria-label={`${row.remove.label}: ${row.label}`}
-                                      title={row.remove.label}
-                                      onClick={() => {
-                                        const remove = row.remove;
-                                        if (!remove) return;
-                                        //the row goes away with its button, so keep focus on the box, where Delete and ⌘Z still work
-                                        rootRef.current?.querySelector<HTMLElement>(`[data-node="${CSS.escape(node.id)}"]`)?.focus({ preventScroll: true });
-                                        void run(remove.run, node.id);
-                                      }}
-                                    >
-                                      <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
-                                        <path d="M2 2l6 6M8 2l-6 6" />
-                                      </svg>
-                                    </button>
-                                  ) : null}
-                                </li>
-                              ))}
-                            </ul>
-                          )}
-                        </div>
-                      ) : null}
-                    </Fragment>
-                  );
-                })
-              : null}
-
-            {nodes.length === 0 && empty ? <div className={styles.empty}>{empty}</div> : null}
-          </div>
+            Customize
+          </button>
         </div>
-
-        {toast ? (
-          <div key={toast.key} className={styles.toast}>
-            <span>{toast.message}</span>
-            {toast.change ? (
-              <button type="button" className={styles.toastButton} onClick={() => undo(toast.change)}>
-                Undo
+      </div>
+      {settingsOpen ? (
+        <div id={`${markerId}-settings`} className={styles.settings}>
+          <label className={styles.field}>
+            Connections
+            <select
+              value={view.connections}
+              onChange={(event) => setView({ ...view, connections: event.target.value as ViewPreferences["connections"] })}
+            >
+              <option value="all">All connections</option>
+              <option value="selected">Selected node only</option>
+              <option value="none">Hide connections</option>
+            </select>
+          </label>
+          <label>
+            <input type="checkbox" checked={view.labels} onChange={(event) => setView({ ...view, labels: event.target.checked })} />{" "}
+            Connection labels
+          </label>
+          <label>
+            <input type="checkbox" checked={view.background} onChange={(event) => setView({ ...view, background: event.target.checked })} />{" "}
+            Dot grid
+          </label>
+          <label>
+            <input type="checkbox" checked={view.locked} onChange={(event) => setView({ ...view, locked: event.target.checked })} /> Lock
+            positions
+          </label>
+          {settings}
+          <span className={styles.hint}>
+            {preferencesKey ? "View preferences save on this device." : "Preferences apply to this session."}
+          </span>
+        </div>
+      ) : null}
+      {status ? (
+        <div className={styles.status} role="status">
+          <span>{status}</span>
+          <button type="button" className={styles.button} onClick={() => cancel()}>
+            Cancel
+          </button>
+        </div>
+      ) : null}
+      <div className={styles.workspace}>
+        <div className={styles.stage}>
+          <div className={styles.mapBar}>
+            <div className={styles.zoomControls} role="group" aria-label="Map zoom">
+              <button
+                type="button"
+                aria-label="Zoom out"
+                disabled={scale <= 0.5}
+                onClick={() => setView({ ...view, zoom: Math.max(0.5, scale - 0.1) })}
+              >
+                −
               </button>
-            ) : null}
+              <span>{Math.round(scale * 100)}%</span>
+              <button
+                type="button"
+                aria-label="Zoom in"
+                disabled={scale >= 1.5}
+                onClick={() => setView({ ...view, zoom: Math.min(1.5, scale + 0.1) })}
+              >
+                +
+              </button>
+              <button type="button" onClick={() => setView({ ...view, zoom: null })}>
+                Fit
+              </button>
+            </div>
+            <span>{view.locked ? "Positions locked" : "Drag to arrange · click to manage"}</span>
+            <span>
+              {view.connections === "selected"
+                ? "Showing selected connections"
+                : view.connections === "none"
+                  ? "Connections hidden"
+                  : "All connections"}
+            </span>
           </div>
-        ) : null}
+          <div ref={frameRef} className={styles.frame} tabIndex={0} aria-label="Calendar map canvas; scroll to explore">
+            <div style={{ width: width * scale || undefined, height: height * scale, marginInline: "auto", overflow: "hidden" }}>
+              <div
+                ref={canvasRef}
+                className={styles.canvas}
+                style={{ width: width || undefined, height, transform: `scale(${scale})`, transformOrigin: "top left" }}
+                onPointerDown={onCanvasPointerDown}
+                onPointerMove={onCanvasPointerMove}
+              >
+                {ready ? (
+                  <div className={styles.lanes} aria-hidden="true">
+                    {(["left", "hub", "right"] as const).map((group) => (
+                      <span key={group}>{groupLabels?.[group] ?? { left: "Calendars", hub: "Hub", right: "Sources" }[group]}</span>
+                    ))}
+                  </div>
+                ) : null}
+                {ready ? (
+                  <svg className={styles.edges} width={width} height={height} role="group" aria-label="Calendar connections">
+                    <defs>
+                      {(["neutral", "accent"] as const).map((tone) => (
+                        <marker
+                          key={tone}
+                          id={`${markerId}-${tone}`}
+                          viewBox="0 0 10 10"
+                          refX="8.5"
+                          refY="5"
+                          markerWidth="8"
+                          markerHeight="8"
+                          markerUnits="userSpaceOnUse"
+                          orient="auto-start-reverse"
+                        >
+                          <path
+                            d="M2 1.5 7.5 5 2 8.5"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.5"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            className={tone === "accent" ? styles.arrowAccent : styles.arrowNeutral}
+                          />
+                        </marker>
+                      ))}
+                    </defs>
+                    {shapes.map(({ edge, geo }) => (
+                      <g key={edge.id}>
+                        <path
+                          className={styles.edge}
+                          d={geo.path}
+                          strokeWidth={1.4}
+                          data-muted={(selectedNode && edge.from !== selectedNode.id && edge.to !== selectedNode.id) || undefined}
+                          data-tone={edge.tone ?? "neutral"}
+                          data-dash={edge.dash}
+                          data-faint={edge.faint || undefined}
+                          data-selected={(selection?.kind === "edge" && selection.id === edge.id) || undefined}
+                          markerEnd={edge.directed ? `url(#${markerId}-${edge.tone === "accent" ? "accent" : "neutral"})` : undefined}
+                        />
+                        <path
+                          className={styles.edgeHit}
+                          d={geo.path}
+                          role="button"
+                          tabIndex={0}
+                          aria-label={`${nodeLabel(edge.from)} to ${nodeLabel(edge.to)}${edge.label ? `: ${edge.label}` : ""}`}
+                          aria-pressed={selection?.kind === "edge" && selection.id === edge.id}
+                          onClick={() => setSelection({ kind: "edge", id: edge.id })}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault();
+                              setSelection({ kind: "edge", id: edge.id });
+                            }
+                          }}
+                        />
+                      </g>
+                    ))}
+                    {liveLine ? (
+                      <line
+                        className={styles.liveLine}
+                        x1={liveLine.start.x}
+                        y1={liveLine.start.y}
+                        x2={liveLine.end.x}
+                        y2={liveLine.end.y}
+                      />
+                    ) : null}
+                  </svg>
+                ) : null}
 
-        {functions.length > 0 ? (
-          <div className={styles.palette} role="group" aria-label="Actions">
-            {groups.map(([group, list]) => (
-              <div key={group} className={styles.paletteGroup} role="group" aria-label={group}>
-                <span className={styles.paletteHeading}>{group}</span>
-                {list.map((fn) => (
-                  <button
-                    key={fn.id}
-                    ref={(element) => {
-                      if (element) chipRefs.current.set(fn.id, element);
-                      else chipRefs.current.delete(fn.id);
-                    }}
-                    type="button"
-                    className={styles.chip}
-                    aria-pressed={gesture.kind === "armed" && gesture.fnId === fn.id}
-                    {...fnDrag.bind(fn.id)}
-                    onClick={(event) => {
-                      if (event.detail === 0) toggleArm(fn.id);
-                    }}
-                  >
-                    {fn.icon}
-                    {fn.label}
-                  </button>
+                {shapes.map(({ edge, geo }) => {
+                  const selected = selection?.kind === "edge" && selection.id === edge.id;
+                  const pick = () => setSelection(selected ? null : { kind: "edge", id: edge.id });
+                  if (edge.via) {
+                    return (
+                      <button
+                        key={edge.id}
+                        type="button"
+                        className={styles.via}
+                        style={{ transform: `translate(${geo.mid.x}px, ${geo.mid.y}px) translate(-50%, -50%)` }}
+                        data-selected={selected || undefined}
+                        aria-pressed={selected}
+                        aria-label={`${edge.via.label}: ${nodeLabel(edge.from)} to ${nodeLabel(edge.to)}`}
+                        onClick={pick}
+                      >
+                        {edge.via.label}
+                      </button>
+                    );
+                  }
+                  if (!edge.label || (!view.labels && !selected)) return null;
+                  const spoken = `${nodeLabel(edge.from)} to ${nodeLabel(edge.to)}: ${edge.label}`;
+                  //a label wider than the gap it sits in shrinks to a dot; the inspector still has the words
+                  const roomy =
+                    geo.label.align !== "middle" ||
+                    Math.hypot(geo.end.x - geo.start.x, geo.end.y - geo.start.y) >= edge.label.length * 6.4 + 28;
+                  if (!roomy) {
+                    return (
+                      <button
+                        key={edge.id}
+                        type="button"
+                        className={styles.edgeDot}
+                        style={{ transform: `translate(${geo.mid.x}px, ${geo.mid.y}px) translate(-50%, -50%)` }}
+                        data-tone={edge.tone ?? "neutral"}
+                        data-selected={selected || undefined}
+                        aria-pressed={selected}
+                        aria-label={spoken}
+                        title={edge.label}
+                        onClick={pick}
+                      />
+                    );
+                  }
+                  const shift = { start: "translate(0, -50%)", middle: "translate(-50%, -50%)", end: "translate(-100%, -50%)" }[
+                    geo.label.align
+                  ];
+                  return (
+                    <button
+                      key={edge.id}
+                      type="button"
+                      className={styles.edgeLabel}
+                      style={{ transform: `translate(${geo.label.x}px, ${geo.label.y}px) ${shift}` }}
+                      data-selected={selected || undefined}
+                      aria-pressed={selected}
+                      aria-label={spoken}
+                      onClick={pick}
+                    >
+                      {edge.label}
+                    </button>
+                  );
+                })}
+
+                {ready
+                  ? nodes.map((node) => {
+                      const centre = centres[node.id];
+                      const answer = acceptance(node.id);
+                      const selected = selection?.kind === "node" && selection.id === node.id;
+                      const highlighted = over === node.id || (linkOver === node.id && answer === true);
+                      const { w: nodeW, h: nodeH } = sizeOf(node.id);
+                      //the toggle sits in the header row, which is the whole node unless it's a box
+                      const headerY = centre.y - nodeH / 2 + NODE_SIZE.h / 2;
+                      return (
+                        <Fragment key={node.id}>
+                          <button
+                            type="button"
+                            className={styles.node}
+                            style={
+                              {
+                                width: nodeW,
+                                height: nodeH,
+                                transform: `translate3d(${centre.x - nodeW / 2}px, ${centre.y - nodeH / 2}px, 0)`,
+                                "--node-color": node.color,
+                              } as CSSProperties
+                            }
+                            data-search-muted={
+                              (query.trim() && !`${node.label} ${node.caption ?? ""}`.toLowerCase().includes(query.trim().toLowerCase())) ||
+                              undefined
+                            }
+                            data-variant={node.variant}
+                            data-hub={node.group === "hub" || undefined}
+                            data-selected={selected || undefined}
+                            data-pressed={pressed === node.id || undefined}
+                            data-dimmed={node.dimmed || undefined}
+                            data-toggle={node.toggle ? true : undefined}
+                            data-box={node.box && node.variant !== "function" ? true : undefined}
+                            data-node={node.id}
+                            data-accept={answer === true ? "yes" : typeof answer === "string" ? "no" : undefined}
+                            data-over={highlighted || undefined}
+                            aria-pressed={selected}
+                            aria-disabled={typeof answer === "string" || undefined}
+                            aria-label={spokenNode(node)}
+                            title={typeof answer === "string" ? answer : node.label}
+                            {...(view.locked ? {} : nodeDrag.bind(node.id))}
+                            onClick={(event) => {
+                              if (view.locked || event.detail === 0) activateNode(node.id);
+                            }}
+                            onKeyDown={(event) => onNodeKeyDown(event, node.id)}
+                          >
+                            <span
+                              key={pulse?.id === node.id ? pulse.key : "body"}
+                              className={styles.nodeBody}
+                              data-pulse={pulse?.id === node.id || undefined}
+                            >
+                              <span className={styles.swatch} aria-hidden="true" />
+                              <span className={styles.nodeText}>
+                                <span className={styles.nodeLabel}>
+                                  {node.badge ? <span className={styles.badge}>{node.badge}</span> : null}
+                                  <span>{node.label}</span>
+                                  {node.locked ? <LockGlyph /> : null}
+                                </span>
+                                {node.caption ? <span className={styles.caption}>{node.caption}</span> : null}
+                              </span>
+                              {node.busy ? <span className={styles.spinner} aria-hidden="true" /> : null}
+                            </span>
+                            {/*the handle that's drawing must stay mounted, or its pointer capture goes with it*/}
+                            {(gesture.kind === "idle" || (gesture.kind === "linking" && gesture.held && gesture.from === node.id)) &&
+                            canDrawFrom(node.id) ? (
+                              <span className={styles.handle} aria-hidden="true" {...bindHandle(node.id)} />
+                            ) : null}
+                          </button>
+                          {node.toggle ? (
+                            <button
+                              type="button"
+                              className={styles.nodeToggle}
+                              style={{ transform: `translate3d(${centre.x + nodeW / 2 - TOGGLE - 8}px, ${headerY - TOGGLE / 2}px, 0)` }}
+                              aria-pressed={node.toggle.on}
+                              aria-label={node.toggle.label}
+                              title={node.toggle.label}
+                              //keep the press from reaching the canvas, which would clear the selection
+                              onPointerDown={(event) => event.stopPropagation()}
+                              onClick={() => {
+                                const toggle = node.toggle;
+                                if (toggle) void run(toggle.run, node.id);
+                              }}
+                            >
+                              {node.toggle.icon}
+                            </button>
+                          ) : null}
+                          {node.box && node.variant !== "function" ? (
+                            <div
+                              className={styles.boxRows}
+                              style={{
+                                width: nodeW,
+                                transform: `translate3d(${centre.x - nodeW / 2}px, ${centre.y - nodeH / 2 + NODE_SIZE.h}px, 0)`,
+                              }}
+                              //rows have their own controls; a press here mustn't drag the box or clear the selection
+                              onPointerDown={(event) => event.stopPropagation()}
+                            >
+                              {node.box.rows.length === 0 ? (
+                                <p className={styles.boxEmpty}>{node.box.empty ?? "Empty"}</p>
+                              ) : (
+                                <ul className={styles.boxList} aria-label={`${node.label}: items`}>
+                                  {node.box.rows.map((row) => (
+                                    <li key={row.id} className={styles.boxRow}>
+                                      <span className={styles.swatch} style={{ background: row.color }} aria-hidden="true" />
+                                      <span className={styles.boxLabel} title={row.label}>
+                                        {row.label}
+                                      </span>
+                                      {row.choice ? (
+                                        <select
+                                          className={styles.boxChoice}
+                                          aria-label={`${row.choice.label}: ${row.label}`}
+                                          value={row.choice.value}
+                                          onChange={(event) => {
+                                            const choice = row.choice;
+                                            const value = event.target.value;
+                                            if (choice && value !== choice.value) void run(() => choice.onChange(value), node.id);
+                                          }}
+                                        >
+                                          {row.choice.options.map((option) => (
+                                            <option key={option.value} value={option.value}>
+                                              {option.label}
+                                            </option>
+                                          ))}
+                                        </select>
+                                      ) : null}
+                                      {row.remove ? (
+                                        <button
+                                          type="button"
+                                          className={styles.boxRemove}
+                                          aria-label={`${row.remove.label}: ${row.label}`}
+                                          title={row.remove.label}
+                                          onClick={() => {
+                                            const remove = row.remove;
+                                            if (!remove) return;
+                                            //the row goes away with its button, so keep focus on the box, where Delete and ⌘Z still work
+                                            rootRef.current
+                                              ?.querySelector<HTMLElement>(`[data-node="${CSS.escape(node.id)}"]`)
+                                              ?.focus({ preventScroll: true });
+                                            void run(remove.run, node.id);
+                                          }}
+                                        >
+                                          <svg
+                                            width="10"
+                                            height="10"
+                                            viewBox="0 0 10 10"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            strokeWidth="1.6"
+                                            aria-hidden="true"
+                                          >
+                                            <path d="M2 2l6 6M8 2l-6 6" />
+                                          </svg>
+                                        </button>
+                                      ) : null}
+                                    </li>
+                                  ))}
+                                </ul>
+                              )}
+                            </div>
+                          ) : null}
+                        </Fragment>
+                      );
+                    })
+                  : null}
+
+                {nodes.length === 0 && empty ? <div className={styles.empty}>{empty}</div> : null}
+              </div>
+            </div>
+          </div>
+
+          {toast ? (
+            <div key={toast.key} className={styles.toast}>
+              <span>{toast.message}</span>
+              {toast.change ? (
+                <button type="button" className={styles.toastButton} onClick={() => undo(toast.change)}>
+                  Undo
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+
+          {functions.length > 0 ? (
+            <details className={styles.advanced}>
+              <summary>
+                More tools <span>Drag or click to apply</span>
+              </summary>
+              <div className={styles.palette} role="group" aria-label="Functions">
+                {groups.map(([group, list]) => (
+                  <div key={group} className={styles.paletteGroup} role="group" aria-label={group}>
+                    <span className={styles.paletteHeading} aria-hidden="true">
+                      {group}
+                    </span>
+                    {list.map((fn) => (
+                      <button
+                        key={fn.id}
+                        ref={(element) => {
+                          if (element) chipRefs.current.set(fn.id, element);
+                          else chipRefs.current.delete(fn.id);
+                        }}
+                        type="button"
+                        className={styles.chip}
+                        aria-pressed={gesture.kind === "armed" && gesture.fnId === fn.id}
+                        {...fnDrag.bind(fn.id)}
+                        onClick={(event) => {
+                          if (event.detail === 0) toggleArm(fn.id);
+                        }}
+                      >
+                        {fn.icon}
+                        {fn.label}
+                      </button>
+                    ))}
+                  </div>
                 ))}
               </div>
-            ))}
-          </div>
-        ) : null}
-      </div>
+            </details>
+          ) : null}
+        </div>
 
-      <div className={styles.inspector}>
-        {selectedNode ? (
-          <>
-            <div className={styles.inspectorText}>
-              <p className={styles.inspectorTitle}>{selectedNode.label}</p>
-              {selectedNode.details?.length ? (
+        <aside ref={inspectorRef} className={styles.inspector} aria-label="Calendar details and navigation">
+          <label className={styles.field}>
+            Find a calendar
+            <input type="search" value={query} placeholder="Search calendars…" onChange={(event) => setQuery(event.target.value)} />
+          </label>
+          {query.trim() ? (
+            <div className={styles.searchResults}>
+              {nodes
+                .filter((node) => `${node.label} ${node.caption ?? ""}`.toLowerCase().includes(query.trim().toLowerCase()))
+                .map((node) => (
+                  <button
+                    type="button"
+                    key={node.id}
+                    className={styles.connection}
+                    onClick={() => {
+                      setSelection({ kind: "node", id: node.id });
+                      rootRef.current
+                        ?.querySelector<HTMLElement>(`[data-node="${CSS.escape(node.id)}"]`)
+                        ?.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" });
+                    }}
+                  >
+                    {node.label}
+                  </button>
+                ))}
+              {!nodes.some((node) => `${node.label} ${node.caption ?? ""}`.toLowerCase().includes(query.trim().toLowerCase())) ? (
+                <p className={styles.hint}>No calendars match “{query}”.</p>
+              ) : null}
+            </div>
+          ) : null}
+          {selectedNode ? (
+            <MapInspector
+              node={selectedNode}
+              nodes={nodes}
+              edges={edges}
+              functions={functions}
+              nodeDrop={nodeDrop}
+              run={run}
+              selectEdge={(id) => setSelection({ kind: "edge", id })}
+            />
+          ) : selectedEdge ? (
+            <>
+              <div className={styles.inspectorText}>
+                <span className={styles.eyebrow}>Connection details</span>
+                <h3 className={styles.inspectorTitle}>
+                  {selectedEdge.via?.label ?? `${nodeLabel(selectedEdge.from)} → ${nodeLabel(selectedEdge.to)}`}
+                </h3>
                 <ul className={styles.inspectorLines}>
-                  {selectedNode.details.map((line) => (
+                  {selectedEdge.details?.map((line) => (
                     <li key={line}>{line}</li>
                   ))}
                 </ul>
-              ) : null}
-            </div>
-            <div className={styles.inspectorActions}>
-              {selectedNode.actions?.map((action) => (
-                <button key={action.id} type="button" className={styles.button} onClick={() => void run(action.run, selectedNode.id)}>
-                  {action.label}
+              </div>
+              <div className={styles.inspectorActions}>
+                {selectedEdge.actions?.map((action) => (
+                  <button key={action.id} type="button" className={styles.button} onClick={() => void run(action.run, selectedEdge.to)}>
+                    {action.label}
+                  </button>
+                ))}
+                {selectedEdge.remove ? (
+                  <button type="button" className={styles.button} data-tone="danger" onClick={() => removeEdge(selectedEdge)}>
+                    {selectedEdge.remove.label ?? "Delete link"}
+                  </button>
+                ) : null}
+                <button type="button" className={styles.button} onClick={() => setSelection({ kind: "node", id: selectedEdge.from })}>
+                  Back to {nodeLabel(selectedEdge.from)}
                 </button>
-              ))}
-              <button type="button" className={styles.button} onClick={() => setSelection(null)}>
-                Done
-              </button>
-            </div>
-          </>
-        ) : selectedEdge ? (
-          <>
-            <div className={styles.inspectorText}>
-              <p className={styles.inspectorTitle}>
-                {selectedEdge.via?.label ?? `${nodeLabel(selectedEdge.from)} → ${nodeLabel(selectedEdge.to)}`}
-              </p>
-              {selectedEdge.details?.length ? (
-                <ul className={styles.inspectorLines}>
-                  {selectedEdge.details.map((line) => (
-                    <li key={line}>{line}</li>
-                  ))}
-                </ul>
-              ) : null}
-            </div>
-            <div className={styles.inspectorActions}>
-              {selectedEdge.actions?.map((action) => (
-                <button key={action.id} type="button" className={styles.button} onClick={() => void run(action.run, selectedEdge.to)}>
-                  {action.label}
-                </button>
-              ))}
-              {selectedEdge.remove ? (
-                <button
-                  type="button"
-                  className={styles.button}
-                  data-tone="danger"
-                  aria-keyshortcuts="Delete Backspace"
-                  onClick={() => removeEdge(selectedEdge)}
-                >
-                  {selectedEdge.remove.label ?? "Delete link"}
-                </button>
-              ) : null}
-              <button type="button" className={styles.button} onClick={() => setSelection(null)}>
-                Done
-              </button>
-            </div>
-          </>
-        ) : (
-          <p className={styles.hint}>{status ?? hint ?? "Select a calendar, or drag an action onto one. Drag from the dot on a calendar to connect it to another. Delete removes the selected line."}</p>
-        )}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className={styles.welcome}>
+                <span className={styles.eyebrow}>Start here</span>
+                <h3>Your calendar flow</h3>
+                <p>Select a calendar or function to see its settings. Follow an arrow to inspect the connection.</p>
+              </div>
+              <div className={styles.directory}>
+                {(["left", "hub", "right"] as const).map((group) => (
+                  <div key={group}>
+                    <span className={styles.eyebrow}>
+                      {groupLabels?.[group] ?? { left: "Calendars", hub: "Hub", right: "Sources" }[group]}
+                    </span>
+                    {nodes
+                      .filter((node) => node.group === group)
+                      .map((node) => (
+                        <button
+                          type="button"
+                          className={styles.connection}
+                          key={node.id}
+                          onClick={() => setSelection({ kind: "node", id: node.id })}
+                        >
+                          <strong>{node.label}</strong>
+                          <span>{node.caption}</span>
+                        </button>
+                      ))}
+                  </div>
+                ))}
+              </div>
+              <details className={styles.help}>
+                <summary>How to use the map</summary>
+                <p>{hint ?? "Select any node to manage it. Drag nodes to arrange your workspace. Use Customize to change the view."}</p>
+              </details>
+            </>
+          )}
+          {selection ? (
+            <button type="button" className={styles.button} onClick={() => setSelection(null)}>
+              Back to all calendars
+            </button>
+          ) : null}
+        </aside>
       </div>
 
       {ghost ? (

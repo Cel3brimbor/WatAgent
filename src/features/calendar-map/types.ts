@@ -12,6 +12,8 @@ export type MapNode = {
   /** Any CSS color, drawn as the node's swatch. */
   color: string;
   group: MapNodeGroup;
+  /** Compact processing step, with configuration shown only in the inspector. */
+  variant?: "function";
   /** Short leading badge, such as a rank. */
   badge?: string;
   /** Second line under the label. */
@@ -109,6 +111,8 @@ type FunctionBase = {
 
 /** Dropped on one node. */
 export type MapNodeFunction = FunctionBase & {
+  /** Contextual action text in the selected node’s inspector. */
+  actionLabel?: (nodeId: string) => string;
   kind: "node";
   /** true, or the reason this node can't take it. */
   accepts: (nodeId: string) => true | string;

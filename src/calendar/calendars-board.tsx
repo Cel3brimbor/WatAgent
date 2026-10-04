@@ -1,6 +1,18 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { CSS as dndCSS } from "@dnd-kit/utilities";
+import { GripIcon } from "@/shared/icons";
 import { SegmentedControl } from "@/shared/segmented-control";
 import { Switch } from "@/shared/switch";
 import { useDialog } from "@/shared/use-dialog";
@@ -39,8 +51,6 @@ export type MergeMemberModel = {
   name: string;
   color: string;
   sharedLabel: string;
-  rank: number;
-  ranks: { value: string; label: string }[];
 };
 
 export type MergeModel = {
@@ -559,7 +569,7 @@ function MergedPane({
   return (
     <div className="calendars-pane">
       <div className="calendars-pane-bar">
-        <p className="calendars-note">Combine imported calendars that share events. Rank 1 is the copy you see.</p>
+        <p className="calendars-note">Combine imported calendars that share events. Drag the rows to set priority — the first calendar wins.</p>
         <button type="button" className="primary-btn" onClick={onNewMerge}>
           New merge
         </button>
@@ -584,7 +594,7 @@ function MergedPane({
               ? merge.members.length === 0
                 ? "Add at least two imported calendars."
                 : "Add one more calendar to merge. Until then this is saved on this device only, and it is not on the calendar yet."
-              : "When an event is on more than one calendar, Rank 1 is the one you see, then Rank 2, and so on."}
+              : "When an event is on more than one calendar, the first row is the copy you see. Drag to reorder."}
           </p>
           {merge.draft ? null : (
             <Setting
@@ -595,47 +605,7 @@ function MergedPane({
               onChange={(shown) => onShowMerge(merge.id, shown)}
             />
           )}
-          <ol className="calendars-members">
-            {merge.members.map((member, index) => (
-              <li key={member.id} className="calendars-member">
-                <span className="calendars-member-rank">{index + 1}</span>
-                <span className="calendars-swatch" style={{ background: member.color }} aria-hidden="true" />
-                <span className="calendars-row-copy">
-                  <span className="calendars-row-name">
-                    {member.name}
-                    {index === 0 && !merge.draft ? " · Wins" : ""}
-                  </span>
-                  {merge.draft ? null : <span className="calendars-row-caption">{member.sharedLabel}</span>}
-                </span>
-                {member.ranks.length > 1 ? (
-                  <label className="calendars-rank">
-                    <span className="calendars-sr">Rank for {member.name}</span>
-                    <select
-                      className="calendar-editor-input calendar-editor-select"
-                      value={String(member.rank)}
-                      aria-label={`Rank for ${member.name}`}
-                      onChange={(event) => onRank(merge.id, member.id, Number(event.target.value))}
-                    >
-                      {member.ranks.map((rank) => (
-                        <option key={rank.value} value={rank.value}>
-                          {rank.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                ) : null}
-                <button type="button" className="ghost-btn" disabled={index === 0} onClick={() => onRank(merge.id, member.id, index - 1)}>
-                  Move up
-                </button>
-                <button type="button" className="ghost-btn" disabled={index === merge.members.length - 1} onClick={() => onRank(merge.id, member.id, index + 1)}>
-                  Move down
-                </button>
-                <button type="button" className="ghost-btn" onClick={() => onRemoveMember(member.id)}>
-                  Remove
-                </button>
-              </li>
-            ))}
-          </ol>
+          <MemberList merge={merge} onRank={onRank} onRemoveMember={onRemoveMember} />
           <div className="calendars-actions">
             <button type="button" className="ghost-btn" onClick={() => onAddToMerge(merge.id)}>
               Add calendar
@@ -648,6 +618,92 @@ function MergedPane({
         </article>
       ))}
     </div>
+  );
+}
+
+function MemberList({
+  merge,
+  onRank,
+  onRemoveMember,
+}: {
+  merge: MergeModel;
+  onRank: Props["onRank"];
+  onRemoveMember: Props["onRemoveMember"];
+}) {
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+  const ids = merge.members.map((member) => member.id);
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    //onRank removes the member before splicing it back, so the index of the row it lands on is the final rank in either direction
+    onRank(merge.id, String(active.id), ids.indexOf(String(over.id)));
+  }
+
+  return (
+    <DndContext id={`merge-members-${merge.id}`} sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+      <SortableContext items={ids} strategy={verticalListSortingStrategy}>
+        <ol className="calendars-members" aria-label={`Priority order in ${merge.name}`}>
+          {merge.members.map((member, index) => (
+            <SortableMember
+              key={member.id}
+              member={member}
+              index={index}
+              draft={merge.draft}
+              onRemoveMember={onRemoveMember}
+            />
+          ))}
+        </ol>
+      </SortableContext>
+    </DndContext>
+  );
+}
+
+function SortableMember({
+  member,
+  index,
+  draft,
+  onRemoveMember,
+}: {
+  member: MergeMemberModel;
+  index: number;
+  draft: boolean;
+  onRemoveMember: Props["onRemoveMember"];
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: member.id,
+    transition: { duration: 240, easing: "cubic-bezier(0.25, 1, 0.5, 1)" },
+  });
+  return (
+    <li
+      ref={setNodeRef}
+      style={{ transform: dndCSS.Transform.toString(transform), transition }}
+      className={`calendars-member${isDragging ? " is-dragging" : ""}`}
+    >
+      <button
+        type="button"
+        className="calendars-member-handle"
+        aria-label={`Reorder ${member.name}`}
+        title={`Drag to reorder ${member.name}`}
+        {...attributes}
+        {...listeners}
+      >
+        <GripIcon />
+      </button>
+      <span className="calendars-member-rank">{index + 1}</span>
+      <span className="calendars-swatch" style={{ background: member.color }} aria-hidden="true" />
+      <span className="calendars-row-copy">
+        <span className="calendars-row-name">{member.name}</span>
+        {draft ? null : <span className="calendars-row-caption">{member.sharedLabel}</span>}
+      </span>
+      {index === 0 && !draft ? <span className="calendars-member-badge">Wins</span> : null}
+      <button type="button" className="ghost-btn calendars-member-remove" onClick={() => onRemoveMember(member.id)}>
+        Remove
+      </button>
+    </li>
   );
 }
 

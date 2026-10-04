@@ -1,14 +1,7 @@
 "use client";
 
 import { useEffect, useRef, type PointerEvent as ReactPointerEvent } from "react";
-import {
-  animateSpring,
-  createVelocityTracker,
-  project,
-  rubberband,
-  type SpringHandle,
-  type VelocityTracker,
-} from "@/shared/motion";
+import { animateSpring, rubberband, type SpringHandle } from "@/shared/motion";
 import { clamp, type Pt } from "./geometry";
 import { capturePointer } from "./pointer";
 
@@ -40,14 +33,11 @@ type Drag = {
   origin: Pt;
   startClient: Pt;
   moved: boolean;
-  xs: VelocityTracker;
-  ys: VelocityTracker;
   last: Pt;
   target: string | null;
 };
 
 const HYSTERESIS = 4;
-const FLICK = 600;
 
 //past an edge the node keeps following, but with growing resistance
 function band(value: number, min: number, max: number, span: number): number {
@@ -56,7 +46,7 @@ function band(value: number, min: number, max: number, span: number): number {
   return value;
 }
 
-//1:1 tracking from where the node was grabbed, then a momentum hand-off into per-axis springs.
+//1:1 tracking from the grab point; release keeps the chosen position.
 //grabbing a node mid-flight stops its springs and carries on from the on-screen position.
 export function useNodeDrag(options: NodeDragOptions) {
   const opts = useRef(options);
@@ -127,13 +117,13 @@ export function useNodeDrag(options: NodeDragOptions) {
       return;
     }
     const bounds = o.bounds(current.id);
-    const velocity = { x: current.xs.velocity(), y: current.ys.velocity() };
-    //aim for where the throw would come to rest, then let the springs carry the release speed there
-    const to = {
-      x: clamp(current.last.x + project(velocity.x, 0.99), bounds.minX, bounds.maxX),
-      y: clamp(current.last.y + project(velocity.y, 0.99), bounds.minY, bounds.maxY),
-    };
-    settle(current.id, to, velocity, Math.hypot(velocity.x, velocity.y) > FLICK ? 0.8 : 1);
+    const to = cancelled
+      ? current.origin
+      : {
+          x: clamp(current.last.x, bounds.minX, bounds.maxX),
+          y: clamp(current.last.y, bounds.minY, bounds.maxY),
+        };
+    settle(current.id, to);
   }
 
   function bind(id: string) {
@@ -144,10 +134,6 @@ export function useNodeDrag(options: NodeDragOptions) {
         const o = opts.current;
         const at = o.toCanvas(event.clientX, event.clientY);
         const centre = o.centre(id);
-        const xs = createVelocityTracker();
-        const ys = createVelocityTracker();
-        xs.add(at.x);
-        ys.add(at.y);
         drag.current = {
           id,
           pointerId: event.pointerId,
@@ -155,8 +141,6 @@ export function useNodeDrag(options: NodeDragOptions) {
           origin: centre,
           startClient: { x: event.clientX, y: event.clientY },
           moved: false,
-          xs,
-          ys,
           last: centre,
           target: null,
         };
@@ -172,8 +156,6 @@ export function useNodeDrag(options: NodeDragOptions) {
         current.moved = true;
         const o = opts.current;
         const at = o.toCanvas(event.clientX, event.clientY);
-        current.xs.add(at.x);
-        current.ys.add(at.y);
         const bounds = o.bounds(id);
         const span = o.span();
         const next = {
