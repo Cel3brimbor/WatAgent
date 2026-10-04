@@ -88,6 +88,7 @@ import { CalendarMapSection } from "@/calendar/calendar-map-section";
 import { onRulesRan, ruleRunSummary } from "@/agent/rules/rules-client";
 import { useAgentRules } from "@/agent/rules/use-agent-rules";
 import { TodoList } from "@/calendar/todo-list";
+import { readKeywordTasks, type KeywordTasks } from "@/calendar/keyword-tasks";
 import { AccessError, plainReason } from "@/auth/access";
 import { CalendarChatPanel } from "@/agent/calendar-chat-panel";
 import type { PendingAiChange } from "@/calendar/approval-client";
@@ -406,6 +407,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
   const [colorOverrides, setColorOverrides] = useState<Record<string, string>>(() => readColorOverrides());
   const [localCalendars, setLocalCalendars] = useState<LocalCalendar[]>(() => readLocalCalendars());
   const [smartTags, setSmartTags] = useState<SmartTag[]>(() => readSmartTags());
+  const [keywordTasks, setKeywordTasks] = useState<KeywordTasks>(() => readKeywordTasks());
   const [sidePanelSections, setSidePanelSections] = useState<SidePanelSectionsOpen>(() => readSidePanelSections());
   const groups = calendarGroupsOf(sources.groups);
   const smartTagMatcher = useMemo(
@@ -505,7 +507,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
 
   useCalendarPreferencesSync(
     calendar.hydrated,
-    { view, importedCalendars, mergedCalendars, agentHiddenCalendarIds, newCalendarsShown, localCalendars, sources, colors, colorOverrides, smartTags, navCollapsed, sidePanelSections },
+    { view, importedCalendars, mergedCalendars, agentHiddenCalendarIds, newCalendarsShown, localCalendars, sources, colors, colorOverrides, smartTags, keywordTasks, navCollapsed, sidePanelSections },
     {
       setView,
       setImportedCalendars,
@@ -517,6 +519,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
       setColors,
       setColorOverrides,
       setSmartTags,
+      setKeywordTasks,
       setNavCollapsed,
       setSidePanelSections,
     },

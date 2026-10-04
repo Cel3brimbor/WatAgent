@@ -24,6 +24,7 @@ import {
   type SidePanelSectionsOpen,
 } from "@/calendar/preferences";
 import { writeSmartTags, type SmartTag } from "@/calendar/smart-tags";
+import { writeKeywordTasks, type KeywordTasks } from "@/calendar/keyword-tasks";
 import { writeLocalCalendars, type LocalCalendar } from "@/calendar/local-calendars";
 import type { CalendarView, ImportedCalendar, MergedCalendar } from "@/calendar/types";
 
@@ -40,6 +41,7 @@ export type CalendarPreferencesState = {
   colors: CalendarColors;
   colorOverrides: Record<string, string>;
   smartTags: SmartTag[];
+  keywordTasks: KeywordTasks;
   navCollapsed: boolean;
   sidePanelSections: SidePanelSectionsOpen;
 };
@@ -55,6 +57,7 @@ function writeLocalCache(doc: UserCalendarPreferencesV1): void {
   writeCalendarColors(doc.colors);
   writeColorOverrides(doc.colorOverrides);
   writeSmartTags(doc.smartTags);
+  writeKeywordTasks(doc.keywordTasks);
   writeSidePanelSections(doc.sidePanelSections);
   try {
     window.localStorage.setItem("watagent.nav.collapsed", doc.navCollapsed ? "1" : "0");
@@ -78,6 +81,7 @@ type ApplyPatch = {
   setColors: (colors: CalendarColors) => void;
   setColorOverrides: (overrides: Record<string, string>) => void;
   setSmartTags: (tags: SmartTag[]) => void;
+  setKeywordTasks: (config: KeywordTasks) => void;
   setNavCollapsed: (collapsed: boolean) => void;
   setSidePanelSections: (sections: SidePanelSectionsOpen) => void;
 };
@@ -93,6 +97,7 @@ function applyDoc(doc: UserCalendarPreferencesV1, apply: ApplyPatch): void {
   apply.setColors(doc.colors);
   apply.setColorOverrides(doc.colorOverrides);
   apply.setSmartTags(doc.smartTags);
+  apply.setKeywordTasks(doc.keywordTasks);
   apply.setNavCollapsed(doc.navCollapsed);
   apply.setSidePanelSections(doc.sidePanelSections);
   writeLocalCache(doc);
@@ -134,16 +139,16 @@ export function useCalendarPreferencesSync(ready: boolean, state: CalendarPrefer
     };
   }, [ready]);
 
-  const { view, importedCalendars, mergedCalendars, agentHiddenCalendarIds, newCalendarsShown, localCalendars, sources, colors, colorOverrides, smartTags, navCollapsed, sidePanelSections } = state;
+  const { view, importedCalendars, mergedCalendars, agentHiddenCalendarIds, newCalendarsShown, localCalendars, sources, colors, colorOverrides, smartTags, keywordTasks, navCollapsed, sidePanelSections } = state;
 
   useEffect(() => {
     if (!ready || skipSaveRef.current) return;
-    const doc = toDoc({ view, importedCalendars, mergedCalendars, agentHiddenCalendarIds, newCalendarsShown, localCalendars, sources, colors, colorOverrides, smartTags, navCollapsed, sidePanelSections });
+    const doc = toDoc({ view, importedCalendars, mergedCalendars, agentHiddenCalendarIds, newCalendarsShown, localCalendars, sources, colors, colorOverrides, smartTags, keywordTasks, navCollapsed, sidePanelSections });
     writeLocalCache(doc);
     window.clearTimeout(saveTimerRef.current);
     saveTimerRef.current = window.setTimeout(() => {
       void saveCalendarPreferences(doc).catch(() => undefined);
     }, SAVE_DEBOUNCE_MS);
     return () => window.clearTimeout(saveTimerRef.current);
-  }, [ready, view, importedCalendars, mergedCalendars, agentHiddenCalendarIds, newCalendarsShown, localCalendars, sources, colors, colorOverrides, smartTags, navCollapsed, sidePanelSections]);
+  }, [ready, view, importedCalendars, mergedCalendars, agentHiddenCalendarIds, newCalendarsShown, localCalendars, sources, colors, colorOverrides, smartTags, keywordTasks, navCollapsed, sidePanelSections]);
 }
