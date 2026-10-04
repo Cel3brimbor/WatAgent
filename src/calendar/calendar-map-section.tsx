@@ -658,7 +658,6 @@ export function CalendarMapSection({
       const members = savedBoxes[box.id] ?? [];
       const merged = members.length >= 2;
       const hidden = merged && !shownOnGrid(box.id);
-      const ranks = members.length > 1 ? members.map((_, rank) => ({ value: String(rank), label: ordinal(rank + 1) })) : [];
       const missingLink = members.some((member) => !linkOf(member));
       return {
         id: box.id,
@@ -674,13 +673,11 @@ export function CalendarMapSection({
             : missingLink
               ? `${box.name} has no calendar link to sync.`
               : undefined,
-        members: members.map((member, index) => ({
+        members: members.map((member) => ({
           id: member,
           name: nameOf(member),
           color: colorOverrides[member] ?? colors.event,
           sharedLabel: `${plural(shared.get(member) ?? 0, "event")} also on another calendar in this merge`,
-          rank: index,
-          ranks,
         })),
       };
     });
@@ -1343,6 +1340,7 @@ export function CalendarMapSection({
           sources={feeds.map((feed) => ({
             id: feed.id,
             name: feed.name,
+            color: colorOverrides[feed.id] ?? colors.event,
             usedBy: boxHolding(feed.id)?.id !== mergeEditor.id ? boxHolding(feed.id)?.name : undefined,
           }))}
           editing={Boolean(mergeEditor.id)}

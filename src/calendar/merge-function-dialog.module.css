@@ -69,29 +69,121 @@
 }
 .priority {
   display: grid;
-  gap: 8px;
-  margin: 20px 0;
-  font-size: 0.8rem;
+  gap: 0.45rem;
+  margin: 22px 0;
 }
-.priority > span {
-  color: var(--ink-soft);
+
+.priorityTitle {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--ink);
 }
-.priority > div {
+
+.priorityList {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.priorityItem {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
+  gap: 0.55rem;
+  padding: 0.35rem 0.6rem 0.35rem 0.3rem;
+  border: 1px solid var(--line-soft);
+  border-radius: 11px;
+  background: var(--paper);
+  transition:
+    border-color 140ms var(--ease-out),
+    background 140ms var(--ease-out),
+    box-shadow 140ms var(--ease-out);
 }
-.priority button {
+
+.priorityItem:hover {
+  border-color: var(--line);
+}
+
+.isDragging {
+  z-index: 2;
+  border-color: var(--accent);
+  background: var(--panel-solid);
+  box-shadow:
+    0 0 0 1px var(--accent),
+    0 10px 28px var(--glow);
+}
+
+.priorityHandle {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 1.9rem;
+  height: 1.9rem;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
   background: transparent;
-  border: 1px solid var(--line);
-  color: var(--ink);
-  border-radius: 5px;
-  width: 30px;
-  height: 30px;
-  cursor: pointer;
+  color: var(--ink-soft);
+  cursor: grab;
+  touch-action: none;
 }
-.priority button:disabled {
-  opacity: 0.3;
-  cursor: default;
+
+.priorityHandle:hover {
+  color: var(--ink);
+  background: var(--press);
+}
+
+.priorityHandle:active {
+  cursor: grabbing;
+}
+
+.priorityHandle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.priorityRank {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  min-width: 1.35rem;
+  height: 1.35rem;
+  padding: 0 0.25rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  color: var(--ink-soft);
+  font-size: 0.74rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.priorityItem:first-child .priorityRank {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.priorityName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 0.85rem;
+  font-weight: 550;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.priorityBadge {
+  flex: 0 0 auto;
+  padding: 0.14rem 0.5rem;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.72rem;
+  font-weight: 650;
+}
+
+.priorityHint {
+  font-size: 0.75rem;
+  color: var(--ink-soft);
 }

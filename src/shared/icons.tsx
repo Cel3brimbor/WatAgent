@@ -165,6 +165,27 @@ export function DotsVerticalIcon({ className }: IconProps) {
   );
 }
 
+export function GripIcon({ className }: IconProps) {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      width="16"
+      height="16"
+      aria-hidden="true"
+      focusable="false"
+      fill="currentColor"
+      className={className ? `glyph ${className}` : "glyph"}
+    >
+      <circle cx="5.75" cy="3.1" r="1.1" />
+      <circle cx="10.25" cy="3.1" r="1.1" />
+      <circle cx="5.75" cy="8" r="1.1" />
+      <circle cx="10.25" cy="8" r="1.1" />
+      <circle cx="5.75" cy="12.9" r="1.1" />
+      <circle cx="10.25" cy="12.9" r="1.1" />
+    </svg>
+  );
+}
+
 export function LockIcon(props: IconProps) {
   return (
     <Glyph {...props} strokeWidth={1.6}>

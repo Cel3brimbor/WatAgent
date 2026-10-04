@@ -1,10 +1,22 @@
 "use client";
 
 import { useId, useRef, useState } from "react";
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { GripIcon } from "@/shared/icons";
 import { useDialog } from "@/shared/use-dialog";
 import styles from "./merge-function-dialog.module.css";
 
-type Source = { id: string; name: string; usedBy?: string };
+type Source = { id: string; name: string; color?: string; usedBy?: string };
 type Props = {
   name: string;
   members: string[];
@@ -20,8 +32,19 @@ export function MergeFunctionDialog({ name: initialName, members: initialMembers
   const [members, setMembers] = useState(initialMembers);
   const ref = useRef<HTMLDivElement>(null);
   const titleId = useId();
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
   useDialog(ref, { open: true, onEscape: onCancel });
   const valid = name.trim().length > 0 && members.length >= 2;
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    setMembers((current) => arrayMove(current, current.indexOf(String(active.id)), current.indexOf(String(over.id))));
+  }
+
   return (
     <div className="modal-backdrop" data-state="open" onClick={onCancel}>
       <div
@@ -82,28 +105,23 @@ export function MergeFunctionDialog({ name: initialName, members: initialMembers
           </fieldset>
           {members.length > 1 ? (
             <div className={styles.priority}>
-              <span>Source priority</span>
-              {members.map((id, index) => (
-                <div key={id}>
-                  <span>
-                    {index + 1}. {sources.find((source) => source.id === id)?.name}
-                  </span>
-                  <button
-                    type="button"
-                    disabled={index === 0}
-                    aria-label={`Move ${sources.find((source) => source.id === id)?.name} up`}
-                    onClick={() =>
-                      setMembers((current) => {
-                        const next = [...current];
-                        [next[index - 1], next[index]] = [next[index], next[index - 1]];
-                        return next;
-                      })
-                    }
-                  >
-                    ↑
-                  </button>
-                </div>
-              ))}
+              <span className={styles.priorityTitle}>Source priority</span>
+              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                <SortableContext items={members} strategy={verticalListSortingStrategy}>
+                  <ol className={styles.priorityList} aria-label="Source priority order">
+                    {members.map((id, index) => (
+                      <SortablePriorityRow
+                        key={id}
+                        id={id}
+                        index={index}
+                        name={sources.find((source) => source.id === id)?.name ?? id}
+                        color={sources.find((source) => source.id === id)?.color}
+                      />
+                    ))}
+                  </ol>
+                </SortableContext>
+              </DndContext>
+              <span className={styles.priorityHint}>Drag to reorder. The first source wins when events overlap.</span>
             </div>
           ) : null}
           {error ? (
@@ -122,5 +140,34 @@ export function MergeFunctionDialog({ name: initialName, members: initialMembers
         </form>
       </div>
     </div>
+  );
+}
+
+function SortablePriorityRow({ id, index, name, color }: { id: string; index: number; name: string; color?: string }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id,
+    transition: { duration: 240, easing: "cubic-bezier(0.25, 1, 0.5, 1)" },
+  });
+  return (
+    <li
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={`${styles.priorityItem}${isDragging ? ` ${styles.isDragging}` : ""}`}
+    >
+      <button
+        type="button"
+        className={styles.priorityHandle}
+        aria-label={`Reorder ${name}`}
+        title={`Drag to reorder ${name}`}
+        {...attributes}
+        {...listeners}
+      >
+        <GripIcon />
+      </button>
+      <span className={styles.priorityRank}>{index + 1}</span>
+      {color ? <span className="calendars-swatch" style={{ background: color }} aria-hidden="true" /> : null}
+      <span className={styles.priorityName}>{name}</span>
+      {index === 0 ? <span className={styles.priorityBadge}>Wins</span> : null}
+    </li>
   );
 }
