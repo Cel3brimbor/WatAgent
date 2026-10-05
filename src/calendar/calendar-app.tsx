@@ -349,7 +349,17 @@ function periodStart(focus: Date, view: CalendarView, weekStartsOn: 0 | 1): numb
   return new Date(focus.getFullYear(), 0, 1).getTime();
 }
 
-export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: () => void }) {
+export function CalendarApp({
+  user,
+  onSignOut,
+  advancedView,
+  onAdvancedViewChange,
+}: {
+  user: AuthUser;
+  onSignOut: () => void;
+  advancedView: boolean;
+  onAdvancedViewChange: (value: boolean) => void;
+}) {
   const calendar = useCalendar();
   const { syncFromGoogle, createChat, pruneEmptyChats, setAfterWrite } = calendar;
   const [view, setView] = useState<CalendarView>(() => readCalendarView());
@@ -1652,7 +1662,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
       className={`app-frame${navCollapsed ? " is-nav-collapsed" : ""}${chatResizing ? " is-resizing-chat" : ""}`}
       style={colorVars}
     >
-      <SideNav section={section} collapsed={navCollapsed} onSection={setSection} onToggle={toggleNav}>
+      <SideNav section={section} collapsed={navCollapsed} onSection={setSection} onToggle={toggleNav} advanced={advancedView}>
         <CalendarSidePanel
           focus={focus}
           view={view}
@@ -1849,6 +1859,10 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
                 mergedCalendars={mergedCalendars}
                 onRenameCalendar={(id, name) => renameExternal(externalCalendarId(id), name)}
                 accountEmail={user.email}
+                advancedView={advancedView}
+                onAdvancedViewChange={(value) => {
+                  onAdvancedViewChange(value);
+                }}
                 requireAiApproval={calendar.requireAiApproval}
                 onRequireAiApprovalChange={(value) =>
                   void calendar.setRequireAiApproval(value).catch(() => setNotice("Unable to save Agent settings."))
