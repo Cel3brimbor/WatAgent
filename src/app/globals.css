@@ -838,6 +838,80 @@ select {
   font-size: 0.95rem;
 }
 
+.login-shell--center .login-card.onboarding-card {
+  text-align: left;
+}
+
+.onboarding-progress {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.8rem;
+}
+
+.onboarding-group legend,
+.onboarding-group > label {
+  font-size: 1.35rem;
+  font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.onboarding-group {
+  display: grid;
+  gap: 1rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.onboarding-group legend {
+  padding: 0;
+  margin-bottom: 1rem;
+}
+
+.onboarding-hint {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.onboarding-choices {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+
+.onboarding-choice {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.5rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 0.92rem;
+}
+
+.onboarding-choice input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.onboarding-choice.is-selected {
+  border-color: var(--accent);
+  background: var(--accent-soft, transparent);
+  color: var(--accent);
+}
+
+.onboarding-choice:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .login-shell.login-shell--center {
   grid-template-columns: minmax(0, 24rem);
   justify-content: center;
