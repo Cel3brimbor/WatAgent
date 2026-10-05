@@ -8013,3 +8013,40 @@ h3 {
   .calendar-toolbar-right .segmented-option { padding-inline: 0.2rem; font-size: 0.72rem; }
   .calendar-year { grid-template-columns: 1fr; }
 }
+
+/* A compact month overview with a day agenda, inspired by native calendars. */
+.calendar-month-layout { min-height: 100%; display: flex; flex-direction: column; }
+.calendar-month-desktop { flex: 1; }
+.calendar-month-mobile { display: none; }
+@media (max-width: 760px) {
+  .calendar-toolbar[data-section="calendar"], .calendar-month-mobile { font-family: -apple-system, BlinkMacSystemFont, "Inter Variable", sans-serif; }
+  .calendar-toolbar[data-section="calendar"] h2 { font-family: inherit; font-size: 1.65rem; font-weight: 750; letter-spacing: -0.055rem; }
+  .calendar-step { border: 0; background: transparent; gap: 0.25rem; }
+  .calendar-step .icon-btn, .calendar-today-btn { color: var(--accent); }
+  .calendar-toolbar-right .segmented { border-radius: 10px; padding: 3px; }
+  .calendar-toolbar-right .segmented-thumb { border-radius: 7px; }
+  .calendar-month-desktop { display: none; }
+  .calendar-month-mobile { display: block; padding: 0 0.25rem 1rem; }
+  .calendar-mobile-weekdays, .calendar-mobile-dates { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+  .calendar-mobile-weekdays { color: var(--ink-soft); text-align: center; font-size: 0.7rem; font-weight: 600; padding: 0.6rem 0 0.4rem; }
+  .calendar-mobile-date { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-width: 0; min-height: 49px; padding: 3px 0; border: 0; border-radius: 0; border-top: 1px solid var(--line); background: transparent; color: var(--ink); font: inherit; }
+  .calendar-mobile-date-number { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; font-size: 1.1rem; font-weight: 500; }
+  .calendar-mobile-date.is-outside { color: var(--ink-soft); opacity: 0.45; }
+  .calendar-mobile-date.is-today .calendar-mobile-date-number { color: var(--accent); font-weight: 700; }
+  .calendar-mobile-date.is-selected .calendar-mobile-date-number { background: var(--ink); color: var(--panel, var(--on-accent)); }
+  .calendar-mobile-date.is-selected.is-today .calendar-mobile-date-number { background: var(--accent); color: var(--on-accent); }
+  .calendar-mobile-date-dots { height: 4px; display: flex; gap: 3px; }
+  .calendar-mobile-date-dots i { width: 4px; height: 4px; border-radius: 50%; }
+  .calendar-mobile-agenda { margin-top: 1rem; border-top: 1px solid var(--line); }
+  .calendar-mobile-agenda header { display: flex; align-items: center; justify-content: space-between; padding: 1rem 0.5rem 0.8rem; }
+  .calendar-mobile-agenda header p { margin: 0 0 0.2rem; color: var(--ink-soft); font-size: 0.75rem; }
+  .calendar-mobile-agenda h3 { font-family: inherit; margin: 0; font-size: 1.2rem; font-weight: 700; letter-spacing: -0.03rem; }
+  .calendar-mobile-agenda header .icon-btn { color: var(--accent); min-width: 44px; min-height: 44px; }
+  .calendar-mobile-agenda-row { display: grid; grid-template-columns: 4.3rem minmax(0, 1fr); padding: 0.6rem 0.5rem; border-top: 1px solid var(--line); align-items: start; gap: 0.4rem; }
+  .calendar-mobile-agenda-time { font-size: 0.7rem; color: var(--ink-soft); padding-top: 0.5rem; }
+  .calendar-mobile-agenda-row .calendar-strip { min-height: 60px; border-radius: 6px; padding: 0.5rem 0.65rem; text-align: left; }
+  .calendar-mobile-agenda-row .calendar-strip-title { white-space: normal; font-size: 0.9rem; }
+  .calendar-mobile-agenda-row .calendar-strip-time, .calendar-mobile-agenda-row .calendar-strip-location { font-size: 0.72rem; }
+  .calendar-mobile-agenda-empty { text-align: center; color: var(--ink-soft); padding: 1.6rem 0.5rem; font-size: 0.85rem; }
+  .calendar-year-month h3 { font-family: -apple-system, BlinkMacSystemFont, sans-serif; color: var(--accent); }
+}
