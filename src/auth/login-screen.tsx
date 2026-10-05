@@ -49,6 +49,9 @@ export function LoginScreen({ error, onSignIn }: Props) {
         >
           {working ? "Signing in…" : "Continue with Google"}
         </button>
+        <p className="login-legal">
+          By continuing, you agree to our <a href="/privacy/">Privacy Policy</a>.
+        </p>
       </section>
     </main>
   );
