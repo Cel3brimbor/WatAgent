@@ -6,8 +6,9 @@ import { useAgentEffort } from "@/agent/use-agent-effort";
 import { AgentActivity } from "@/agent/agent-activity";
 import { ChatBubbleTools } from "@/agent/bubble-tools";
 import { CalendarBadge } from "@/agent/calendar-badge";
-import type { MentionCalendar } from "@/agent/calendar-mention";
+import { messagePieces, type MentionCalendar } from "@/agent/calendar-mention";
 import { ChatComposer } from "@/agent/chat-composer";
+import { MentionField, type MentionFieldHandle } from "@/agent/mention-field";
 import { ChatTabStrip } from "@/agent/chat-tab-strip";
 import { MessageContent } from "@/agent/message-content";
 import type { ChatMessage, ChatSession } from "@/agent/types";
@@ -105,8 +106,7 @@ export function CalendarChatPanel({
   //follow new output only while the reader is already at the bottom
   const pinnedRef = useRef(true);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editDraft, setEditDraft] = useState("");
-  const [editCalendars, setEditCalendars] = useState<string[]>([]);
+  const editRef = useRef<MentionFieldHandle>(null);
   const [openBadge, setOpenBadge] = useState<string | null>(null);
   const { effort, setEffort } = useAgentEffort();
 
@@ -138,18 +138,23 @@ export function CalendarChatPanel({
     return (
       calendars.find((calendar) => calendar.id === id) ?? {
         id,
-        name: id === "tasks" ? "Tasks" : id === "events" ? "Agent Main" : "Calendar",
+        name:
+          id === "tasks" ? "Tasks" : id === "events" ? "Agent Main" : id === "google" ? "Google Calendar" : "Calendar",
         kind: id === "tasks" ? "task" : "event",
         color: "#5b8a72",
+        readOnly: id === "google" || id.startsWith("ics:") || id.startsWith("merge-"),
       }
     );
   }
 
   function submitEdit(messageId: string) {
-    const next = editDraft.trim();
-    if (busy || (!next && editCalendars.length === 0)) return;
+    const payload = editRef.current?.read();
+    const next = payload?.text.trim() ?? "";
+    const calendarIds = payload?.calendarIds ?? [];
+    if (busy || (!next && calendarIds.length === 0)) return;
     setEditingId(null);
-    send({ text: next, calendarIds: editCalendars, branch: { kind: "edit", messageId } });
+    setOpenBadge(null);
+    send({ text: next, calendarIds, branch: { kind: "edit", messageId } });
   }
 
   return (
@@ -233,59 +238,42 @@ export function CalendarChatPanel({
                       <span className="bubble-role">{m.role === "user" ? "You" : "WatAgent"}</span>
                       <div className="bubble-body">
                         <AgentActivity parts={m.activity} streaming={streaming && !m.content.trim()} />
-                        {m.role === "user" && (editing ? editCalendars : m.calendarIds)?.length ? (
-                          <div className="bubble-badges">
-                            {(editing ? editCalendars : (m.calendarIds ?? [])).map((id) => (
-                              <CalendarBadge
-                                key={id}
-                                calendar={calendarOf(id)}
-                                items={items}
-                                open={openBadge === `${m.id}:${id}`}
-                                onOpenChange={(next) => setOpenBadge(next ? `${m.id}:${id}` : null)}
-                                onRemove={
-                                  editing
-                                    ? () => {
-                                        setEditCalendars((list) => list.filter((row) => row !== id));
-                                        setOpenBadge(null);
-                                      }
-                                    : undefined
-                                }
-                                onEditItem={editing ? undefined : onEditCalendarItem}
-                              />
-                            ))}
-                          </div>
-                        ) : null}
                         {editing ? (
                           <>
-                            <textarea
+                            <MentionField
+                              key={m.id}
+                              ref={editRef}
                               className="bubble-edit"
-                              value={editDraft}
-                              maxLength={20_000}
-                              aria-label="Edit message"
-                              autoFocus
-                              onChange={(event) => setEditDraft(event.target.value)}
-                              onKeyDown={(event) => {
-                                if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
-                                  event.preventDefault();
-                                  submitEdit(m.id);
-                                }
-                                if (event.key === "Escape") setEditingId(null);
-                              }}
+                              calendars={calendars}
+                              items={items}
+                              ariaLabel="Edit message"
+                              initialText={m.content}
+                              initialCalendarIds={m.calendarIds}
+                              openCalendarId={openBadge?.startsWith(`edit:${m.id}:`) ? openBadge.slice(`edit:${m.id}:`.length) : null}
+                              onOpenCalendar={(id) => setOpenBadge(id ? `edit:${m.id}:${id}` : null)}
+                              onEnter={() => submitEdit(m.id)}
+                              onEscape={() => setEditingId(null)}
                             />
                             <div className="bubble-edit-actions">
                               <button type="button" className="ghost-btn" onClick={() => setEditingId(null)}>
                                 Cancel
                               </button>
-                              <button
-                                type="button"
-                                className="primary-btn"
-                                disabled={busy || (!editDraft.trim() && editCalendars.length === 0)}
-                                onClick={() => submitEdit(m.id)}
-                              >
+                              <button type="button" className="primary-btn" disabled={busy} onClick={() => submitEdit(m.id)}>
                                 Update
                               </button>
                             </div>
                           </>
+                        ) : m.role === "user" ? (
+                          <UserMessage
+                            content={m.content}
+                            calendarIds={m.calendarIds}
+                            calendarOf={calendarOf}
+                            items={items}
+                            openBadge={openBadge}
+                            messageId={m.id}
+                            onOpenBadge={setOpenBadge}
+                            onEditItem={onEditCalendarItem}
+                          />
                         ) : (
                           <MessageContent content={m.content} />
                         )}
@@ -300,9 +288,8 @@ export function CalendarChatPanel({
                         locked={Boolean(restriction)}
                         onRegenerate={() => send({ text: "", branch: { kind: "regenerate", messageId: m.id } })}
                         onStartEdit={() => {
+                          setOpenBadge(null);
                           setEditingId(m.id);
-                          setEditDraft(m.content);
-                          setEditCalendars(m.calendarIds ?? []);
                         }}
                       />
                     </div>
@@ -348,5 +335,50 @@ export function CalendarChatPanel({
         />
       </div>
     </aside>
+  );
+}
+
+function UserMessage({
+  content,
+  calendarIds,
+  calendarOf,
+  items,
+  openBadge,
+  messageId,
+  onOpenBadge,
+  onEditItem,
+}: {
+  content: string;
+  calendarIds?: string[];
+  calendarOf: (id: string) => MentionCalendar;
+  items: CalendarItemDoc[];
+  openBadge: string | null;
+  messageId: string;
+  onOpenBadge: (id: string | null) => void;
+  onEditItem?: (item: CalendarItemDoc) => void;
+}) {
+  const pieces = messagePieces(content, calendarIds).filter((piece) => piece.kind === "calendar" || piece.text.trim());
+  if (pieces.length === 0) return null;
+  const chips = pieces.some((piece) => piece.kind === "calendar");
+  if (!chips) return <MessageContent content={content} />;
+  return (
+    <div className="bubble-flow">
+      {pieces.map((piece, index) =>
+        piece.kind === "calendar" ? (
+          <CalendarBadge
+            key={`${piece.id}:${index}`}
+            calendar={calendarOf(piece.id)}
+            items={items}
+            open={openBadge === `${messageId}:${piece.id}`}
+            onOpenChange={(next) => onOpenBadge(next ? `${messageId}:${piece.id}` : null)}
+            onEditItem={onEditItem}
+          />
+        ) : (
+          <span key={index} className="bubble-text">
+            {piece.text}
+          </span>
+        ),
+      )}
+    </div>
   );
 }

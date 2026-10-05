@@ -641,7 +641,8 @@ export function CalendarMapSection({
         lockSentence: "Read only. Its events change only when it syncs.",
         pending: 0,
         approvalOn: requireAiApproval,
-        canAsk: false,
+        canAsk: true,
+        askBlocked: unseen ? `The Agent can’t see ${feed.name}. Turn on Agent can see this first.` : undefined,
         ...syncState(feed.id),
         ...(syncProgress[feed.id] ? { syncProgress: syncProgress[feed.id] } : {}),
         mergeLink: merged
@@ -678,7 +679,8 @@ export function CalendarMapSection({
           "Read only. The Agent reads Google events and never changes them. When the same event is also on another calendar, that copy shows.",
         pending: 0,
         approvalOn: requireAiApproval,
-        canAsk: false,
+        canAsk: true,
+        askBlocked: unseen ? `The Agent can’t see ${nameOf(GOOGLE)}. Turn on Agent can see this first.` : undefined,
         ...syncState(GOOGLE),
         ...(syncProgress[GOOGLE] ? { syncProgress: syncProgress[GOOGLE] } : {}),
       });
@@ -757,6 +759,12 @@ export function CalendarMapSection({
 
   const isLocal = (id: string) => localCalendars.some((calendar) => calendar.id === id);
   const isCalendar = (id: string) => id !== AGENT && names.has(id);
+  function canAskNode(id: string): true | string {
+    if (id === AGENT || !names.has(id)) return "Drop it on a calendar.";
+    if (isBox(id) && !isMerged(id)) return "Finish the merge before asking about it.";
+    if (agentHidden(id)) return `The Agent can't see ${nameOf(id)}. Link it to the Agent first.`;
+    return true;
+  }
   const nodes = useMemo<MapNode[]>(() => {
     const list: MapNode[] = [
       {
@@ -1148,12 +1156,8 @@ export function CalendarMapSection({
       label: "Ask Agent",
       group: "Agent",
       icon: <ChatIcon />,
-      prompt: "choose a WatAgent calendar to attach to a message",
-      accepts: (id) => {
-        if (id === AGENT) return "Drop it on a WatAgent calendar.";
-        if (!isLocal(id)) return "Only WatAgent calendars can be attached to a message.";
-        return agentHidden(id) ? `The Agent can't see ${nameOf(id)}. Link it to the Agent first.` : true;
-      },
+      prompt: "choose a calendar to attach to a message",
+      accepts: (id) => canAskNode(id),
       apply: (id) => {
         onAskAgent(id);
         return { message: `Chat opened with @${nameOf(id)} attached` };
@@ -1221,12 +1225,12 @@ export function CalendarMapSection({
       }
       if (target !== AGENT) return "Drop it on the Agent or a Merge function.";
       if (hasAgentLink(dragged) && agentHidden(dragged)) return true;
-      return isLocal(dragged) ? true : "Only WatAgent calendars can be attached to a message.";
+      return canAskNode(dragged);
     },
     apply: (dragged, target) => {
       const box = boxList.find((entry) => mergeFunctionId(entry.id) === target);
       if (box) return dropInto(box.id, dragged);
-      if (agentHidden(dragged)) return setAgentAccess(dragged, true);
+      if (hasAgentLink(dragged) && agentHidden(dragged)) return setAgentAccess(dragged, true);
       onAskAgent(dragged);
       return { message: `Chat opened with @${nameOf(dragged)} attached` };
     },

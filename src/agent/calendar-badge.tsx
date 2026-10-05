@@ -54,11 +54,21 @@ function rangeOf(focus: Date, view: PopView): { start: number; end: number } {
   return { start: start.getTime(), end: end.getTime() };
 }
 
-function eventsInRange(items: CalendarItemDoc[], calendarId: string, start: number, end: number): CalendarItemDoc[] {
+function onCalendar(item: CalendarItemDoc, calendar: MentionCalendar): boolean {
+  if (calendar.id === "google") return item.calendar.calendarId === "google";
+  if (calendar.memberIds?.length) {
+    const owner = item.calendar.importSource ? `ics:${item.calendar.importSource}` : "";
+    return calendar.memberIds.includes(owner);
+  }
+  if (calendar.id.startsWith("ics:")) return item.calendar.importSource === calendar.id.slice(4);
+  return localCalendarIdOf(item.calendar) === calendar.id;
+}
+
+function eventsInRange(items: CalendarItemDoc[], calendar: MentionCalendar, start: number, end: number): CalendarItemDoc[] {
   return items
     .filter((item) => {
       if (item.editorDraft || item.pendingAction === "delete") return false;
-      if (localCalendarIdOf(item.calendar) !== calendarId) return false;
+      if (!onCalendar(item, calendar)) return false;
       return item.calendar.endUTC > start && item.calendar.startUTC < end;
     })
     .sort((a, b) => a.calendar.startUTC - b.calendar.startUTC || a.title.localeCompare(b.title));
@@ -123,7 +133,7 @@ export function CalendarBadge({ calendar, items, open, onOpenChange, onRemove, o
   );
 }
 
-function CalendarBadgePopover({
+export function CalendarBadgePopover({
   calendar,
   items,
   anchor,
@@ -144,7 +154,7 @@ function CalendarBadgePopover({
   const [box, setBox] = useState<{ left: number; top?: number; bottom?: number; width: number; maxHeight: number } | null>(null);
   const weekStartsOn = localeWeekStartsOn();
   const range = rangeOf(focus, view);
-  const events = eventsInRange(items, calendar.id, range.start, range.end);
+  const events = eventsInRange(items, calendar, range.start, range.end);
   const groups = new Map<number, CalendarItemDoc[]>();
   for (const item of events) {
     const day = startOfLocalDay(new Date(Math.max(item.calendar.startUTC, range.start))).getTime();

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { attachedIdsOf, matchCalendars, mentionAtCaret, stripMention, type MentionCalendar } from "./calendar-mention";
+import { attachedIdsOf, calendarToken, matchCalendars, mentionAtCaret, messagePieces, stripMention, textForModel, type MentionCalendar } from "./calendar-mention";
 
 const calendars: MentionCalendar[] = [
   { id: "events", name: "Agent Main", kind: "event", color: "#5b8a72" },
@@ -21,6 +21,14 @@ assert.deepEqual(
   ["Agent Main", "Tasks", "My School Notes"],
 );
 assert.equal(stripMention("meet @sch tomorrow", 5, "sch"), "meet  tomorrow".replace(/[ \t]{2,}/g, " "));
-assert.deepEqual(attachedIdsOf(["events", "events", "bogus", calendars[2].id]), ["events", calendars[2].id]);
+assert.deepEqual(attachedIdsOf(["events", "events", "bogus", calendars[2].id, "ics:learn"]), ["events", calendars[2].id, "ics:learn"]);
+const token = calendarToken("ics:learn");
+assert.deepEqual(messagePieces(`next event in ${token}`, ["events"]), [
+  { kind: "calendar", id: "events" },
+  { kind: "text", text: "next event in " },
+  { kind: "calendar", id: "ics:learn" },
+]);
+assert.equal(textForModel(`next event in ${token}`, () => "LEARN"), "next event in @LEARN");
+assert.equal(textForModel(token, () => "LEARN"), "Use the attached calendar @LEARN.");
 
 console.log("calendar mention checks passed.");

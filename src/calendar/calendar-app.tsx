@@ -107,7 +107,7 @@ import { KeywordTaskRules, type KeywordTaskCalendarOption } from "@/calendar/key
 import { AccessError, plainReason } from "@/auth/access";
 import { CalendarChatPanel } from "@/agent/calendar-chat-panel";
 import type { PendingAiChange } from "@/calendar/approval-client";
-import { attachedIdsOf } from "@/agent/calendar-mention";
+import { attachedIdsOf, textForModel, type MentionCalendar } from "@/agent/calendar-mention";
 import type { AgentEffort } from "@/agent/agent-effort";
 import { requestChatTitle } from "@/agent/chat-title";
 import { readAgentStream } from "@/agent/stream";
@@ -498,17 +498,6 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
     [calendar.displayItems, draft],
   );
   const shownCalendars = useMemo(() => shownLocalCalendars(localCalendars, calendar.items), [localCalendars, calendar.items]);
-  const mentionCalendars = useMemo(
-    () =>
-      shownCalendars.filter((calendar) => !isAgentCalendarHidden(agentHiddenCalendarIds, calendar.id)).map((calendar) => ({
-        id: calendar.id,
-        name: calendar.name,
-        kind: calendar.kind,
-        color: calendarSwatchColor(calendar.id, colors, colorOverrides),
-        readOnly: isCalendarReadOnly(sources, calendar.id),
-      })),
-    [shownCalendars, colors, colorOverrides, sources, agentHiddenCalendarIds],
-  );
   const localCalendarCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     for (const item of calendar.items) {
@@ -573,6 +562,67 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
     }
     return rows;
   }, [itemsForUi, importedCalendars, mergedCalendars]);
+
+  const mentionCalendars = useMemo(() => {
+    const rows: MentionCalendar[] = shownCalendars
+      .filter((calendar) => !isAgentCalendarHidden(agentHiddenCalendarIds, calendar.id))
+      .map((calendar) => ({
+        id: calendar.id,
+        name: calendar.name,
+        kind: calendar.kind,
+        color: calendarSwatchColor(calendar.id, colors, colorOverrides),
+        readOnly: isCalendarReadOnly(sources, calendar.id),
+      }));
+    for (const calendar of sideExternalCalendars) {
+      if (isAgentCalendarHidden(agentHiddenCalendarIds, calendar.id)) continue;
+      rows.push({
+        id: calendar.id,
+        name: calendar.name,
+        kind: "event" as const,
+        color: calendarSwatchColor(calendar.id, colors, colorOverrides),
+        readOnly: true,
+        ...(calendar.merged ? { memberIds: calendar.feeds.map((feed) => externalCalendarId(feed.id)) } : {}),
+      });
+    }
+    if ((googleConnected || overlayEvents.length > 0) && !isAgentCalendarHidden(agentHiddenCalendarIds, "google")) {
+      rows.push({
+        id: "google",
+        name: "Google Calendar",
+        kind: "event",
+        color: colors.google,
+        readOnly: true,
+      });
+    }
+    return rows;
+  }, [
+    shownCalendars,
+    sideExternalCalendars,
+    colors,
+    colorOverrides,
+    sources,
+    agentHiddenCalendarIds,
+    googleConnected,
+    overlayEvents.length,
+  ]);
+
+  const chatItems = useMemo(() => {
+    const google = overlayEvents.map((event) => ({
+      id: `gcal:${event.id}`,
+      title: event.title,
+      createdAt: event.startUTC,
+      updatedAt: event.startUTC,
+      calendar: {
+        kind: "event" as const,
+        startUTC: event.startUTC,
+        endUTC: event.endUTC,
+        allDay: event.allDay,
+        location: event.location,
+        description: event.description,
+        calendarId: "google",
+      },
+    }));
+    return [...calendar.displayItems, ...google];
+  }, [calendar.displayItems, overlayEvents]);
 
   const renameExternal = useCallback((id: string, name: string) => {
     setMergedCalendars((current) => current.map((calendar) => (calendar.id === id ? { ...calendar, name } : calendar)));
@@ -1410,7 +1460,11 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
             .slice(-80)
             .map((message) => ({
               role: message.role,
-              content: message.content.trim() || "Use the attached calendar.",
+              content:
+                message.role === "user"
+                  ? textForModel(message.content, (id) => mentionCalendars.find((calendar) => calendar.id === id)?.name ?? "calendar") ||
+                    "Use the attached calendar."
+                  : message.content.trim() || "Use the attached calendar.",
             })),
         }),
       });
@@ -1512,7 +1566,9 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
       setStreamingAssistantId(null);
       calendar.persistActiveChat();
       if (nameThisChat && nameAfterReply && chatId) {
-        const userText = text.trim() || "Attached calendar";
+        const userText =
+          textForModel(text, (id) => mentionCalendars.find((calendar) => calendar.id === id)?.name ?? "calendar") ||
+          "Attached calendar";
         void requestChatTitle(userText, assistantText).then((title) => {
           if (title) calendar.applyAutoTitle(chatId, title);
         });
@@ -1824,7 +1880,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
           onResizingChange={setChatResizing}
           onClose={() => setChatOpen(false)}
           calendars={mentionCalendars}
-          items={calendar.displayItems}
+          items={chatItems}
           pendingChanges={calendar.pendingChanges}
           approvalBusy={calendar.approvalBusy}
           onApprove={(id) =>
