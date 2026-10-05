@@ -1,6 +1,7 @@
 import { AGENT_EFFORTS, type AgentEffort } from "@/agent/agent-effort";
 import { apiJson } from "@/shared/api-base";
 import { parseCalendarMeta, type CalendarItemMeta } from "@/calendar/types";
+import { uwFacultyOf, type UwFaculty } from "@/auth/onboarding";
 import type { ColorSchemePreference, TeaThemeId } from "@/shared/tea-theme";
 
 export type PendingAiChange = {
@@ -69,16 +70,28 @@ export type CalendarSettings = {
   teaTheme: TeaThemeId | null;
   colorScheme: ColorSchemePreference | null;
   agentEffort: AgentEffort | null;
+  onboarded: boolean;
+  isUwaterlooStudent: boolean | null;
+  uwFaculty: UwFaculty | null;
+  advancedView: boolean | null;
 };
 
-export async function getCalendarSettings(): Promise<CalendarSettings> {
-  const payload = await apiJson<Record<string, unknown>>("/api/calendar/settings");
+function settingsOf(payload: Record<string, unknown>): CalendarSettings {
   return {
     requireAiApproval: payload.requireAiApproval === true,
     teaTheme: teaThemeOf(payload.teaTheme),
     colorScheme: colorSchemeOf(payload.colorScheme),
     agentEffort: agentEffortOf(payload.agentEffort),
+    onboarded: payload.onboarded === true,
+    isUwaterlooStudent: typeof payload.isUwaterlooStudent === "boolean" ? payload.isUwaterlooStudent : null,
+    uwFaculty: uwFacultyOf(payload.uwFaculty),
+    advancedView: typeof payload.advancedView === "boolean" ? payload.advancedView : null,
   };
+}
+
+export async function getCalendarSettings(): Promise<CalendarSettings> {
+  const payload = await apiJson<Record<string, unknown>>("/api/calendar/settings");
+  return settingsOf(payload);
 }
 
 export async function patchCalendarSettings(patch: {
@@ -86,17 +99,16 @@ export async function patchCalendarSettings(patch: {
   teaTheme?: TeaThemeId | null;
   colorScheme?: ColorSchemePreference | null;
   agentEffort?: AgentEffort | null;
+  onboarded?: true;
+  isUwaterlooStudent?: boolean | null;
+  uwFaculty?: UwFaculty | null;
+  advancedView?: boolean | null;
 }): Promise<CalendarSettings> {
   const payload = await apiJson<Record<string, unknown>>("/api/calendar/settings", {
     method: "PATCH",
     body: JSON.stringify(patch),
   });
-  return {
-    requireAiApproval: payload.requireAiApproval === true,
-    teaTheme: teaThemeOf(payload.teaTheme),
-    colorScheme: colorSchemeOf(payload.colorScheme),
-    agentEffort: agentEffortOf(payload.agentEffort),
-  };
+  return settingsOf(payload);
 }
 
 export async function setRequireAiApproval(requireAiApproval: boolean): Promise<void> {
