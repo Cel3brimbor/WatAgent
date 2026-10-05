@@ -8,12 +8,21 @@ type Props = {
   onSkip: () => Promise<void>;
 };
 
+type Step = "student" | "faculty" | "view";
+
 export function OnboardingScreen({ onDone, onSkip }: Props) {
+  const [step, setStep] = useState<Step>("student");
   const [student, setStudent] = useState<boolean | null>(null);
   const [faculty, setFaculty] = useState<UwFaculty | "">("");
   const [advanced, setAdvanced] = useState(false);
   const [working, setWorking] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
+
+  //the faculty question is skipped only once they say they are not a UW student
+  const steps: Step[] = student === false ? ["student", "view"] : ["student", "faculty", "view"];
+  const index = steps.indexOf(step);
+  const last = index === steps.length - 1;
+  const ready = step === "student" ? student !== null : step === "faculty" ? faculty !== "" : true;
 
   async function run(action: () => Promise<void>) {
     setWorking(true);
@@ -26,7 +35,16 @@ export function OnboardingScreen({ onDone, onSkip }: Props) {
     }
   }
 
-  const ready = student !== null && (student === false || faculty !== "");
+  function next() {
+    if (!ready || student === null) return;
+    if (!last) {
+      setStep(steps[index + 1]);
+      return;
+    }
+    void run(() =>
+      onDone({ isUwaterlooStudent: student, uwFaculty: student && faculty ? faculty : null, advancedView: advanced }),
+    );
+  }
 
   return (
     <main className="login-shell login-shell--center">
@@ -34,35 +52,35 @@ export function OnboardingScreen({ onDone, onSkip }: Props) {
         className="login-card onboarding-card"
         onSubmit={(event) => {
           event.preventDefault();
-          if (!ready || student === null) return;
-          void run(() =>
-            onDone({ isUwaterlooStudent: student, uwFaculty: student && faculty ? faculty : null, advancedView: advanced }),
-          );
+          next();
         }}
       >
-        <h1>Set up WatAgent</h1>
-        <p className="login-subtitle">Three quick questions. You can change them later in Settings.</p>
+        <p className="onboarding-progress" aria-live="polite">
+          Question {index + 1} of {steps.length}
+        </p>
         {failure ? (
           <p className="login-error" role="alert">
             {failure}
           </p>
         ) : null}
 
-        <fieldset className="onboarding-group">
-          <legend>Are you a University of Waterloo student?</legend>
-          <div className="onboarding-choices">
-            <label className={`onboarding-choice${student === true ? " is-selected" : ""}`}>
-              <input type="radio" name="uw" checked={student === true} onChange={() => setStudent(true)} />
-              Yes
-            </label>
-            <label className={`onboarding-choice${student === false ? " is-selected" : ""}`}>
-              <input type="radio" name="uw" checked={student === false} onChange={() => setStudent(false)} />
-              No
-            </label>
-          </div>
-        </fieldset>
+        {step === "student" ? (
+          <fieldset className="onboarding-group">
+            <legend>Are you a University of Waterloo student?</legend>
+            <div className="onboarding-choices">
+              <label className={`onboarding-choice${student === true ? " is-selected" : ""}`}>
+                <input type="radio" name="uw" checked={student === true} onChange={() => setStudent(true)} />
+                Yes
+              </label>
+              <label className={`onboarding-choice${student === false ? " is-selected" : ""}`}>
+                <input type="radio" name="uw" checked={student === false} onChange={() => setStudent(false)} />
+                No
+              </label>
+            </div>
+          </fieldset>
+        ) : null}
 
-        {student ? (
+        {step === "faculty" ? (
           <div className="onboarding-group">
             <label htmlFor="onboarding-faculty">Which faculty are you in?</label>
             <select
@@ -80,29 +98,43 @@ export function OnboardingScreen({ onDone, onSkip }: Props) {
           </div>
         ) : null}
 
-        <fieldset className="onboarding-group">
-          <legend>Which view do you want?</legend>
-          <div className="onboarding-choices">
-            <label className={`onboarding-choice${!advanced ? " is-selected" : ""}`}>
-              <input type="radio" name="view" checked={!advanced} onChange={() => setAdvanced(false)} />
-              Simple
-            </label>
-            <label className={`onboarding-choice${advanced ? " is-selected" : ""}`}>
-              <input type="radio" name="view" checked={advanced} onChange={() => setAdvanced(true)} />
-              Advanced
-            </label>
-          </div>
-          <p className="onboarding-hint">
-            Advanced adds the Calendars section for merging calendars, rules and the calendar map.
-          </p>
-        </fieldset>
+        {step === "view" ? (
+          <fieldset className="onboarding-group">
+            <legend>Which view do you want?</legend>
+            <div className="onboarding-choices">
+              <label className={`onboarding-choice${!advanced ? " is-selected" : ""}`}>
+                <input type="radio" name="view" checked={!advanced} onChange={() => setAdvanced(false)} />
+                Simple
+              </label>
+              <label className={`onboarding-choice${advanced ? " is-selected" : ""}`}>
+                <input type="radio" name="view" checked={advanced} onChange={() => setAdvanced(true)} />
+                Advanced
+              </label>
+            </div>
+            <p className="onboarding-hint">
+              Advanced adds the Calendars section for merging calendars, rules and the calendar map. You can change this
+              later in Settings.
+            </p>
+          </fieldset>
+        ) : null}
 
         <button type="submit" className="primary-btn login-btn" disabled={!ready || working}>
-          {working ? "Saving…" : "Continue"}
+          {working ? "Saving…" : last ? "Finish" : "Continue"}
         </button>
-        <button type="button" className="ghost-btn login-btn" disabled={working} onClick={() => void run(onSkip)}>
-          Skip for now
-        </button>
+        {index > 0 ? (
+          <button
+            type="button"
+            className="ghost-btn login-btn"
+            disabled={working}
+            onClick={() => setStep(steps[index - 1])}
+          >
+            Back
+          </button>
+        ) : (
+          <button type="button" className="ghost-btn login-btn" disabled={working} onClick={() => void run(onSkip)}>
+            Skip for now
+          </button>
+        )}
       </form>
     </main>
   );
