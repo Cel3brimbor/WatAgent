@@ -10,6 +10,7 @@ import {
   campusCalendarsOf,
   campusCategoryLabel,
   campusPlacements,
+  eventInCampusCategory,
   googleCalendarLink,
   icsFileName,
   localSpan,
@@ -91,6 +92,13 @@ const imported: ImportedCalendar[] = [
 assert.deepEqual(campusCalendarsOf(imported).map((entry) => entry.categories), [["talks"]]);
 assert.deepEqual(campusCalendarsOf(imported.slice(0, 1)), []);
 assert.equal(campusCategoryLabel("talks"), "Talks & seminars");
+assert.equal(campusCategoryLabel("rec-badminton"), "Badminton");
+assert.equal(eventInCampusCategory({ categories: ["rec-badminton"] }, "recreation"), true);
+assert.equal(eventInCampusCategory({ categories: ["rec-badminton"] }, "talks"), false);
+assert.deepEqual(
+  campusEventsOf({ categories: [{ id: "rec-badminton", label: "Badminton", hint: "courts", group: "drop-ins" }, { id: "talks", label: "Talks", hint: "", group: "nope" }] }).categories,
+  [{ id: "rec-badminton", label: "Badminton", hint: "courts", group: "drop-ins" }, { id: "talks", label: "Talks", hint: "" }],
+);
 assert.deepEqual(toggledCategories(["talks"], "academic", true, categories), ["academic", "talks"]);
 assert.deepEqual(toggledCategories(["academic", "talks"], "talks", false, categories), ["academic"]);
 

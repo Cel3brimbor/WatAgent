@@ -41,7 +41,7 @@ export function parseCampusSubscriptions(raw: unknown): CampusSubscriptionPref[]
     const color = typeof rec.color === "string" && HEX_COLOR.test(rec.color) ? rec.color.toLowerCase() : undefined;
     list.push({ categoryId, ...(color ? { color } : {}) });
   }
-  return list.slice(0, 20);
+  return list.slice(0, 40);
 }
 
 export function campusSubscriptionsMatch(imported: ImportedCalendar[], subs: CampusSubscriptionPref[]): boolean {

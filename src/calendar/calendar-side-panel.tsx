@@ -554,7 +554,9 @@ export function CalendarSidePanel({
           const source = removing.source; setRemoving(null);
           if (!source) return;
           setRemoveBusy(true); setRemoveError(null);
-          void onRemoveExternal(source).catch(() => setRemoveError("Unable to remove this calendar. Please try again.")).finally(() => setRemoveBusy(false));
+          void onRemoveExternal(source)
+            .catch((err) => setRemoveError(err instanceof Error && err.message ? err.message : "Unable to remove this calendar. Please try again."))
+            .finally(() => setRemoveBusy(false));
         }} /> : null}
     </div>
   );

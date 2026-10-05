@@ -8,8 +8,10 @@ import {
   campusEventIcs,
   campusFeedUrl,
   campusPlacements,
+  eventInCampusCategory,
   googleCalendarLink,
   icsFileName,
+  isDropInSport,
   localSpan,
   matchesCampusQuery,
   toggledCategories,
@@ -152,10 +154,14 @@ export function CampusEventsSection({ items, calendars, onAdd, subscriptions, on
   const counts = useMemo(() => {
     const found = new Map<string, number>();
     for (const event of upcoming) for (const id of event.categories) found.set(id, (found.get(id) ?? 0) + 1);
+    //the drop-in chip counts every sport, including sessions still tagged with the old combined category
+    let dropIns = 0;
+    for (const [id, count] of found) if (id === "recreation" || isDropInSport(id)) dropIns += count;
+    if (dropIns > 0) found.set("recreation", dropIns);
     return found;
   }, [upcoming]);
   const shown = useMemo(
-    () => upcoming.filter((event) => (!category || event.categories.includes(category)) && matchesCampusQuery(event, query)),
+    () => upcoming.filter((event) => eventInCampusCategory(event, category) && matchesCampusQuery(event, query)),
     [upcoming, category, query],
   );
   const days = useMemo(() => campusDays(shown, now), [shown, now]);
@@ -349,7 +355,7 @@ export function CampusEventsSection({ items, calendars, onAdd, subscriptions, on
     );
   }
 
-  const chips = (data?.categories ?? []).filter((entry) => (counts.get(entry.id) ?? 0) > 0);
+  const chips = (data?.categories ?? []).filter((entry) => entry.group !== "drop-ins" && (counts.get(entry.id) ?? 0) > 0);
   //calendar apps can only reach a public https server, so development has no link to share
   const feedLink = (() => {
     const link = campusFeedUrl(subscribed);
@@ -367,17 +373,6 @@ export function CampusEventsSection({ items, calendars, onAdd, subscriptions, on
           <h2 id="campus-heading">UWaterloo events</h2>
           <p>{subtitle || "Talks, workshops, games and dates from around campus"}</p>
         </div>
-        <input
-          type="search"
-          className={styles.search}
-          placeholder="Search events"
-          aria-label="Search UWaterloo events"
-          value={query}
-          onChange={(event) => {
-            setQuery(event.target.value);
-            setLimit(PAGE);
-          }}
-        />
       </div>
       {data && data.categories.length > 0 ? (
         <CampusSubscriptions
@@ -389,6 +384,17 @@ export function CampusEventsSection({ items, calendars, onAdd, subscriptions, on
           feedLink={feedLink}
         />
       ) : null}
+      <input
+        type="search"
+        className={styles.search}
+        placeholder="Search events"
+        aria-label="Search UWaterloo events"
+        value={query}
+        onChange={(event) => {
+          setQuery(event.target.value);
+          setLimit(PAGE);
+        }}
+      />
       {chips.length > 0 ? (
         <div className={styles.chips} role="group" aria-label="Filter by category">
           <button type="button" className={styles.chip} aria-pressed={category == null} onClick={() => setCategory(null)}>
