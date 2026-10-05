@@ -72,7 +72,7 @@ import { mergeEditorDraft } from "@/calendar/editor-draft";
 import { GoogleEventCard } from "@/calendar/google-event-card";
 import { rememberPlace } from "@/calendar/place-memory";
 import { SettingsPanel } from "@/calendar/settings-panel";
-import { useCalendarPreferencesSync } from "@/calendar/use-calendar-preferences-sync";
+import { useCalendarPreferencesSync, type CalendarPreferencesState } from "@/calendar/use-calendar-preferences-sync";
 import {
   BUILTIN_CALENDARS,
   isBuiltinLocalCalendarId,
@@ -102,6 +102,13 @@ import {
   isDefaultCampusCalendarName,
   type CampusEvent,
 } from "@/campus/campus-events";
+import {
+  campusColorKey,
+  campusSubscriptionsMatch,
+  colorOverridesWithCampusSubscriptions,
+  withCampusFeedColor,
+  type CampusSubscriptionPref,
+} from "@/campus/campus-subscription-prefs";
 import { keywordTasksOf, readKeywordTasks, withKeywordTaskDone, type KeywordTasks, type KeywordTaskSource } from "@/calendar/keyword-tasks";
 import { KeywordTaskRules, type KeywordTaskCalendarOption } from "@/calendar/keyword-task-rules";
 import { AccessError, plainReason } from "@/auth/access";
@@ -523,6 +530,11 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
 
   useAppearanceSync(calendar.hydrated);
 
+  const campusRestoreRef = useRef<CampusSubscriptionPref[] | null>(null);
+  const campusRestoreDoneRef = useRef(false);
+  const campusRestoreBusyRef = useRef(false);
+  const flushCalendarPreferencesRef = useRef<((overrides?: Partial<CalendarPreferencesState>) => void) | null>(null);
+
   const preferencesLoaded = useCalendarPreferencesSync(
     calendar.hydrated,
     { view, importedCalendars, mergedCalendars, agentHiddenCalendarIds, newCalendarsShown, localCalendars, sources, colors, colorOverrides, smartTags, keywordTasks, navCollapsed, sidePanelSections },
@@ -540,7 +552,12 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
       setKeywordTasks,
       setNavCollapsed,
       setSidePanelSections,
+      onCampusSubscriptionsRestore: (subs) => {
+        campusRestoreRef.current = subs;
+        campusRestoreDoneRef.current = false;
+      },
     },
+    flushCalendarPreferencesRef,
   );
 
   const importedLabels = useMemo<ImportedLabels>(() => ({ imported: importedCalendars, merged: mergedCalendars }), [importedCalendars, mergedCalendars]);
@@ -671,6 +688,13 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
 
   //each enabled category is its own calendar. a link that still lists several is split the next time this runs
   const campusCalendars = useMemo(() => campusCalendarsOf(importedCalendars), [importedCalendars]);
+  const campusCategoryByFeedId = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const entry of campusCalendars) {
+      if (entry.categories.length === 1) map.set(entry.calendar.id, entry.categories[0]);
+    }
+    return map;
+  }, [campusCalendars]);
   const campusSources = useMemo(() => new Set(campusCalendars.map((entry) => entry.calendar.id)), [campusCalendars]);
   const importedRef = useRef(importedCalendars);
   const campusBusy = useRef(false);
@@ -704,6 +728,8 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
             }
             const url = campusFeedUrl([id]);
             const feedId = newFeedId();
+            const feedKey = externalCalendarId(feedId);
+            setColorOverrides((current) => withCampusFeedColor(current, id, feedKey));
             await syncImportedFeed({ id: feedId, url });
             await addImported({ id: feedId, name: label, url });
             importedRef.current = [...importedRef.current.filter((calendar) => calendar.id !== feedId), { id: feedId, name: label, url }];
@@ -730,6 +756,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
           setNotice(err instanceof Error ? err.message : "Unable to update your UWaterloo event subscriptions.");
         } finally {
           campusBusy.current = false;
+          flushCalendarPreferencesRef.current?.({ importedCalendars: importedRef.current });
         }
       });
       campusChain.current = job.then(() => undefined, () => undefined);
@@ -740,6 +767,30 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
 
   const campusSplitAttempts = useRef(0);
   const { refresh: refreshItems, hydrated } = calendar;
+
+  useEffect(() => {
+    if (!hydrated || !preferencesLoaded || campusRestoreDoneRef.current || campusRestoreBusyRef.current) return;
+    const restore = campusRestoreRef.current;
+    if (!restore) return;
+    const finish = () => {
+      setColorOverrides((current) => colorOverridesWithCampusSubscriptions(current, restore));
+      campusRestoreDoneRef.current = true;
+      campusRestoreRef.current = null;
+      campusRestoreBusyRef.current = false;
+    };
+    if (!campusSubscriptionsMatch(importedCalendars, restore)) {
+      campusRestoreBusyRef.current = true;
+      void subscribeCampus(
+        restore.map((sub) => ({ id: sub.categoryId, label: campusCategoryLabel(sub.categoryId) })),
+        { quiet: true },
+      ).then(finish, () => {
+        campusRestoreBusyRef.current = false;
+      });
+      return;
+    }
+    finish();
+  }, [hydrated, preferencesLoaded, importedCalendars, subscribeCampus]);
+
   useEffect(() => {
     if (!hydrated || !preferencesLoaded || campusSplitAttempts.current >= 2) return;
     const needsSplit = importedCalendars.some((calendar) => (campusFeedCategories(calendar.url)?.length ?? 0) > 1);
@@ -902,18 +953,30 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
           if (filterGroups.hidden && filter.hiddenIds.includes(event.calendarId)) return true;
           return googleShown && !isSidebarHidden(filter, event.calendarId) && !filter.mutedGoogleIds.includes(event.calendarId);
         }),
-      }), mergedCalendars, importedCalendars).map((item) => ({
-        ...item,
-        calendarColor: item.importSource
-          ? calendarSwatchColor(item.mergedCalendarId ?? externalCalendarId(item.importSource), colors, colorOverrides)
-          : item.calendarId
-            ? calendarSwatchColor(item.calendarId, colors, colorOverrides)
-            : item.kind === "task"
-              ? colors.task
-              : colors.event,
-      }));
+      }), mergedCalendars, importedCalendars).map((item) => {
+        const swatch = (calendarId: string, importSource?: string) => {
+          if (importSource) {
+            const categoryId = campusCategoryByFeedId.get(importSource);
+            if (categoryId) {
+              const stable = colorOverrides[campusColorKey(categoryId)];
+              if (stable) return stable;
+            }
+          }
+          return calendarSwatchColor(calendarId, colors, colorOverrides);
+        };
+        return {
+          ...item,
+          calendarColor: item.importSource
+            ? swatch(item.mergedCalendarId ?? externalCalendarId(item.importSource), item.importSource)
+            : item.calendarId
+              ? swatch(item.calendarId)
+              : item.kind === "task"
+                ? colors.task
+                : colors.event,
+        };
+      });
     },
-    [itemsForUi, busyBlocks, shownOverlayEvents, mergedCalendars, importedCalendars, campusSources, colorOverrides, colors],
+    [itemsForUi, busyBlocks, shownOverlayEvents, mergedCalendars, importedCalendars, campusSources, campusCategoryByFeedId, colorOverrides, colors],
   );
 
   const itemsForDay = useCallback(

@@ -8,6 +8,7 @@ import type { CalendarView, ImportedCalendar, ImportedCalendarSource } from "@/c
 import { addDays, addMonths, isToday, monthCells, startOfLocalDay, startOfWeek, startOfWorkWeek } from "@/calendar/date-utils";
 import type { GoogleCalendarRef } from "@/calendar/google-calendar-client";
 import { campusFeedCategories } from "@/campus/campus-events";
+import { campusColorKey } from "@/campus/campus-subscription-prefs";
 import { isExcludedGoogleCalendarName } from "@/calendar/calendar-lists";
 import {
   CALENDAR_PALETTE,
@@ -180,8 +181,20 @@ export function CalendarSidePanel({
       checked: googleChecked(sources, calendar.id),
       google: true,
     }));
+  const externalRowColor = (calendar: SideExternalCalendar, id: string) => {
+    if (isCampusSideCalendar(calendar)) {
+      const categories = campusFeedCategories(calendar.feeds[0]?.url ?? "");
+      if (categories?.length === 1) {
+        const stable = colorOverrides[campusColorKey(categories[0])];
+        if (stable) return stable;
+      }
+    }
+    return calendarSwatchColor(id, colors, colorOverrides);
+  };
   const externalRows: Row[] = externalCalendars.map((calendar) => ({
-    id: calendar.id, name: calendar.name, color: calendarSwatchColor(calendar.id, colors, colorOverrides),
+    id: calendar.id,
+    name: calendar.name,
+    color: externalRowColor(calendar, calendar.id),
     checked: !sources.mutedGoogleIds.includes(calendar.id),
   }));
   const allRows: Row[] = [...localRows, ...externalRows, ...googleRows];
@@ -307,7 +320,15 @@ export function CalendarSidePanel({
     const next = color.toLowerCase();
     if (id === "events") onColors({ ...colors, event: next });
     else if (id === "tasks") onColors({ ...colors, task: next });
-    else onColorOverrides({ ...colorOverrides, [id]: next });
+    else {
+      const calendar = externalById(id);
+      const nextOverrides = { ...colorOverrides, [id]: next };
+      if (calendar && isCampusSideCalendar(calendar)) {
+        const categories = campusFeedCategories(calendar.feeds[0]?.url ?? "");
+        if (categories?.length === 1) nextOverrides[campusColorKey(categories[0])] = next;
+      }
+      onColorOverrides(nextOverrides);
+    }
     setMenu((current) => (current && current.id === id ? { ...current, color: next } : current));
   }
 

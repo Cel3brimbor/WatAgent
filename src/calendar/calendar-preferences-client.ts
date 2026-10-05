@@ -14,6 +14,7 @@ export async function fetchCalendarPreferences(): Promise<CalendarPreferencesRes
   };
 }
 
+/** Persists to `user_calendar_preferences` via PATCH /api/calendar/preferences (not the profiles row). */
 export async function saveCalendarPreferences(
   doc: UserCalendarPreferencesV1,
 ): Promise<CalendarPreferencesResponse> {

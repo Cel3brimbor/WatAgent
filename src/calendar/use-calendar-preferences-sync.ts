@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
+  buildUserCalendarPreferencesDoc,
   parseUserCalendarPreferencesDoc,
   preferencesDocHasContent,
   readLocalCalendarPreferences,
@@ -27,6 +28,9 @@ import { writeSmartTags, type SmartTag } from "@/calendar/smart-tags";
 import { writeKeywordTasks, type KeywordTasks } from "@/calendar/keyword-tasks";
 import { writeLocalCalendars, type LocalCalendar } from "@/calendar/local-calendars";
 import type { CalendarView, ImportedCalendar, MergedCalendar } from "@/calendar/types";
+import { writeCampusSubscriptions } from "@/campus/campus-subscription-prefs";
+import type { CampusSubscriptionPref } from "@/campus/campus-subscription-prefs";
+import type { MutableRefObject } from "react";
 
 const SAVE_DEBOUNCE_MS = 600;
 
@@ -59,6 +63,7 @@ function writeLocalCache(doc: UserCalendarPreferencesV1): void {
   writeSmartTags(doc.smartTags);
   writeKeywordTasks(doc.keywordTasks);
   writeSidePanelSections(doc.sidePanelSections);
+  writeCampusSubscriptions(doc.campusSubscriptions);
   try {
     window.localStorage.setItem("watagent.nav.collapsed", doc.navCollapsed ? "1" : "0");
   } catch {
@@ -67,7 +72,7 @@ function writeLocalCache(doc: UserCalendarPreferencesV1): void {
 }
 
 function toDoc(state: CalendarPreferencesState): UserCalendarPreferencesV1 {
-  return { version: 1, ...state };
+  return buildUserCalendarPreferencesDoc(state);
 }
 
 type ApplyPatch = {
@@ -84,6 +89,8 @@ type ApplyPatch = {
   setKeywordTasks: (config: KeywordTasks) => void;
   setNavCollapsed: (collapsed: boolean) => void;
   setSidePanelSections: (sections: SidePanelSectionsOpen) => void;
+  /** One-time restore list from the server; feeds may still need to be created on this device. */
+  onCampusSubscriptionsRestore?: (subs: CampusSubscriptionPref[]) => void;
 };
 
 function applyDoc(doc: UserCalendarPreferencesV1, apply: ApplyPatch): void {
@@ -100,11 +107,17 @@ function applyDoc(doc: UserCalendarPreferencesV1, apply: ApplyPatch): void {
   apply.setKeywordTasks(doc.keywordTasks);
   apply.setNavCollapsed(doc.navCollapsed);
   apply.setSidePanelSections(doc.sidePanelSections);
+  apply.onCampusSubscriptionsRestore?.(doc.campusSubscriptions);
   writeLocalCache(doc);
 }
 
 /** Loads preferences from the server (with one-time local → server migration) and debounces saves. False until that first load settles. */
-export function useCalendarPreferencesSync(ready: boolean, state: CalendarPreferencesState, apply: ApplyPatch): boolean {
+export function useCalendarPreferencesSync(
+  ready: boolean,
+  state: CalendarPreferencesState,
+  apply: ApplyPatch,
+  flushSaveRef?: MutableRefObject<((overrides?: Partial<CalendarPreferencesState>) => void) | null>,
+): boolean {
   const applyRef = useRef(apply);
   applyRef.current = apply;
   const stateRef = useRef(state);
@@ -136,7 +149,15 @@ export function useCalendarPreferencesSync(ready: boolean, state: CalendarPrefer
             const latest = stateRef.current;
             //subscribing while this load is in flight already wrote events; keep that link instead of restoring the older list
             const calendarsChanged = latest.importedCalendars !== atStart.importedCalendars || latest.mergedCalendars !== atStart.mergedCalendars;
-            const doc = calendarsChanged ? { ...parsed, importedCalendars: latest.importedCalendars, mergedCalendars: latest.mergedCalendars } : parsed;
+            const { version: _version, campusSubscriptions: _campus, ...parsedState } = parsed;
+            const doc = calendarsChanged
+              ? buildUserCalendarPreferencesDoc({
+                  ...parsedState,
+                  importedCalendars: latest.importedCalendars,
+                  mergedCalendars: latest.mergedCalendars,
+                  colorOverrides: latest.colorOverrides,
+                })
+              : parsed;
             if (!cancelled) applyDoc(doc, applyRef.current);
             if (calendarsChanged) await saveCalendarPreferences(doc);
           }
@@ -176,6 +197,23 @@ export function useCalendarPreferencesSync(ready: boolean, state: CalendarPrefer
       void saveCalendarPreferences(queued).catch(() => undefined);
     };
   }, [ready, view, importedCalendars, mergedCalendars, agentHiddenCalendarIds, newCalendarsShown, localCalendars, sources, colors, colorOverrides, smartTags, keywordTasks, navCollapsed, sidePanelSections]);
+
+  const flushSave = (overrides?: Partial<CalendarPreferencesState>) => {
+    if (!ready || skipSaveRef.current) return;
+    window.clearTimeout(saveTimerRef.current);
+    pendingSaveRef.current = null;
+    const doc = toDoc({ ...stateRef.current, ...overrides });
+    writeLocalCache(doc);
+    void saveCalendarPreferences(doc).catch(() => undefined);
+  };
+
+  useEffect(() => {
+    if (!flushSaveRef) return;
+    flushSaveRef.current = flushSave;
+    return () => {
+      flushSaveRef.current = null;
+    };
+  });
 
   //declared after the save effect so this cleanup runs first and the flush above can see the unmount
   useEffect(() => {
