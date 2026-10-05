@@ -76,7 +76,6 @@ import { useCalendarPreferencesSync, type CalendarPreferencesState } from "@/cal
 import {
   BUILTIN_CALENDARS,
   isBuiltinLocalCalendarId,
-  isPrimaryEventCalendarId,
   PRIMARY_EVENT_CALENDAR_NAME,
   calendarIdField,
   defaultEventCalendarId,

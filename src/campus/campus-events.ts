@@ -147,7 +147,8 @@ export function campusEventsOf(raw: unknown): CampusEventsPayload {
 
 /** The subscription link for these categories; none means every event. Calendar links must be https or webcal, so a plain-http API (development) gets webcal. */
 export function campusFeedUrl(categories: string[], base = API_BASE_URL): string {
-  const url = new URL(CAMPUS_FEED_PATH, base);
+  const origin = base || (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
+  const url = new URL(CAMPUS_FEED_PATH, origin);
   const ids = categories.filter((id) => CATEGORY_ID.test(id));
   url.search = ids.length > 0 ? `?categories=${ids.join(",")}` : "";
   return url.protocol === "http:" ? `webcal:${url.href.slice("http:".length)}` : url.href;

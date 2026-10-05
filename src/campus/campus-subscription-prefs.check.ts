@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import type { ImportedCalendar } from "@/calendar/types";
 import {
   campusColorKey,
   campusSubscriptionsMatch,
@@ -9,7 +10,7 @@ import {
 } from "./campus-subscription-prefs";
 
 const talksFeed = "feed-11111111-1111-4111-8111-111111111111";
-const imported = [
+const imported: ImportedCalendar[] = [
   {
     id: talksFeed,
     name: "Talks & seminars",
