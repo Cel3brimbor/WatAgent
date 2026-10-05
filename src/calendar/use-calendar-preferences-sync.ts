@@ -14,6 +14,7 @@ import {
   writeCalendarColors,
   writeCalendarView,
   writeImportedCalendars,
+  writeCampusCalendars,
   writeMergedCalendars,
   writeAgentHiddenIds,
   writeNewCalendarsShown,
@@ -37,6 +38,7 @@ const SAVE_DEBOUNCE_MS = 600;
 export type CalendarPreferencesState = {
   view: CalendarView;
   importedCalendars: ImportedCalendar[];
+  campusCalendars: ImportedCalendar[];
   mergedCalendars: MergedCalendar[];
   agentHiddenCalendarIds: string[];
   newCalendarsShown: boolean;
@@ -53,6 +55,7 @@ export type CalendarPreferencesState = {
 function writeLocalCache(doc: UserCalendarPreferencesV1): void {
   writeCalendarView(doc.view);
   writeImportedCalendars(doc.importedCalendars);
+  writeCampusCalendars(doc.campusCalendars);
   writeMergedCalendars(doc.mergedCalendars);
   writeAgentHiddenIds(doc.agentHiddenCalendarIds);
   writeNewCalendarsShown(doc.newCalendarsShown);
@@ -78,6 +81,7 @@ function toDoc(state: CalendarPreferencesState): UserCalendarPreferencesV1 {
 type ApplyPatch = {
   setView: (view: CalendarView) => void;
   setImportedCalendars: (calendars: ImportedCalendar[]) => void;
+  setCampusCalendars: (calendars: ImportedCalendar[]) => void;
   setMergedCalendars: (calendars: MergedCalendar[]) => void;
   setAgentHiddenCalendarIds: (ids: string[]) => void;
   setNewCalendarsShown: (shown: boolean) => void;
@@ -95,6 +99,7 @@ type ApplyPatch = {
 function applyDoc(doc: UserCalendarPreferencesV1, apply: ApplyPatch): void {
   apply.setView(doc.view);
   apply.setImportedCalendars(doc.importedCalendars);
+  apply.setCampusCalendars(doc.campusCalendars);
   apply.setMergedCalendars(doc.mergedCalendars);
   apply.setAgentHiddenCalendarIds(doc.agentHiddenCalendarIds);
   apply.setNewCalendarsShown(doc.newCalendarsShown);
@@ -147,12 +152,15 @@ export function useCalendarPreferencesSync(
           if (parsed) {
             const latest = stateRef.current;
             //subscribing while this load is in flight already wrote events; keep that link instead of restoring the older list
-            const calendarsChanged = latest.importedCalendars !== atStart.importedCalendars || latest.mergedCalendars !== atStart.mergedCalendars;
+            const calendarsChanged = latest.importedCalendars !== atStart.importedCalendars
+              || latest.campusCalendars !== atStart.campusCalendars
+              || latest.mergedCalendars !== atStart.mergedCalendars;
             const { version: _version, campusSubscriptions: _campus, ...parsedState } = parsed;
             const doc = calendarsChanged
               ? buildUserCalendarPreferencesDoc({
                   ...parsedState,
                   importedCalendars: latest.importedCalendars,
+                  campusCalendars: latest.campusCalendars,
                   mergedCalendars: latest.mergedCalendars,
                   colorOverrides: latest.colorOverrides,
                 })
@@ -175,11 +183,11 @@ export function useCalendarPreferencesSync(
     };
   }, [ready]);
 
-  const { view, importedCalendars, mergedCalendars, agentHiddenCalendarIds, newCalendarsShown, localCalendars, sources, colors, colorOverrides, smartTags, keywordTasks, navCollapsed, sidePanelSections } = state;
+  const { view, importedCalendars, campusCalendars, mergedCalendars, agentHiddenCalendarIds, newCalendarsShown, localCalendars, sources, colors, colorOverrides, smartTags, keywordTasks, navCollapsed, sidePanelSections } = state;
 
   useEffect(() => {
     if (!ready || skipSaveRef.current) return;
-    const doc = toDoc({ view, importedCalendars, mergedCalendars, agentHiddenCalendarIds, newCalendarsShown, localCalendars, sources, colors, colorOverrides, smartTags, keywordTasks, navCollapsed, sidePanelSections });
+    const doc = toDoc({ view, importedCalendars, campusCalendars, mergedCalendars, agentHiddenCalendarIds, newCalendarsShown, localCalendars, sources, colors, colorOverrides, smartTags, keywordTasks, navCollapsed, sidePanelSections });
     writeLocalCache(doc);
     pendingSaveRef.current = doc;
     window.clearTimeout(saveTimerRef.current);
@@ -195,7 +203,7 @@ export function useCalendarPreferencesSync(
       pendingSaveRef.current = null;
       void saveCalendarPreferences(queued).catch(() => undefined);
     };
-  }, [ready, view, importedCalendars, mergedCalendars, agentHiddenCalendarIds, newCalendarsShown, localCalendars, sources, colors, colorOverrides, smartTags, keywordTasks, navCollapsed, sidePanelSections]);
+  }, [ready, view, importedCalendars, campusCalendars, mergedCalendars, agentHiddenCalendarIds, newCalendarsShown, localCalendars, sources, colors, colorOverrides, smartTags, keywordTasks, navCollapsed, sidePanelSections]);
 
   const flushSave = (overrides?: Partial<CalendarPreferencesState>) => {
     if (!ready || skipSaveRef.current) return;

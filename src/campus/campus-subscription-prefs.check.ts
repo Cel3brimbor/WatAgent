@@ -8,7 +8,7 @@ import {
   withCampusFeedColor,
 } from "./campus-subscription-prefs";
 
-const talksFeed = "feed-11111111-1111-4111-8111-111111111111";
+const talksFeed = "feed-11111111-1111-4111-8111-111111111111" as const;
 const imported = [
   {
     id: talksFeed,

@@ -6,18 +6,20 @@ import { localCalendarIdOf } from "./local-calendars";
 export type ExternalCalendarRef = { id: string; name: string; source: ImportedCalendarSource; url?: string };
 export const externalCalendarId = importedCalendarId;
 
-/** Every saved link, then any imported events left without one (an old unnamed import). */
-export function externalCalendarsOf(items: CalendarItemDoc[], imported: ImportedCalendar[]): ExternalCalendarRef[] {
-  const list: ExternalCalendarRef[] = imported.map((calendar) => ({
-    id: externalCalendarId(calendar.id),
-    name: calendar.name,
-    source: calendar.id,
-    url: calendar.url,
-  }));
+/** Every saved external link, then any imported events left without one (an old unnamed import). skipSources are UWaterloo feeds: they have their own list and never become an "Imported calendar" row. */
+export function externalCalendarsOf(
+  items: CalendarItemDoc[],
+  imported: ImportedCalendar[],
+  skipSources: ReadonlySet<string> = new Set(),
+): ExternalCalendarRef[] {
+  const list: ExternalCalendarRef[] = imported.flatMap((calendar) => {
+    if (skipSources.has(calendar.id)) return [];
+    return [{ id: externalCalendarId(calendar.id), name: calendar.name, source: calendar.id, url: calendar.url }];
+  });
   const orphans = new Set<ImportedCalendarSource>();
   for (const item of items) {
     const source = item.calendar.importSource;
-    if (source && !imported.some((calendar) => calendar.id === source)) orphans.add(source);
+    if (source && !skipSources.has(source) && !imported.some((calendar) => calendar.id === source)) orphans.add(source);
   }
   for (const source of orphans) list.push({ id: externalCalendarId(source), name: "Imported calendar", source });
   return list;

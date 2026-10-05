@@ -19,6 +19,7 @@ import { TEA_THEMES, useColorScheme, useTeaTheme, type ColorSchemePreference } f
 
 type Props = {
   importedCalendars: ImportedCalendar[];
+  campusCalendars?: ImportedCalendar[];
   mergedCalendars: MergedCalendar[];
   onRenameCalendar: (id: ImportedCalendarSource, name: string) => void;
   accountEmail: string | null;
@@ -69,6 +70,7 @@ function formatSynced(ms: number | null): string {
 
 export function SettingsPanel({
   importedCalendars,
+  campusCalendars = [],
   mergedCalendars,
   onRenameCalendar,
   accountEmail,
@@ -180,7 +182,7 @@ export function SettingsPanel({
         )}
       </section>
 
-      <CalendarImportPanel importedCalendars={importedCalendars} onImported={onImported} />
+      <CalendarImportPanel importedCalendars={[...importedCalendars, ...campusCalendars]} onImported={onImported} />
 
       <ImportedCalendarsPanel
         calendars={importedCalendars}

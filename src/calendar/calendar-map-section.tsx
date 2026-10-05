@@ -15,7 +15,6 @@ import {
   type RuleFeed,
 } from "@/agent/rules/rules-client";
 import type { AgentRulesState } from "@/agent/rules/use-agent-rules";
-import { campusFeedCategories } from "@/campus/campus-events";
 import { sharedEventCounts } from "@/calendar/calendar-merge";
 import { feedSyncProgressLabel, formatFeedSyncSummary, syncImportedFeed } from "@/calendar/calendar-sync";
 import { calendarIdForMeta } from "@/calendar/calendar-ownership";
@@ -94,6 +93,8 @@ type Props = {
   sources: CalendarSourceFilter;
   onSources: Dispatch<SetStateAction<CalendarSourceFilter>>;
   importedCalendars: ImportedCalendar[];
+  /** UWaterloo event feeds. Kept off the external list so they can't flash as an imported calendar. */
+  campusCalendars: ImportedCalendar[];
   colors: CalendarColors;
   colorOverrides: Record<string, string>;
   localCalendars: LocalCalendar[];
@@ -159,6 +160,7 @@ export function CalendarMapSection({
   sources,
   onSources,
   importedCalendars,
+  campusCalendars,
   colors,
   colorOverrides,
   localCalendars,
@@ -240,11 +242,17 @@ export function CalendarMapSection({
   }, []);
 
   const groups = calendarGroupsOf(sources.groups);
-  const feeds = useMemo(() => externalCalendarsOf(items, importedCalendars), [items, importedCalendars]);
-  const campusSources = useMemo(
-    () => new Set(importedCalendars.filter((calendar) => campusFeedCategories(calendar.url) != null).map((calendar) => calendar.id)),
-    [importedCalendars],
-  );
+  const campusSources = useMemo(() => new Set(campusCalendars.map((calendar) => calendar.id)), [campusCalendars]);
+  const feeds = useMemo(() => {
+    const external = externalCalendarsOf(items, importedCalendars, campusSources);
+    const seen = new Set(external.map((feed) => feed.id));
+    const campus = campusCalendars.flatMap((calendar) => {
+      const id = externalCalendarId(calendar.id);
+      if (seen.has(id)) return [];
+      return [{ id, name: calendar.name, source: calendar.id, url: calendar.url }];
+    });
+    return [...external, ...campus];
+  }, [items, importedCalendars, campusCalendars, campusSources]);
   const showGoogle = googleConnected === true || overlayEvents.length > 0;
   const memberOf = useMemo(() => mergedByMember(mergedCalendars), [mergedCalendars]);
   const isMerged = (id: string) => mergedCalendars.some((calendar) => calendar.id === id);
@@ -315,7 +323,9 @@ export function CalendarMapSection({
 
   const agentHidden = (id: string) => isAgentCalendarHidden(agentHiddenIds, id);
   const readOnly = (id: string) => id !== AGENT && id !== GOOGLE && isCalendarReadOnly(sources, id);
-  const linkOf = (id: string) => importedCalendars.find((calendar) => externalCalendarId(calendar.id) === id);
+  const linkOf = (id: string) =>
+    importedCalendars.find((calendar) => externalCalendarId(calendar.id) === id)
+    ?? campusCalendars.find((calendar) => externalCalendarId(calendar.id) === id);
 
   function tell(message: string, change?: Change) {
     toastKey.current += 1;

@@ -7,7 +7,10 @@ import {
   campusEventsOf,
   campusFeedCategories,
   campusFeedUrl,
+  campusScrapeIsNewer,
   campusCalendarsOf,
+  splitCampusCalendars,
+  campusCalendarItems,
   campusCategoryLabel,
   campusPlacements,
   eventInCampusCategory,
@@ -91,6 +94,13 @@ const imported: ImportedCalendar[] = [
 ];
 assert.deepEqual(campusCalendarsOf(imported).map((entry) => entry.categories), [["talks"]]);
 assert.deepEqual(campusCalendarsOf(imported.slice(0, 1)), []);
+assert.deepEqual(
+  splitCampusCalendars(imported).imported.map((calendar) => calendar.id),
+  ["learn"],
+  "uwaterloo events leave the external list",
+);
+assert.deepEqual(splitCampusCalendars(imported).campus.map((calendar) => calendar.name), ["UWaterloo events"]);
+assert.deepEqual(splitCampusCalendars(imported.slice(0, 1), imported.slice(1)).campus.map((calendar) => calendar.id), [imported[1].id]);
 assert.equal(campusCategoryLabel("talks"), "Talks & seminars");
 assert.equal(campusCategoryLabel("rec-badminton"), "Badminton");
 assert.equal(eventInCampusCategory({ categories: ["rec-badminton"] }, "recreation"), true);
@@ -160,5 +170,20 @@ assert.ok(ics.split("\r\n").every((row) => new TextEncoder().encode(row).length 
 assert.match(ics, /SUMMARY:Hallman Lecture: rights\\, health\\; and policy\r\n/);
 assert.match(campusEventIcs(readingWeek, 0), /DTSTART;VALUE=DATE:20261010\r\nDTEND;VALUE=DATE:20261019\r\n/);
 assert.equal(icsFileName(lecture), "hallman-lecture-rights-health-and-policy.ics");
+
+const staged = campusCalendarItems([lecture, readingWeek], "feed-11111111-1111-4111-8111-111111111111", "talks");
+assert.equal(staged.length, 1);
+assert.equal(staged[0].calendar.importSource, "feed-11111111-1111-4111-8111-111111111111");
+assert.equal(staged[0].title, lecture.title);
+assert.equal(staged[0].calendar.location, "Hagey Hall 1101");
+
+//the scrape time is the only signal. equal means leave the calendars alone, and a missing server time never overwrites.
+assert.equal(campusScrapeIsNewer(100, 100), false);
+assert.equal(campusScrapeIsNewer(101, 100), true);
+assert.equal(campusScrapeIsNewer(99, 100), false);
+assert.equal(campusScrapeIsNewer(null, 100), false);
+assert.equal(campusScrapeIsNewer(Number.NaN, 100), false);
+assert.equal(campusScrapeIsNewer(100, null), true);
+assert.equal(campusScrapeIsNewer(100, 0), true);
 
 console.log("Campus events client checks passed.");

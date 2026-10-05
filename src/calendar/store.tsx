@@ -41,6 +41,12 @@ type CalendarContextValue = {
   approvePendingChanges: (input: { ids?: string[]; all?: boolean }) => Promise<void>;
   rejectPendingChanges: (input: { ids?: string[]; all?: boolean }) => Promise<void>;
   refresh: () => Promise<void>;
+  /** Drop a feed's events now, and keep a refresh from putting them back until releaseImport. */
+  hideImport: (source: string) => void;
+  /** Show events already on this device, and keep them across refreshes until the server has that feed. */
+  stageImport: (source: string, items: CalendarItemDoc[]) => void;
+  /** The server list is the truth for this feed again. */
+  releaseImport: (source: string) => void;
   syncFromGoogle: (range: {
     rangeStartUTC: number;
     rangeEndUTC: number;
@@ -116,6 +122,20 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
   const [approvalBusy, setApprovalBusy] = useState(false);
   const itemsRef = useRef(items);
   itemsRef.current = items;
+  //feeds the screen changed before the server finished. refreshes honor these until releaseImport.
+  const hiddenImports = useRef(new Set<string>());
+  const stagedImports = useRef(new Map<string, CalendarItemDoc[]>());
+  const withLocalImports = useCallback((loaded: CalendarItemDoc[]) => {
+    const visible = loaded.filter((item) => !item.calendar.importSource || !hiddenImports.current.has(item.calendar.importSource));
+    const present = new Set<string>();
+    for (const item of visible) if (item.calendar.importSource) present.add(item.calendar.importSource);
+    const extra: CalendarItemDoc[] = [];
+    for (const [source, docs] of stagedImports.current) {
+      if (hiddenImports.current.has(source) || present.has(source)) continue;
+      extra.push(...docs);
+    }
+    return sortItems([...visible, ...extra]);
+  }, []);
   const chatStateRef = useRef(chatState);
   chatStateRef.current = chatState;
 
@@ -138,11 +158,28 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
   const refresh = useCallback(async () => {
     try {
       const loaded = await listCalendarItems();
-      setItems(sortItems(loaded));
+      setItems(withLocalImports(loaded));
       setLoadError(null);
     } catch {
       setLoadError("Unable to load your calendar.");
     }
+  }, [withLocalImports]);
+
+  const hideImport = useCallback((source: string) => {
+    stagedImports.current.delete(source);
+    hiddenImports.current.add(source);
+    setItems((prev) => prev.filter((item) => item.calendar.importSource !== source));
+  }, []);
+
+  const stageImport = useCallback((source: string, docs: CalendarItemDoc[]) => {
+    hiddenImports.current.delete(source);
+    stagedImports.current.set(source, docs);
+    setItems((prev) => withLocalImports(prev.filter((item) => item.calendar.importSource !== source)));
+  }, [withLocalImports]);
+
+  const releaseImport = useCallback((source: string) => {
+    hiddenImports.current.delete(source);
+    stagedImports.current.delete(source);
   }, []);
 
   const refreshPending = useCallback(async () => {
@@ -521,6 +558,9 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
       approvePendingChanges,
       rejectPendingChanges,
       refresh,
+      hideImport,
+      stageImport,
+      releaseImport,
       syncFromGoogle,
       setAfterWrite,
       upsert,
@@ -556,6 +596,9 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
       approvePendingChanges,
       rejectPendingChanges,
       refresh,
+      hideImport,
+      stageImport,
+      releaseImport,
       syncFromGoogle,
       setAfterWrite,
       upsert,

@@ -1,6 +1,7 @@
 import { calendarIdField } from "@/calendar/local-calendars";
-import type { CalendarItemDoc, CalendarItemMeta, ImportedCalendar } from "@/calendar/types";
+import type { CalendarItemDoc, CalendarItemMeta, ImportedCalendar, ImportedCalendarSource } from "@/calendar/types";
 import { API_BASE_URL } from "@/shared/config";
+import { newId } from "@/shared/ids";
 
 /** One category the backend sorts UWaterloo events into, like "careers" or "talks". Drop-in sports carry group "drop-ins". */
 export type CampusCategory = { id: string; label: string; hint: string; group?: "drop-ins" };
@@ -143,6 +144,16 @@ function campusEventOf(raw: unknown, known: Set<string>): CampusEvent | null {
   };
 }
 
+/**
+ * True only when the server scrape is strictly newer than the one already applied.
+ * A missing or unusable server time never syncs. A missing applied time does, once.
+ */
+export function campusScrapeIsNewer(server: number | null | undefined, applied: number | null | undefined): boolean {
+  if (typeof server !== "number" || !Number.isFinite(server) || server <= 0) return false;
+  if (typeof applied !== "number" || !Number.isFinite(applied) || applied <= 0) return true;
+  return server > applied;
+}
+
 /** The /api/campus-events payload, keeping only what reads cleanly. */
 export function campusEventsOf(raw: unknown): CampusEventsPayload {
   const rec = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
@@ -195,7 +206,31 @@ export function campusFeedCategories(link: string): string[] | null {
 
 export type CampusCalendar = { calendar: ImportedCalendar; categories: string[] };
 
-/** Every imported calendar that subscribes to the campus feed, in the order they were saved. */
+/**
+ * UWaterloo event calendars are their own list. A campus feed that was saved with external links moves over,
+ * and a feed id can't sit in both lists.
+ */
+export function splitCampusCalendars(
+  imported: ImportedCalendar[],
+  campus: ImportedCalendar[] = [],
+): { imported: ImportedCalendar[]; campus: ImportedCalendar[] } {
+  const campusById = new Map<string, ImportedCalendar>();
+  for (const calendar of campus) {
+    if (campusFeedCategories(calendar.url) == null || campusById.has(calendar.id)) continue;
+    campusById.set(calendar.id, calendar);
+  }
+  const external: ImportedCalendar[] = [];
+  for (const calendar of imported) {
+    if (campusFeedCategories(calendar.url) != null) {
+      if (!campusById.has(calendar.id)) campusById.set(calendar.id, calendar);
+      continue;
+    }
+    if (!campusById.has(calendar.id)) external.push(calendar);
+  }
+  return { imported: external, campus: [...campusById.values()] };
+}
+
+/** Every calendar that subscribes to the campus feed, in the order they were saved. */
 export function campusCalendarsOf(imported: ImportedCalendar[]): CampusCalendar[] {
   return imported.flatMap((calendar) => {
     const categories = campusFeedCategories(calendar.url);
@@ -230,6 +265,31 @@ function plain(text: string): string {
 
 export function campusEventDescription(event: CampusEvent): string {
   return [event.summary, event.url].filter(Boolean).join("\n\n").slice(0, 4000);
+}
+
+/** Events already loaded for this category, shaped like calendar rows so a toggle can show them before the server writes them. */
+export function campusCalendarItems(events: CampusEvent[], feedId: ImportedCalendarSource, categoryId: string): CalendarItemDoc[] {
+  const now = Date.now();
+  return events.flatMap((event) => {
+    if (!eventInCampusCategory(event, categoryId)) return [];
+    const span = localSpan(event);
+    if (span.endUTC <= span.startUTC) return [];
+    const title = event.title.trim().slice(0, 200) || "Event";
+    return [{
+      id: newId(),
+      title,
+      createdAt: now,
+      updatedAt: now,
+      calendar: {
+        kind: "event" as const,
+        ...span,
+        allDay: event.allDay,
+        importSource: feedId,
+        ...(event.location ? { location: event.location.slice(0, 300) } : {}),
+        description: campusEventDescription(event),
+      },
+    }];
+  });
 }
 
 /** A calendar item for one occurrence, on a WatAgent calendar. */

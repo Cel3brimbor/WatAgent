@@ -6,6 +6,7 @@ import {
   readCalendarColors,
   readCalendarView,
   readImportedCalendars,
+  readCampusCalendars,
   readMergedCalendars,
   readAgentHiddenIds,
   readNewCalendarsShown,
@@ -23,6 +24,7 @@ import {
 import { parseSmartTagsFromUnknown, readSmartTags, type SmartTag } from "@/calendar/smart-tags";
 import { parseKeywordTasksFromUnknown, readKeywordTasks, type KeywordTasks } from "@/calendar/keyword-tasks";
 import type { CalendarView, ImportedCalendar, MergedCalendar } from "@/calendar/types";
+import { splitCampusCalendars } from "@/campus/campus-events";
 import { BUILTIN_CALENDARS, localCalendarsOf, readLocalCalendars, type LocalCalendar } from "@/calendar/local-calendars";
 import {
   campusSubscriptionsOf,
@@ -35,6 +37,7 @@ export type UserCalendarPreferencesV1 = {
   version: 1;
   view: CalendarView;
   importedCalendars: ImportedCalendar[];
+  campusCalendars: ImportedCalendar[];
   mergedCalendars: MergedCalendar[];
   agentHiddenCalendarIds: string[];
   newCalendarsShown: boolean;
@@ -52,10 +55,13 @@ export type UserCalendarPreferencesV1 = {
 export type UserCalendarPreferencesState = Omit<UserCalendarPreferencesV1, "version" | "campusSubscriptions">;
 
 export function buildUserCalendarPreferencesDoc(state: UserCalendarPreferencesState): UserCalendarPreferencesV1 {
-  const campusSubscriptions = campusSubscriptionsOf(state.importedCalendars, state.colorOverrides);
+  const feeds = splitCampusCalendars(state.importedCalendars, state.campusCalendars);
+  const campusSubscriptions = campusSubscriptionsOf(feeds.campus, state.colorOverrides);
   return {
     version: 1,
     ...state,
+    importedCalendars: feeds.imported,
+    campusCalendars: feeds.campus,
     campusSubscriptions,
     colorOverrides: colorOverridesWithCampusSubscriptions(state.colorOverrides, campusSubscriptions),
   };
@@ -126,15 +132,18 @@ export function readLocalCalendarPreferences(): UserCalendarPreferencesV1 {
   } catch {
     navCollapsed = false;
   }
-  const importedCalendars = readImportedCalendars();
+  const storedFeeds = splitCampusCalendars(readImportedCalendars(), readCampusCalendars());
+  const importedCalendars = storedFeeds.imported;
+  const campusCalendars = storedFeeds.campus;
   const colorOverrides = readColorOverrides();
   const campusSubscriptions =
-    readCampusSubscriptions() ?? campusSubscriptionsOf(importedCalendars, colorOverrides);
+    readCampusSubscriptions() ?? campusSubscriptionsOf(campusCalendars, colorOverrides);
   return {
     version: 1,
     view: readCalendarView(),
     importedCalendars,
-    mergedCalendars: readMergedCalendars(importedCalendars),
+    campusCalendars,
+    mergedCalendars: readMergedCalendars([...importedCalendars, ...campusCalendars]),
     agentHiddenCalendarIds: readAgentHiddenIds(),
     newCalendarsShown: readNewCalendarsShown(),
     localCalendars: readLocalCalendars(),
@@ -162,23 +171,32 @@ export function parseUserCalendarPreferencesDoc(
   const sources = sourcesOf(rec.sources) ?? fallbacks.sources;
   const colors = colorsOf(rec.colors) ?? fallbacks.colors;
   //docs saved before these lists keep their links in fixed slots and their duplicate rule as a priority order
-  const importedCalendars =
-    rec.importedCalendars !== undefined || rec.calendarLinks !== undefined
-      ? importedCalendarsOf(rec.importedCalendars, rec.calendarLinks, rec.calendarNames)
-      : fallbacks.importedCalendars;
+  const hasFeedList = rec.importedCalendars !== undefined || rec.calendarLinks !== undefined;
+  const listed = hasFeedList
+    ? importedCalendarsOf(rec.importedCalendars, rec.calendarLinks, rec.calendarNames)
+    : fallbacks.importedCalendars;
+  const explicitCampus = rec.campusCalendars !== undefined
+    ? importedCalendarsOf(rec.campusCalendars)
+    : hasFeedList
+      ? []
+      : fallbacks.campusCalendars;
+  const feeds = splitCampusCalendars(listed, explicitCampus);
+  const importedCalendars = feeds.imported;
+  const campusCalendars = feeds.campus;
   const mergedCalendars =
     rec.mergedCalendars !== undefined
       ? mergedCalendarsOf(rec.mergedCalendars)
-      : legacyMergedCalendars(rec.calendarPriorityOrder, rec.showDuplicateEvents, rec.duplicatePriority, importedCalendars);
+      : legacyMergedCalendars(rec.calendarPriorityOrder, rec.showDuplicateEvents, rec.duplicatePriority, [...importedCalendars, ...campusCalendars]);
   const colorOverrides = rec.colorOverrides !== undefined ? overridesOf(rec.colorOverrides) : fallbacks.colorOverrides;
   const campusSubscriptions =
     rec.campusSubscriptions !== undefined
-      ? (parseCampusSubscriptions(rec.campusSubscriptions) ?? campusSubscriptionsOf(importedCalendars, colorOverrides))
-      : campusSubscriptionsOf(importedCalendars, colorOverrides);
+      ? (parseCampusSubscriptions(rec.campusSubscriptions) ?? campusSubscriptionsOf(campusCalendars, colorOverrides))
+      : campusSubscriptionsOf(campusCalendars, colorOverrides);
   return {
     version: 1,
     view,
     importedCalendars,
+    campusCalendars,
     mergedCalendars,
     agentHiddenCalendarIds:
       rec.agentHiddenCalendarIds !== undefined ? agentHiddenIdsOf(rec.agentHiddenCalendarIds) : fallbacks.agentHiddenCalendarIds,
@@ -199,7 +217,7 @@ export function parseUserCalendarPreferencesDoc(
 }
 
 export function preferencesDocHasContent(doc: UserCalendarPreferencesV1): boolean {
-  if (doc.importedCalendars.length > 0 || doc.mergedCalendars.length > 0 || doc.agentHiddenCalendarIds.length > 0) return true;
+  if (doc.importedCalendars.length > 0 || doc.campusCalendars.length > 0 || doc.mergedCalendars.length > 0 || doc.agentHiddenCalendarIds.length > 0) return true;
   if (!doc.newCalendarsShown) return true;
   if (doc.smartTags.length > 0) return true;
   if (doc.keywordTasks.rules.length > 0 || doc.keywordTasks.doneKeys.length > 0) return true;
