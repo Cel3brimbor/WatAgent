@@ -1696,7 +1696,7 @@ export function CalendarApp({
         />
       </SideNav>
       <div className="calendar-shell">
-      <header className="calendar-toolbar">
+      <header className="calendar-toolbar" data-section={section}>
         <div className="calendar-toolbar-left">
           {section === "calendar" ? (
             <h2 aria-live="polite">{formatFocusLabel(focus, view, weekStartsOn)}</h2>
