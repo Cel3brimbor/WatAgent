@@ -523,7 +523,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
 
   useAppearanceSync(calendar.hydrated);
 
-  useCalendarPreferencesSync(
+  const preferencesLoaded = useCalendarPreferencesSync(
     calendar.hydrated,
     { view, importedCalendars, mergedCalendars, agentHiddenCalendarIds, newCalendarsShown, localCalendars, sources, colors, colorOverrides, smartTags, keywordTasks, navCollapsed, sidePanelSections },
     {
@@ -741,7 +741,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
   const campusSplitAttempts = useRef(0);
   const { refresh: refreshItems, hydrated } = calendar;
   useEffect(() => {
-    if (!hydrated || campusSplitAttempts.current >= 2) return;
+    if (!hydrated || !preferencesLoaded || campusSplitAttempts.current >= 2) return;
     const needsSplit = importedCalendars.some((calendar) => (campusFeedCategories(calendar.url)?.length ?? 0) > 1);
     const needsRename = importedCalendars.some((calendar) => {
       const categories = campusFeedCategories(calendar.url);
@@ -755,13 +755,13 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
     }
     if (needsSplit) setNotice("UWaterloo Events now has one calendar per category.");
     void subscribeCampus([...wanted].map(([id, label]) => ({ id, label })), { quiet: true });
-  }, [hydrated, importedCalendars, subscribeCampus]);
+  }, [hydrated, preferencesLoaded, importedCalendars, subscribeCampus]);
 
   //new events are scraped every few hours; each category calendar catches up when the app opens or Events does
   const onEvents = section === "events";
   const campusSyncKey = campusCalendars.map((entry) => `${entry.calendar.id}\0${entry.calendar.url}`).join("\n");
   useEffect(() => {
-    if (!hydrated || campusCalendars.length === 0) return;
+    if (!hydrated || !preferencesLoaded || campusCalendars.length === 0) return;
     //a combined feed is about to be split, and that split syncs the new calendars
     if (campusCalendars.some((entry) => entry.categories.length !== 1)) return;
     if (Date.now() - readCampusSyncedAt() < CAMPUS_SYNC_EVERY_MS) return;
@@ -782,7 +782,7 @@ export function CalendarApp({ user, onSignOut }: { user: AuthUser; onSignOut: ()
       await refreshItems();
       setNotice(notes.length === 1 ? notes[0] : `UWaterloo Events updated (${notes.length} calendars).`);
     })();
-  }, [hydrated, campusSyncKey, campusCalendars, onEvents, refreshItems]);
+  }, [hydrated, preferencesLoaded, campusSyncKey, campusCalendars, onEvents, refreshItems]);
 
   useEffect(() => {
     let cancelled = false;

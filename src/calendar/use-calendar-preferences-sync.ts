@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   parseUserCalendarPreferencesDoc,
   preferencesDocHasContent,
@@ -103,16 +103,22 @@ function applyDoc(doc: UserCalendarPreferencesV1, apply: ApplyPatch): void {
   writeLocalCache(doc);
 }
 
-/** Loads preferences from the server (with one-time local → server migration) and debounces saves. */
-export function useCalendarPreferencesSync(ready: boolean, state: CalendarPreferencesState, apply: ApplyPatch): void {
+/** Loads preferences from the server (with one-time local → server migration) and debounces saves. False until that first load settles. */
+export function useCalendarPreferencesSync(ready: boolean, state: CalendarPreferencesState, apply: ApplyPatch): boolean {
   const applyRef = useRef(apply);
   applyRef.current = apply;
+  const stateRef = useRef(state);
+  stateRef.current = state;
   const skipSaveRef = useRef(true);
   const saveTimerRef = useRef(0);
+  const pendingSaveRef = useRef<UserCalendarPreferencesV1 | null>(null);
+  const mountedRef = useRef(true);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     if (!ready) return;
     let cancelled = false;
+    const atStart = stateRef.current;
     void (async () => {
       try {
         const local = readLocalCalendarPreferences();
@@ -126,12 +132,22 @@ export function useCalendarPreferencesSync(ready: boolean, state: CalendarPrefer
           }
         } else {
           const parsed = parseUserCalendarPreferencesDoc(remote.preferences, local);
-          if (parsed) applyDoc(parsed, applyRef.current);
+          if (parsed) {
+            const latest = stateRef.current;
+            //subscribing while this load is in flight already wrote events; keep that link instead of restoring the older list
+            const calendarsChanged = latest.importedCalendars !== atStart.importedCalendars || latest.mergedCalendars !== atStart.mergedCalendars;
+            const doc = calendarsChanged ? { ...parsed, importedCalendars: latest.importedCalendars, mergedCalendars: latest.mergedCalendars } : parsed;
+            if (!cancelled) applyDoc(doc, applyRef.current);
+            if (calendarsChanged) await saveCalendarPreferences(doc);
+          }
         }
       } catch {
         // Keep localStorage-backed state when offline or API errors.
       } finally {
-        if (!cancelled) skipSaveRef.current = false;
+        if (!cancelled) {
+          skipSaveRef.current = false;
+          setLoaded(true);
+        }
       }
     })();
     return () => {
@@ -145,10 +161,29 @@ export function useCalendarPreferencesSync(ready: boolean, state: CalendarPrefer
     if (!ready || skipSaveRef.current) return;
     const doc = toDoc({ view, importedCalendars, mergedCalendars, agentHiddenCalendarIds, newCalendarsShown, localCalendars, sources, colors, colorOverrides, smartTags, keywordTasks, navCollapsed, sidePanelSections });
     writeLocalCache(doc);
+    pendingSaveRef.current = doc;
     window.clearTimeout(saveTimerRef.current);
     saveTimerRef.current = window.setTimeout(() => {
+      pendingSaveRef.current = null;
       void saveCalendarPreferences(doc).catch(() => undefined);
     }, SAVE_DEBOUNCE_MS);
-    return () => window.clearTimeout(saveTimerRef.current);
+    return () => {
+      window.clearTimeout(saveTimerRef.current);
+      const queued = pendingSaveRef.current;
+      //only a real unmount flushes; saving here on every edit would let an older list overwrite the new one
+      if (!queued || mountedRef.current) return;
+      pendingSaveRef.current = null;
+      void saveCalendarPreferences(queued).catch(() => undefined);
+    };
   }, [ready, view, importedCalendars, mergedCalendars, agentHiddenCalendarIds, newCalendarsShown, localCalendars, sources, colors, colorOverrides, smartTags, keywordTasks, navCollapsed, sidePanelSections]);
+
+  //declared after the save effect so this cleanup runs first and the flush above can see the unmount
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  return loaded;
 }
