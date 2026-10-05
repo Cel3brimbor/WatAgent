@@ -8,6 +8,7 @@ import type { CalendarView, ImportedCalendar, ImportedCalendarSource } from "@/c
 import { addDays, addMonths, isToday, monthCells, startOfLocalDay, startOfWeek, startOfWorkWeek } from "@/calendar/date-utils";
 import type { GoogleCalendarRef } from "@/calendar/google-calendar-client";
 import { campusFeedCategories } from "@/campus/campus-events";
+import { campusColorKey } from "@/campus/campus-subscription-prefs";
 import { isExcludedGoogleCalendarName } from "@/calendar/calendar-lists";
 import {
   CALENDAR_PALETTE,
@@ -180,8 +181,20 @@ export function CalendarSidePanel({
       checked: googleChecked(sources, calendar.id),
       google: true,
     }));
+  const externalRowColor = (calendar: SideExternalCalendar, id: string) => {
+    if (isCampusSideCalendar(calendar)) {
+      const categories = campusFeedCategories(calendar.feeds[0]?.url ?? "");
+      if (categories?.length === 1) {
+        const stable = colorOverrides[campusColorKey(categories[0])];
+        if (stable) return stable;
+      }
+    }
+    return calendarSwatchColor(id, colors, colorOverrides);
+  };
   const externalRows: Row[] = externalCalendars.map((calendar) => ({
-    id: calendar.id, name: calendar.name, color: calendarSwatchColor(calendar.id, colors, colorOverrides),
+    id: calendar.id,
+    name: calendar.name,
+    color: externalRowColor(calendar, calendar.id),
     checked: !sources.mutedGoogleIds.includes(calendar.id),
   }));
   const allRows: Row[] = [...localRows, ...externalRows, ...googleRows];
@@ -307,7 +320,15 @@ export function CalendarSidePanel({
     const next = color.toLowerCase();
     if (id === "events") onColors({ ...colors, event: next });
     else if (id === "tasks") onColors({ ...colors, task: next });
-    else onColorOverrides({ ...colorOverrides, [id]: next });
+    else {
+      const calendar = externalById(id);
+      const nextOverrides = { ...colorOverrides, [id]: next };
+      if (calendar && isCampusSideCalendar(calendar)) {
+        const categories = campusFeedCategories(calendar.feeds[0]?.url ?? "");
+        if (categories?.length === 1) nextOverrides[campusColorKey(categories[0])] = next;
+      }
+      onColorOverrides(nextOverrides);
+    }
     setMenu((current) => (current && current.id === id ? { ...current, color: next } : current));
   }
 
@@ -333,14 +354,15 @@ export function CalendarSidePanel({
     const external = externalById(id);
     const isGoogle = googleCalendars.some((calendar) => calendar.id === id);
     if (!external && !isGoogle) return;
+    if (external && external.feeds.length === 0) {
+      setMenu(null);
+      onNotice("This calendar’s link is gone. Remove it to clear the leftover events.");
+      return;
+    }
     setSyncBusy(true);
     setMenu(null);
     try {
       if (external) {
-        if (external.feeds.length === 0) {
-          onNotice("No calendar link saved for this feed. Import it again in Settings.");
-          return;
-        }
         //a merged calendar syncs each of its links in turn
         const lines: string[] = [];
         for (const feed of external.feeds) lines.push(formatFeedSyncSummary(feed.name, await syncImportedFeed(feed)));
@@ -495,7 +517,8 @@ export function CalendarSidePanel({
           } : undefined}
           onRemove={menuLocal && !isBuiltinLocalCalendarId(menuLocal.id) ? (deleteBusy ? undefined : () => {
             setDeleting(menuLocal); setMenu(null);
-          }) : !removeBusy && menuExternal?.source && menuExternal.feeds.length > 0 ? () => {
+          }) : !removeBusy && menuExternal?.source ? () => {
+            //leftover events whose link was dropped are still a calendar, and still removable
             setRemoving(menuExternal); setMenu(null);
           } : undefined}
           removeLabel={menuLocal ? "Delete calendar" : undefined}
@@ -524,7 +547,9 @@ export function CalendarSidePanel({
             .finally(() => setDeleteBusy(false));
         }} /> : null}
       {removing ? <ConfirmDialog title={`Remove ${removing.name}?`}
-        message="Archive this calendar’s imported events and remove it from the list? Import its link again to restore it."
+        message={removing.feeds.length > 0
+          ? "Archive this calendar’s imported events and remove it from the list? Import its link again to restore it."
+          : "This calendar’s link is gone, so it can’t sync. Remove its leftover events from WatAgent?"}
         confirmLabel="Remove calendar" onCancel={() => setRemoving(null)} onConfirm={() => {
           const source = removing.source; setRemoving(null);
           if (!source) return;

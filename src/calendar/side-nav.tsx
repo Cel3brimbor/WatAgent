@@ -9,6 +9,8 @@ type Props = {
   collapsed: boolean;
   onSection: (section: AppSection) => void;
   onToggle: () => void;
+  /** False hides the Calendars section. */
+  advanced?: boolean;
   children?: ReactNode;
 };
 
@@ -19,7 +21,7 @@ const BARS: Array<{ id: AppSection; label: string }> = [
   { id: "map", label: "Calendars" },
 ];
 
-export function SideNav({ section, collapsed, onSection, onToggle, children }: Props) {
+export function SideNav({ section, collapsed, onSection, onToggle, advanced = true, children }: Props) {
   return (
     <nav className="side-nav" aria-label="Sections">
       <div className="side-nav-head">
@@ -47,7 +49,7 @@ export function SideNav({ section, collapsed, onSection, onToggle, children }: P
         </button>
       </div>
       <div className="side-nav-group">
-        {BARS.map((bar) => (
+        {BARS.filter((bar) => advanced || bar.id !== "map").map((bar) => (
           <button
             key={bar.id}
             type="button"

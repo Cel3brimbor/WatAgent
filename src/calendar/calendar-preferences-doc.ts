@@ -24,7 +24,13 @@ import { parseSmartTagsFromUnknown, readSmartTags, type SmartTag } from "@/calen
 import { parseKeywordTasksFromUnknown, readKeywordTasks, type KeywordTasks } from "@/calendar/keyword-tasks";
 import type { CalendarView, ImportedCalendar, MergedCalendar } from "@/calendar/types";
 import { BUILTIN_CALENDARS, localCalendarsOf, readLocalCalendars, type LocalCalendar } from "@/calendar/local-calendars";
-
+import {
+  campusSubscriptionsOf,
+  colorOverridesWithCampusSubscriptions,
+  parseCampusSubscriptions,
+  readCampusSubscriptions,
+  type CampusSubscriptionPref,
+} from "@/campus/campus-subscription-prefs";
 export type UserCalendarPreferencesV1 = {
   version: 1;
   view: CalendarView;
@@ -36,11 +42,24 @@ export type UserCalendarPreferencesV1 = {
   sources: CalendarSourceFilter;
   colors: CalendarColors;
   colorOverrides: Record<string, string>;
+  campusSubscriptions: CampusSubscriptionPref[];
   smartTags: SmartTag[];
   keywordTasks: KeywordTasks;
   navCollapsed: boolean;
   sidePanelSections: SidePanelSectionsOpen;
 };
+
+export type UserCalendarPreferencesState = Omit<UserCalendarPreferencesV1, "version" | "campusSubscriptions">;
+
+export function buildUserCalendarPreferencesDoc(state: UserCalendarPreferencesState): UserCalendarPreferencesV1 {
+  const campusSubscriptions = campusSubscriptionsOf(state.importedCalendars, state.colorOverrides);
+  return {
+    version: 1,
+    ...state,
+    campusSubscriptions,
+    colorOverrides: colorOverridesWithCampusSubscriptions(state.colorOverrides, campusSubscriptions),
+  };
+}
 
 const VIEWS = new Set<CalendarView>(["day", "workweek", "week", "month", "year"]);
 
@@ -108,6 +127,9 @@ export function readLocalCalendarPreferences(): UserCalendarPreferencesV1 {
     navCollapsed = false;
   }
   const importedCalendars = readImportedCalendars();
+  const colorOverrides = readColorOverrides();
+  const campusSubscriptions =
+    readCampusSubscriptions() ?? campusSubscriptionsOf(importedCalendars, colorOverrides);
   return {
     version: 1,
     view: readCalendarView(),
@@ -118,7 +140,8 @@ export function readLocalCalendarPreferences(): UserCalendarPreferencesV1 {
     localCalendars: readLocalCalendars(),
     sources: readSourceFilter(),
     colors: readCalendarColors(),
-    colorOverrides: readColorOverrides(),
+    colorOverrides: colorOverridesWithCampusSubscriptions(colorOverrides, campusSubscriptions),
+    campusSubscriptions,
     smartTags: readSmartTags(),
     keywordTasks: readKeywordTasks(),
     navCollapsed,
@@ -147,6 +170,11 @@ export function parseUserCalendarPreferencesDoc(
     rec.mergedCalendars !== undefined
       ? mergedCalendarsOf(rec.mergedCalendars)
       : legacyMergedCalendars(rec.calendarPriorityOrder, rec.showDuplicateEvents, rec.duplicatePriority, importedCalendars);
+  const colorOverrides = rec.colorOverrides !== undefined ? overridesOf(rec.colorOverrides) : fallbacks.colorOverrides;
+  const campusSubscriptions =
+    rec.campusSubscriptions !== undefined
+      ? (parseCampusSubscriptions(rec.campusSubscriptions) ?? campusSubscriptionsOf(importedCalendars, colorOverrides))
+      : campusSubscriptionsOf(importedCalendars, colorOverrides);
   return {
     version: 1,
     view,
@@ -158,7 +186,8 @@ export function parseUserCalendarPreferencesDoc(
     localCalendars: rec.localCalendars !== undefined ? localCalendarsOf(rec.localCalendars) : fallbacks.localCalendars,
     sources,
     colors,
-    colorOverrides: rec.colorOverrides !== undefined ? overridesOf(rec.colorOverrides) : fallbacks.colorOverrides,
+    colorOverrides: colorOverridesWithCampusSubscriptions(colorOverrides, campusSubscriptions),
+    campusSubscriptions,
     smartTags: rec.smartTags !== undefined ? parseSmartTagsFromUnknown(rec.smartTags) : fallbacks.smartTags,
     keywordTasks: rec.keywordTasks !== undefined ? parseKeywordTasksFromUnknown(rec.keywordTasks) : fallbacks.keywordTasks,
     navCollapsed: typeof rec.navCollapsed === "boolean" ? rec.navCollapsed : fallbacks.navCollapsed,
@@ -181,6 +210,7 @@ export function preferencesDocHasContent(doc: UserCalendarPreferencesV1): boolea
   if (JSON.stringify(doc.sources) !== JSON.stringify(ALL_SOURCES)) return true;
   if (JSON.stringify(doc.colors) !== JSON.stringify(DEFAULT_COLORS)) return true;
   if (Object.keys(doc.colorOverrides).length > 0) return true;
+  if (doc.campusSubscriptions.length > 0) return true;
   return false;
 }
 

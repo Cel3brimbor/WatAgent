@@ -29,6 +29,8 @@ type Props = {
   onRemoveCalendar: (id: ImportedCalendarSource) => Promise<void>;
   onSyncGoogle: () => Promise<number | null>;
   onNotice: (message: string) => void;
+  advancedView: boolean;
+  onAdvancedViewChange: (value: boolean) => void;
   requireAiApproval: boolean;
   onRequireAiApprovalChange: (value: boolean) => void;
   onSignOut: () => void;
@@ -77,6 +79,8 @@ export function SettingsPanel({
   onRemoveCalendar,
   onSyncGoogle,
   onNotice,
+  advancedView,
+  onAdvancedViewChange,
   requireAiApproval,
   onRequireAiApprovalChange,
   onSignOut,
@@ -202,6 +206,22 @@ export function SettingsPanel({
         <p id="settings-approval-hint" className="modal-hint">
           When on, the Agent queues adds, updates, and deletes for you to approve or reject. Pending changes stay saved
           until you decide and are not sent to Google Calendar until approved.
+        </p>
+      </section>
+
+      <section className="settings-section" aria-labelledby="settings-view">
+        <h3 id="settings-view">View</h3>
+        <div className="settings-toggle">
+          <label htmlFor="settings-advanced">Advanced view</label>
+          <Switch
+            id="settings-advanced"
+            checked={advancedView}
+            aria-describedby="settings-advanced-hint"
+            onChange={onAdvancedViewChange}
+          />
+        </div>
+        <p id="settings-advanced-hint" className="modal-hint">
+          Shows the Calendars section for merging calendars, rules and the calendar map.
         </p>
       </section>
 
