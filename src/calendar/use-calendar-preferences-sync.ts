@@ -89,7 +89,6 @@ type ApplyPatch = {
   setKeywordTasks: (config: KeywordTasks) => void;
   setNavCollapsed: (collapsed: boolean) => void;
   setSidePanelSections: (sections: SidePanelSectionsOpen) => void;
-  /** One-time restore list from the server; feeds may still need to be created on this device. */
   onCampusSubscriptionsRestore?: (subs: CampusSubscriptionPref[]) => void;
 };
 
