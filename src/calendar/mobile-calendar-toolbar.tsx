@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import type { CalendarView } from "@/calendar/types";
 import { addDays, isToday, sameLocalDay, startOfWeek } from "@/calendar/date-utils";
 import { ChevronLeftIcon, ChevronRightIcon, PlusIcon } from "@/shared/icons";
@@ -21,26 +22,42 @@ type Props = {
 export function MobileCalendarToolbar(props: Props) {
   const { focus, view, weekStartsOn } = props;
   const week = startOfWeek(focus, weekStartsOn);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const dismiss = (event: PointerEvent) => {
+      if (!menuRef.current?.contains(event.target as Node)) setMenuOpen(false);
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") { setMenuOpen(false); triggerRef.current?.focus(); }
+    };
+    document.addEventListener("pointerdown", dismiss);
+    document.addEventListener("keydown", escape);
+    return () => { document.removeEventListener("pointerdown", dismiss); document.removeEventListener("keydown", escape); };
+  }, [menuOpen]);
   return (
     <header className="mobile-calendar-toolbar">
       <div className="mobile-calendar-title-row">
-        <h2 aria-live="polite">{focus.toLocaleDateString(undefined, view === "year" ? { year: "numeric" } : { month: "long", year: "numeric" })}</h2>
+        <div className="mobile-calendar-date-menu" ref={menuRef}>
+          <button ref={triggerRef} type="button" className="mobile-calendar-date-trigger" aria-expanded={menuOpen} aria-controls="mobile-calendar-options" onClick={() => setMenuOpen((open) => !open)}>
+            <span aria-live="polite">{focus.toLocaleDateString(undefined, view === "year" ? { year: "numeric" } : { month: "short", year: "numeric" })}</span>
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4" /></svg>
+          </button>
+          {menuOpen ? <div id="mobile-calendar-options" className="mobile-calendar-options" role="group" aria-label="Calendar controls">
+            <div className="mobile-calendar-period">
+              <button type="button" className="icon-btn" aria-label="Previous" onClick={props.onPrevious}><ChevronLeftIcon /></button>
+              <button type="button" onClick={() => { props.onToday(); setMenuOpen(false); }}>Today</button>
+              <button type="button" className="icon-btn" aria-label="Next" onClick={props.onNext}><ChevronRightIcon /></button>
+            </div>
+            <label>View<select aria-label="Calendar view" value={view} onChange={(event) => { props.onView(event.target.value as CalendarView); setMenuOpen(false); }}>
+              <option value="day">Day</option><option value="workweek">5 days</option><option value="week">Week</option><option value="month">Month</option><option value="year">Year</option>
+            </select></label>
+          </div> : null}
+        </div>
         <button type="button" className="mobile-calendar-agent" aria-pressed={props.agentOpen} onClick={props.onAgent}>Agent</button>
         <button type="button" className="icon-btn mobile-calendar-add" aria-label="New event" onClick={props.onCreate}><PlusIcon /></button>
-      </div>
-      <div className="mobile-calendar-controls">
-        <div className="mobile-calendar-period">
-          <button type="button" className="icon-btn" aria-label="Previous" onClick={props.onPrevious}><ChevronLeftIcon /></button>
-          <button type="button" onClick={props.onToday}>Today</button>
-          <button type="button" className="icon-btn" aria-label="Next" onClick={props.onNext}><ChevronRightIcon /></button>
-        </div>
-        <select aria-label="Calendar view" value={view} onChange={(event) => props.onView(event.target.value as CalendarView)}>
-          <option value="day">Day</option>
-          <option value="workweek">5 days</option>
-          <option value="week">Week</option>
-          <option value="month">Month</option>
-          <option value="year">Year</option>
-        </select>
       </div>
       {view === "day" ? <div className="mobile-calendar-week-strip" aria-label="Choose a day">
         {Array.from({ length: 7 }, (_, index) => {
