@@ -18,7 +18,7 @@ type Props = {
   calendarName?: (id: string) => string;
   onKeywordComplete?: (key: string, done: boolean) => void;
   onKeywordOpen?: (task: KeywordTask) => void;
-  /** The keyword rules panel, shown above the list. */
+  /** The keyword rules panel, shown below the list. */
   rules?: ReactNode;
 };
 
@@ -67,6 +67,7 @@ export function TodoList({ items, onOpen, onComplete, onCreate, keywordTasks = [
   const listRef = useRef<HTMLDivElement>(null);
   const [showOlder, setShowOlder] = useState(false);
   const [doneOpen, setDoneOpen] = useState(false);
+  const [filter, setFilter] = useState<"all" | "today" | "upcoming">("all");
   const now = Date.now();
   const today = startOfLocalDay(new Date(now));
   const recentFrom = today.getTime() - RECENT_DAYS * DAY_MS;
@@ -94,6 +95,14 @@ export function TodoList({ items, onOpen, onComplete, onCreate, keywordTasks = [
   }
   const done = groups.get("done") ?? [];
   const openCount = rows.length - done.length;
+  const filters = [
+    { id: "all", label: "All", count: openCount },
+    { id: "today", label: "Today", count: (groups.get("overdue")?.length ?? 0) + (groups.get("today")?.length ?? 0) },
+    { id: "upcoming", label: "Upcoming", count: (groups.get("week")?.length ?? 0) + (groups.get("later")?.length ?? 0) },
+  ] as const;
+  const visibleGroups = (["overdue", "today", "week", "later"] as const).filter((id) =>
+    filter === "all" || (filter === "today" ? id === "overdue" || id === "today" : id === "week" || id === "later"));
+  const visibleCount = filters.find((entry) => entry.id === filter)!.count;
   //completing a task slides the rest up instead of teleporting
   useFlip(listRef, rows.map((row) => `${row.id}:${row.done}`).join("|"));
 
@@ -113,7 +122,7 @@ export function TodoList({ items, onOpen, onComplete, onCreate, keywordTasks = [
             else onKeywordComplete?.(row.task.key, !row.done);
           }}
         >
-          <CheckIcon />
+          <span className="todo-check-circle"><CheckIcon /></span>
         </button>
         <button
           type="button"
@@ -124,9 +133,9 @@ export function TodoList({ items, onOpen, onComplete, onCreate, keywordTasks = [
             else onKeywordOpen?.(row.task);
           }}
         >
-          <span>{row.title}</span>
+          <span className="todo-title">{row.title}</span>
           <small>
-            {whenLabel(row.dueUTC, row.allDay, today)}
+            <time className={groupOf(row, now, today) === "overdue" ? "is-overdue" : undefined} dateTime={new Date(row.dueUTC).toISOString()}>{whenLabel(row.dueUTC, row.allDay, today)}</time>
             {row.kind === "keyword" && calendarName ? (
               <span className="todo-origin">{calendarName(row.task.source.mergedCalendarId ?? row.task.calendarId)}</span>
             ) : null}
@@ -141,19 +150,31 @@ export function TodoList({ items, onOpen, onComplete, onCreate, keywordTasks = [
       <div className="todo-list-head">
         <div>
           <h2 id="todo-heading">Tasks</h2>
-          <p>{openCount === 0 ? "Nothing left open" : `${openCount} open`}</p>
+          <p className="todo-date">{today.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}</p>
+          <p>{openCount === 0 ? "You’re all caught up" : `${openCount} task${openCount === 1 ? "" : "s"} to do`}</p>
         </div>
         <button type="button" className="primary-btn" onClick={onCreate}>
           <PlusIcon />
           Add task
         </button>
       </div>
-      {rules}
-      {rows.length === 0 ? (
-        <p className="todo-empty">Tasks you add, and events your rules find, show up here.</p>
-      ) : (
+      <div className="todo-filters" role="group" aria-label="Filter tasks">
+        {filters.map((entry) => (
+          <button key={entry.id} type="button" aria-pressed={filter === entry.id} onClick={() => setFilter(entry.id)}>
+            {entry.label}<span>{entry.count}</span>
+          </button>
+        ))}
+      </div>
+      {visibleCount === 0 ? (
+        <div className="todo-empty" role="status">
+          <CheckIcon />
+          <h3>{filter === "today" ? "All clear for today" : filter === "upcoming" ? "A little room ahead" : "You’re all caught up"}</h3>
+          <p>{filter === "upcoming" ? "Future tasks will appear here." : "Add a task when something comes to mind."}</p>
+        </div>
+      ) : null}
+      {rows.length > 0 ? (
         <div ref={listRef} className="todo-groups">
-          {(["overdue", "today", "week", "later"] as const).map((id) => {
+          {visibleGroups.map((id) => {
             const list = groups.get(id);
             if (!list) return null;
             return (
@@ -166,7 +187,7 @@ export function TodoList({ items, onOpen, onComplete, onCreate, keywordTasks = [
               </section>
             );
           })}
-          {done.length > 0 ? (
+          {filter === "all" && done.length > 0 ? (
             <section className="todo-group is-done-group">
               <button type="button" className="todo-group-title todo-group-toggle" aria-expanded={doneOpen} onClick={() => setDoneOpen((open) => !open)}>
                 {GROUP_TITLES.done}
@@ -179,12 +200,13 @@ export function TodoList({ items, onOpen, onComplete, onCreate, keywordTasks = [
             </section>
           ) : null}
         </div>
-      )}
+      ) : null}
       {olderCount > 0 ? (
         <button type="button" className="smart-tag-link todo-older" onClick={() => setShowOlder((current) => !current)}>
           {showOlder ? "Hide older calendar tasks" : `Show ${olderCount} older calendar task${olderCount === 1 ? "" : "s"}`}
         </button>
       ) : null}
+      {rules ? <div className="todo-automation">{rules}</div> : null}
     </section>
   );
 }

@@ -28,7 +28,7 @@ type Props = {
 
 export function KeywordTaskRules({ config, onChange, calendars, sources }: Props) {
   const { rules } = config;
-  const [open, setOpen] = useState(rules.length === 0);
+  const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   //a deleted rule can come back until the next change
   const [removed, setRemoved] = useState<{ rule: KeywordTaskRule; index: number } | null>(null);

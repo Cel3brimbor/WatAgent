@@ -8125,3 +8125,41 @@ h3 {
   .calendar-toolbar:not([data-section="calendar"]) .calendar-toolbar-left { min-width: 0; }
   .calendar-toolbar:not([data-section="calendar"]) .calendar-agent-btn { padding-inline: 6px; border: 0; }
 }
+
+/* Focused task lists: quiet separators, full titles, and generous touch targets. */
+.todo-list { width: min(44rem, 100%); padding-bottom: 1rem; }
+.todo-list-head { gap: .75rem; margin-bottom: 1.25rem; }
+.todo-list-head > div { min-width: 0; }
+.todo-list-head .todo-date { color: var(--ink); font-size: .96rem; font-weight: 600; }
+.todo-list-head .primary-btn { min-height: 44px; flex-shrink: 0; }
+.todo-filters { display: flex; gap: 4px; padding: 4px; margin-bottom: 1.6rem; border-radius: 12px; background: color-mix(in srgb, var(--ink) 5%, var(--paper)); }
+.todo-filters button { display: flex; align-items: center; justify-content: center; gap: .45rem; flex: 1; min-width: 0; min-height: 44px; padding: 6px; border: 1px solid transparent; border-radius: 9px; background: transparent; color: var(--ink-soft); font-size: .85rem; font-weight: 600; }
+.todo-filters button[aria-pressed="true"] { background: var(--panel-solid); color: var(--ink); border-color: var(--line); box-shadow: 0 1px 3px #00000008; }
+.todo-filters button span { font-size: .72rem; font-variant-numeric: tabular-nums; color: var(--ink-soft); }
+.todo-groups { gap: 1.4rem; }
+.todo-group-title { font-family: inherit; font-size: .85rem; font-weight: 650; margin-bottom: .4rem; }
+.todo-group-count { margin-left: auto; font-size: .75rem; }
+.todo-group > ul, .todo-group .disclosure ul { gap: 0; }
+.todo-groups li { gap: .35rem; padding: .5rem 0; background: transparent; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; box-shadow: none; align-items: flex-start; }
+.todo-groups .todo-check { width: 44px; height: 44px; border: 0; background: transparent; }
+.todo-check-circle { display: grid; place-items: center; width: 22px; height: 22px; border: 1.5px solid color-mix(in srgb, var(--ink-soft) 65%, transparent); border-radius: 50%; }
+.todo-check.is-checked .todo-check-circle { background: var(--accent); border-color: var(--accent); }
+.todo-groups .todo-main { min-height: 44px; padding: 4px 8px 4px 0; gap: .3rem; }
+.todo-groups .todo-main > .todo-title { white-space: normal; overflow-wrap: anywhere; line-height: 1.45; font-size: .94rem; font-weight: 500; }
+.todo-main time.is-overdue { color: var(--danger); }
+.todo-main small { line-height: 1.5; overflow-wrap: anywhere; }
+.todo-group-toggle { width: 100%; min-height: 44px; }
+.todo-group-toggle .todo-group-count { margin-left: .15rem; }
+.todo-group-toggle svg { margin-left: auto; }
+.todo-empty { display: grid; justify-items: center; padding: 2rem .75rem; text-align: center; }
+.todo-empty > svg { width: 32px; height: 32px; color: var(--accent); margin-bottom: .75rem; }
+.todo-empty h3 { margin: 0 0 .35rem; font-size: 1rem; color: var(--ink); }
+.todo-empty p { margin: 0; line-height: 1.5; }
+.todo-automation { margin-top: 2rem; }
+.todo-automation .ktask-rules { margin-bottom: 0; }
+.todo-list button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+@media (max-width: 380px) {
+  .todo-list-head .todo-date { font-size: .82rem; }
+  .todo-list-head .primary-btn { padding-inline: 10px; gap: 4px; font-size: .82rem; }
+  .todo-filters button { gap: 4px; font-size: .8rem; }
+}
