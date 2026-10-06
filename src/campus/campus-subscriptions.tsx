@@ -18,15 +18,103 @@ type Props = {
   feedLink: string | null;
 };
 
+function enabledSummary(labels: string[]): string {
+  if (labels.length === 0) return "Turn a sport on and it gets its own calendar.";
+  const shown = labels.length > 2 ? `${labels.slice(0, 2).join(", ")} +${labels.length - 2}` : labels.join(" and ");
+  return labels.length === 1 ? `${shown} has its own calendar` : `${shown} each have their own calendar`;
+}
+
+function DropInSports({
+  label,
+  sports,
+  counts,
+  subscribed,
+  busy,
+  onToggle,
+  legacy,
+}: {
+  label: string;
+  sports: CampusCategory[];
+  counts: Map<string, number>;
+  subscribed: string[];
+  busy: boolean;
+  onToggle: (id: string, on: boolean) => void;
+  /** The previous calendar that held every drop-in. Turning it off removes that calendar. */
+  legacy: boolean;
+}) {
+  const enabled = sports.filter((sport) => subscribed.includes(sport.id));
+  const [open, setOpen] = useState(enabled.length > 0 || legacy);
+  const total = sports.reduce((sum, sport) => sum + (counts.get(sport.id) ?? 0), 0);
+  return (
+    <li className={styles.subNest}>
+      <button
+        type="button"
+        className={styles.subNestToggle}
+        aria-expanded={open}
+        aria-controls="campus-drop-in-sports"
+        onClick={() => setOpen((current) => !current)}
+      >
+        <span className={styles.subLabel}>
+          <span>{label}</span>
+          <small>{enabledSummary(enabled.map((sport) => sport.label))}</small>
+        </span>
+        <span className={styles.subCount} title="Upcoming drop-ins">
+          {total}
+        </span>
+        <ChevronIcon open={open} />
+      </button>
+      <Disclosure open={open} id="campus-drop-in-sports">
+        <p className={styles.subSportNote}>Each sport is its own calendar. Merge them from Calendars if you want a single one.</p>
+        <ul className={styles.subSports}>
+          {legacy ? (
+            <li className={`${styles.subRow} ${styles.subSport}`}>
+              <Switch
+                id="campus-sub-recreation"
+                checked
+                disabled={busy}
+                aria-describedby="campus-sub-recreation-hint"
+                onChange={(on) => {
+                  if (!on) onToggle("recreation", false);
+                }}
+              />
+              <span className={styles.subLabel}>
+                <label htmlFor="campus-sub-recreation">All drop-ins</label>
+                <small id="campus-sub-recreation-hint">The previous calendar, with every sport. Turn it off to remove it.</small>
+              </span>
+            </li>
+          ) : null}
+          {sports.map((sport) => {
+            const id = `campus-sub-${sport.id}`;
+            return (
+              <li key={sport.id} className={`${styles.subRow} ${styles.subSport}`}>
+                <Switch id={id} checked={subscribed.includes(sport.id)} disabled={busy} aria-describedby={`${id}-hint`} onChange={(on) => onToggle(sport.id, on)} />
+                <span className={styles.subLabel}>
+                  <label htmlFor={id}>{sport.label}</label>
+                  <small id={`${id}-hint`}>{sport.hint}</small>
+                </span>
+                <span className={styles.subCount} title="Upcoming events">
+                  {counts.get(sport.id) ?? 0}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      </Disclosure>
+    </li>
+  );
+}
+
 export function CampusSubscriptions({ categories, counts, subscribed, busy, onToggle, feedLink }: Props) {
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
-  const names = categories.filter((category) => subscribed.includes(category.id)).map((category) => category.label);
+  const sports = categories.filter((category) => category.group === "drop-ins");
+  const rows = categories.filter((category) => category.group !== "drop-ins");
+  const named = categories.filter((category) => subscribed.includes(category.id)).map((category) => category.label);
   const summary = busy
     ? "Updating your UWaterloo Events calendars…"
-    : names.length === 0
+    : named.length === 0
       ? "Turn a category on and it gets its own calendar."
-      : `${names.length > 2 ? `${names.slice(0, 2).join(", ")} +${names.length - 2}` : names.join(" and ")} ${names.length === 1 ? "has its own calendar" : "each have their own calendar"}`;
+      : `${named.length > 2 ? `${named.slice(0, 2).join(", ")} +${named.length - 2}` : named.join(" and ")} ${named.length === 1 ? "has its own calendar" : "each have their own calendar"}`;
 
   async function copyLink() {
     if (!feedLink) return;
@@ -56,7 +144,21 @@ export function CampusSubscriptions({ categories, counts, subscribed, busy, onTo
             Each category you turn on is its own read-only calendar under UWaterloo Events. It stays up to date as events are added, moved or called off. When LEARN or Portal has the same event, that copy is the one on your calendar.
           </p>
           <ul className={styles.subList}>
-            {categories.map((category) => {
+            {rows.map((category) => {
+              if (category.id === "recreation") {
+                return (
+                  <DropInSports
+                    key={category.id}
+                    label={category.label}
+                    sports={sports}
+                    counts={counts}
+                    subscribed={subscribed}
+                    busy={busy}
+                    onToggle={onToggle}
+                    legacy={subscribed.includes("recreation")}
+                  />
+                );
+              }
               const id = `campus-sub-${category.id}`;
               return (
                 <li key={category.id} className={styles.subRow}>

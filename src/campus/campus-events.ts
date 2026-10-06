@@ -1,9 +1,10 @@
 import { calendarIdField } from "@/calendar/local-calendars";
-import type { CalendarItemDoc, CalendarItemMeta, ImportedCalendar } from "@/calendar/types";
+import type { CalendarItemDoc, CalendarItemMeta, ImportedCalendar, ImportedCalendarSource } from "@/calendar/types";
 import { API_BASE_URL } from "@/shared/config";
+import { newId } from "@/shared/ids";
 
-/** One category the backend sorts UWaterloo events into, like "careers" or "talks". */
-export type CampusCategory = { id: string; label: string; hint: string };
+/** One category the backend sorts UWaterloo events into, like "careers" or "talks". Drop-in sports carry group "drop-ins". */
+export type CampusCategory = { id: string; label: string; hint: string; group?: "drop-ins" };
 export type CampusSource = { id: string; name: string; url: string };
 
 /** One occurrence of a public UWaterloo event. All-day events carry their Toronto dates, end exclusive. */
@@ -50,6 +51,22 @@ export const CAMPUS_CATEGORY_LABELS: Record<string, string> = {
   social: "Social & community",
   wellness: "Health & wellness",
   athletics: "Warriors home games",
+  recreation: "Drop-in recreation",
+  "rec-badminton": "Badminton",
+  "rec-basketball": "Basketball",
+  "rec-beach-volleyball": "Beach volleyball",
+  "rec-volleyball": "Volleyball",
+  "rec-pickleball": "Pickleball",
+  "rec-field-house": "Field house",
+  "rec-warrior-field": "Warrior field",
+  "rec-warrior-zone": "Warrior zone",
+  "rec-studio": "Studio",
+  "rec-skate": "Rec skate",
+  "rec-swim": "Swimming",
+  "rec-climbing": "Climbing",
+  "rec-fitness": "Fitness centres",
+  "rec-group-fitness": "Group fitness",
+  "rec-other": "Other drop-ins",
   "open-house": "Open houses & tours",
   defences: "Thesis defences",
   other: "Other",
@@ -57,6 +74,17 @@ export const CAMPUS_CATEGORY_LABELS: Record<string, string> = {
 
 export function campusCategoryLabel(id: string): string {
   return CAMPUS_CATEGORY_LABELS[id] ?? "Other";
+}
+
+export function isDropInSport(id: string): boolean {
+  return id.startsWith("rec-");
+}
+
+/** Whether an event belongs on a category filter. The drop-in row matches every sport. */
+export function eventInCampusCategory(event: { categories: string[] }, categoryId: string | null): boolean {
+  if (!categoryId) return true;
+  if (categoryId === "recreation") return event.categories.some((id) => id === "recreation" || isDropInSport(id));
+  return event.categories.includes(categoryId);
 }
 
 export function isDefaultCampusCalendarName(name: string): boolean {
@@ -116,15 +144,26 @@ function campusEventOf(raw: unknown, known: Set<string>): CampusEvent | null {
   };
 }
 
+/**
+ * True only when the server scrape is strictly newer than the one already applied.
+ * A missing or unusable server time never syncs. A missing applied time does, once.
+ */
+export function campusScrapeIsNewer(server: number | null | undefined, applied: number | null | undefined): boolean {
+  if (typeof server !== "number" || !Number.isFinite(server) || server <= 0) return false;
+  if (typeof applied !== "number" || !Number.isFinite(applied) || applied <= 0) return true;
+  return server > applied;
+}
+
 /** The /api/campus-events payload, keeping only what reads cleanly. */
 export function campusEventsOf(raw: unknown): CampusEventsPayload {
   const rec = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
   const categories: CampusCategory[] = Array.isArray(rec.categories)
     ? rec.categories.flatMap((entry) => {
         if (!entry || typeof entry !== "object") return [];
-        const { id, label, hint } = entry as Record<string, unknown>;
+        const { id, label, hint, group } = entry as Record<string, unknown>;
         const name = line(label, 60);
-        return typeof id === "string" && CATEGORY_ID.test(id) && name ? [{ id, label: name, hint: line(hint, 200) ?? "" }] : [];
+        if (typeof id !== "string" || !CATEGORY_ID.test(id) || !name) return [];
+        return [{ id, label: name, hint: line(hint, 200) ?? "", ...(group === "drop-ins" ? { group: "drop-ins" as const } : {}) }];
       })
     : [];
   const known = new Set(categories.map((category) => category.id));
@@ -168,7 +207,31 @@ export function campusFeedCategories(link: string): string[] | null {
 
 export type CampusCalendar = { calendar: ImportedCalendar; categories: string[] };
 
-/** Every imported calendar that subscribes to the campus feed, in the order they were saved. */
+/**
+ * UWaterloo event calendars are their own list. A campus feed that was saved with external links moves over,
+ * and a feed id can't sit in both lists.
+ */
+export function splitCampusCalendars(
+  imported: ImportedCalendar[],
+  campus: ImportedCalendar[] = [],
+): { imported: ImportedCalendar[]; campus: ImportedCalendar[] } {
+  const campusById = new Map<string, ImportedCalendar>();
+  for (const calendar of campus) {
+    if (campusFeedCategories(calendar.url) == null || campusById.has(calendar.id)) continue;
+    campusById.set(calendar.id, calendar);
+  }
+  const external: ImportedCalendar[] = [];
+  for (const calendar of imported) {
+    if (campusFeedCategories(calendar.url) != null) {
+      if (!campusById.has(calendar.id)) campusById.set(calendar.id, calendar);
+      continue;
+    }
+    if (!campusById.has(calendar.id)) external.push(calendar);
+  }
+  return { imported: external, campus: [...campusById.values()] };
+}
+
+/** Every calendar that subscribes to the campus feed, in the order they were saved. */
 export function campusCalendarsOf(imported: ImportedCalendar[]): CampusCalendar[] {
   return imported.flatMap((calendar) => {
     const categories = campusFeedCategories(calendar.url);
@@ -203,6 +266,31 @@ function plain(text: string): string {
 
 export function campusEventDescription(event: CampusEvent): string {
   return [event.summary, event.url].filter(Boolean).join("\n\n").slice(0, 4000);
+}
+
+/** Events already loaded for this category, shaped like calendar rows so a toggle can show them before the server writes them. */
+export function campusCalendarItems(events: CampusEvent[], feedId: ImportedCalendarSource, categoryId: string): CalendarItemDoc[] {
+  const now = Date.now();
+  return events.flatMap((event) => {
+    if (!eventInCampusCategory(event, categoryId)) return [];
+    const span = localSpan(event);
+    if (span.endUTC <= span.startUTC) return [];
+    const title = event.title.trim().slice(0, 200) || "Event";
+    return [{
+      id: newId(),
+      title,
+      createdAt: now,
+      updatedAt: now,
+      calendar: {
+        kind: "event" as const,
+        ...span,
+        allDay: event.allDay,
+        importSource: feedId,
+        ...(event.location ? { location: event.location.slice(0, 300) } : {}),
+        description: campusEventDescription(event),
+      },
+    }];
+  });
 }
 
 /** A calendar item for one occurrence, on a WatAgent calendar. */

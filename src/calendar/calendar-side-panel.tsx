@@ -56,6 +56,8 @@ type Props = {
   colors: CalendarColors;
   onColors: (next: CalendarColors) => void;
   externalCalendars: SideExternalCalendar[];
+  /** UWaterloo Events rows. Separate from external calendars, including while one is being added or removed. */
+  campusCalendars: SideExternalCalendar[];
   /** id is the row's: ics:<feed> or a merged calendar's id. */
   onRenameExternal: (id: string, name: string) => void;
   onRemoveExternal: (source: ImportedCalendarSource) => Promise<void>;
@@ -96,6 +98,7 @@ export function CalendarSidePanel({
   colors,
   onColors,
   externalCalendars,
+  campusCalendars,
   onRenameExternal,
   onRemoveExternal,
   onRefreshCalendars,
@@ -191,28 +194,26 @@ export function CalendarSidePanel({
     }
     return calendarSwatchColor(id, colors, colorOverrides);
   };
-  const externalRows: Row[] = externalCalendars.map((calendar) => ({
+  const rowOf = (calendar: SideExternalCalendar): Row => ({
     id: calendar.id,
     name: calendar.name,
     color: externalRowColor(calendar, calendar.id),
     checked: !sources.mutedGoogleIds.includes(calendar.id),
-  }));
-  const allRows: Row[] = [...localRows, ...externalRows, ...googleRows];
+  });
+  const externalRows: Row[] = externalCalendars.map(rowOf);
+  const campusRowsAll: Row[] = campusCalendars.map(rowOf);
+  const allRows: Row[] = [...localRows, ...externalRows, ...campusRowsAll, ...googleRows];
   const groups = calendarGroupsOf(sources.groups);
   function setGroup(key: keyof CalendarGroups, on: boolean) {
     onSources({ ...sources, groups: { ...groups, [key]: on } });
   }
-  const externalById = (id: string) => externalCalendars.find((calendar) => calendar.id === id);
-  const campusRow = (row: Row) => {
-    const calendar = externalById(row.id);
-    return Boolean(calendar && isCampusSideCalendar(calendar));
-  };
+  const feedCalendars = [...externalCalendars, ...campusCalendars];
+  const externalById = (id: string) => feedCalendars.find((calendar) => calendar.id === id);
   const visible = (row: Row) => !isSidebarHidden(sources, row.id);
   const watagentRows = localRows.filter(visible);
   const otherRows = googleRows.filter(visible);
-  const shownExternal = externalRows.filter(visible);
-  const campusRows = shownExternal.filter(campusRow);
-  const importedRows = shownExternal.filter((row) => !campusRow(row));
+  const importedRows = externalRows.filter(visible);
+  const campusRows = campusRowsAll.filter(visible);
   const hiddenRows = allRows.filter((row) => isSidebarHidden(sources, row.id));
   const smartTagCalendars = allRows.map((row) => ({ id: row.id, name: row.name, google: Boolean(row.google) }));
 
@@ -286,7 +287,7 @@ export function CalendarSidePanel({
   }
 
   function displayOnly(id: string) {
-    const ids = [...googleCalendars.map((calendar) => calendar.id), ...externalCalendars.map((calendar) => calendar.id), ...customIds];
+    const ids = [...googleCalendars.map((calendar) => calendar.id), ...feedCalendars.map((calendar) => calendar.id), ...customIds];
     if (externalById(id) || isCustom(id)) {
       onSources({ ...sources, events: false, tasks: false, google: false, mutedGoogleIds: ids.filter((item) => item !== id), hiddenIds: sources.hiddenIds.filter((item) => item !== id) });
       setMenu(null);
@@ -554,7 +555,9 @@ export function CalendarSidePanel({
           const source = removing.source; setRemoving(null);
           if (!source) return;
           setRemoveBusy(true); setRemoveError(null);
-          void onRemoveExternal(source).catch(() => setRemoveError("Unable to remove this calendar. Please try again.")).finally(() => setRemoveBusy(false));
+          void onRemoveExternal(source)
+            .catch((err) => setRemoveError(err instanceof Error && err.message ? err.message : "Unable to remove this calendar. Please try again."))
+            .finally(() => setRemoveBusy(false));
         }} /> : null}
     </div>
   );

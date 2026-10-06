@@ -17,15 +17,16 @@ import {
 import { removeImportedCalendar } from "@/calendar/client";
 import { calendarItemVisible, externalCalendarId, externalCalendarsOf } from "@/calendar/external-calendars";
 import { mergeTimeline } from "@/calendar/calendar-merge";
-import { mergedByMember, newFeedId } from "@/calendar/imported-calendars";
+import { feedOfCalendarId, mergedByMember, newFeedId } from "@/calendar/imported-calendars";
 import { formatFeedSyncSummary, syncImportedFeed } from "@/calendar/calendar-sync";
-import { isCampusSideCalendar, type SideExternalCalendar } from "@/calendar/calendar-side-panel";
+import { type SideExternalCalendar } from "@/calendar/calendar-side-panel";
 import { aggregateTimeline, overlayTimelineItemOf, rangesOverlap, timelineItemOf, type BusyBlock, type OverlayEvent } from "@/calendar/timeline";
 import {
   ALL_SOURCES,
   readCalendarColors,
   readCalendarView,
   readImportedCalendars,
+  readCampusCalendars,
   readMergedCalendars,
   isAgentCalendarHidden,
   readAgentHiddenIds,
@@ -88,16 +89,19 @@ import {
 import { useAppearanceSync } from "@/calendar/use-appearance-sync";
 import { SideNav, type AppSection } from "@/calendar/side-nav";
 import { CalendarMapSection } from "@/calendar/calendar-map-section";
-import { onRulesRan, ruleRunSummary } from "@/agent/rules/rules-client";
+import { onRulesRan, ruleRunSummary, runRulesAfterSync } from "@/agent/rules/rules-client";
 import { useAgentRules } from "@/agent/rules/use-agent-rules";
 import { TodoList } from "@/calendar/todo-list";
 import { CampusEventsSection } from "@/campus/campus-events-section";
 import {
   campusCalendarsOf,
+  campusCalendarItems,
+  splitCampusCalendars,
   campusCategoryLabel,
   campusEventMeta,
   campusFeedCategories,
   campusFeedUrl,
+  campusScrapeIsNewer,
   isDefaultCampusCalendarName,
   type CampusEvent,
 } from "@/campus/campus-events";
@@ -108,6 +112,7 @@ import {
   withCampusFeedColor,
   type CampusSubscriptionPref,
 } from "@/campus/campus-subscription-prefs";
+import { cachedCampusEvents, fetchCampusScrapeAt, syncCampusCalendars, type CampusSyncCalendar } from "@/campus/campus-client";
 import { keywordTasksOf, readKeywordTasks, withKeywordTaskDone, type KeywordTasks, type KeywordTaskSource } from "@/calendar/keyword-tasks";
 import { KeywordTaskRules, type KeywordTaskCalendarOption } from "@/calendar/keyword-task-rules";
 import { AccessError, plainReason } from "@/auth/access";
@@ -320,23 +325,28 @@ function timeZone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 }
 
-const CAMPUS_SYNC_KEY = "watagent.campus.syncedAt";
-const CAMPUS_SYNC_EVERY_MS = 60 * 60 * 1000;
+//the server scrape we last applied. a wall-clock stamp must not be compared with scrapedAt.
+const CAMPUS_SCRAPE_KEY = "watagent.campus.appliedScrapedAt";
 
-function readCampusSyncedAt(): number {
+function readAppliedCampusScrape(): number | null {
   try {
-    return Number(window.localStorage.getItem(CAMPUS_SYNC_KEY)) || 0;
+    const at = Number(window.localStorage.getItem(CAMPUS_SCRAPE_KEY));
+    return Number.isFinite(at) && at > 0 ? at : null;
   } catch {
-    return 0;
+    return null;
   }
 }
 
-function writeCampusSyncedAt(at: number): void {
+function writeAppliedCampusScrape(at: number): void {
   try {
-    window.localStorage.setItem(CAMPUS_SYNC_KEY, String(at));
+    window.localStorage.setItem(CAMPUS_SCRAPE_KEY, String(at));
   } catch {
     return;
   }
+}
+
+function importAlreadyRunning(err: unknown): boolean {
+  return err instanceof Error && err.message.includes("already running");
 }
 
 //start of the period the stage is showing, so moving within the same week/month isn't a "navigation"
@@ -362,8 +372,9 @@ export function CalendarApp({
   const calendar = useCalendar();
   const { syncFromGoogle, createChat, pruneEmptyChats, setAfterWrite } = calendar;
   const [view, setView] = useState<CalendarView>(() => readCalendarView());
-  const [importedCalendars, setImportedCalendars] = useState<ImportedCalendar[]>(() => readImportedCalendars());
-  const [mergedCalendars, setMergedCalendars] = useState<MergedCalendar[]>(() => readMergedCalendars(readImportedCalendars()));
+  const [importedCalendars, setImportedCalendars] = useState<ImportedCalendar[]>(() => splitCampusCalendars(readImportedCalendars(), readCampusCalendars()).imported);
+  const [campusCalendarFeeds, setCampusCalendarFeeds] = useState<ImportedCalendar[]>(() => splitCampusCalendars(readImportedCalendars(), readCampusCalendars()).campus);
+  const [mergedCalendars, setMergedCalendars] = useState<MergedCalendar[]>(() => readMergedCalendars([...readImportedCalendars(), ...readCampusCalendars()]));
   const [agentHiddenCalendarIds, setAgentHiddenCalendarIds] = useState<string[]>(() => readAgentHiddenIds());
   const [newCalendarsShown, setNewCalendarsShown] = useState(() => readNewCalendarsShown());
   const [googleConnected, setGoogleConnected] = useState<boolean | null>(null);
@@ -546,10 +557,11 @@ export function CalendarApp({
 
   const preferencesLoaded = useCalendarPreferencesSync(
     calendar.hydrated,
-    { view, importedCalendars, mergedCalendars, agentHiddenCalendarIds, newCalendarsShown, localCalendars, sources, colors, colorOverrides, smartTags, keywordTasks, navCollapsed, sidePanelSections },
+    { view, importedCalendars, campusCalendars: campusCalendarFeeds, mergedCalendars, agentHiddenCalendarIds, newCalendarsShown, localCalendars, sources, colors, colorOverrides, smartTags, keywordTasks, navCollapsed, sidePanelSections },
     {
       setView,
       setImportedCalendars,
+      setCampusCalendars: setCampusCalendarFeeds,
       setMergedCalendars,
       setAgentHiddenCalendarIds,
       setNewCalendarsShown,
@@ -569,25 +581,44 @@ export function CalendarApp({
     flushCalendarPreferencesRef,
   );
 
-  const importedLabels = useMemo<ImportedLabels>(() => ({ imported: importedCalendars, merged: mergedCalendars }), [importedCalendars, mergedCalendars]);
+  const importedLabels = useMemo<ImportedLabels>(
+    () => ({ imported: [...importedCalendars, ...campusCalendarFeeds], merged: mergedCalendars }),
+    [importedCalendars, campusCalendarFeeds, mergedCalendars],
+  );
+  const feedsForMerge = useMemo(() => [...importedCalendars, ...campusCalendarFeeds], [importedCalendars, campusCalendarFeeds]);
 
-  //merged calendars stand in for their members in the side panel
-  const sideExternalCalendars = useMemo<SideExternalCalendar[]>(() => {
+  //merged calendars stand in for their members. uwaterloo feeds never share the external list, so a gap in that list can't rename one "Imported calendar"
+  const campusSourceIds = useMemo(() => new Set(campusCalendarFeeds.map((calendar) => calendar.id)), [campusCalendarFeeds]);
+  const { sideExternalCalendars, sideCampusCalendars } = useMemo(() => {
     const byMember = mergedByMember(mergedCalendars);
-    const feedOf = (id: string) => importedCalendars.find((calendar) => externalCalendarId(calendar.id) === id);
-    const rows: SideExternalCalendar[] = mergedCalendars.map((calendar) => ({
-      id: calendar.id,
-      name: calendar.name,
-      feeds: calendar.members.map(feedOf).filter((feed): feed is ImportedCalendar => feed != null),
-      merged: true,
-    }));
-    for (const external of externalCalendarsOf(itemsForUi, importedCalendars)) {
-      if (byMember.has(external.id)) continue;
-      const feed = feedOf(external.id);
-      rows.push({ id: external.id, name: external.name, source: external.source, feeds: feed ? [feed] : [] });
+    const feedOf = (id: string) => feedsForMerge.find((calendar) => externalCalendarId(calendar.id) === id);
+    const external: SideExternalCalendar[] = [];
+    const campus: SideExternalCalendar[] = [];
+    for (const calendar of mergedCalendars) {
+      const row: SideExternalCalendar = {
+        id: calendar.id,
+        name: calendar.name,
+        feeds: calendar.members.map(feedOf).filter((feed): feed is ImportedCalendar => feed != null),
+        merged: true,
+      };
+      const onlyCampus = calendar.members.length > 0 && calendar.members.every((member) => {
+        const source = feedOfCalendarId(member);
+        return source != null && campusSourceIds.has(source);
+      });
+      (onlyCampus ? campus : external).push(row);
     }
-    return rows;
-  }, [itemsForUi, importedCalendars, mergedCalendars]);
+    for (const row of externalCalendarsOf(itemsForUi, importedCalendars, campusSourceIds)) {
+      if (byMember.has(row.id)) continue;
+      const feed = feedOf(row.id);
+      external.push({ id: row.id, name: row.name, source: row.source, feeds: feed ? [feed] : [] });
+    }
+    for (const calendar of campusCalendarFeeds) {
+      const id = externalCalendarId(calendar.id);
+      if (byMember.has(id)) continue;
+      campus.push({ id, name: calendar.name, source: calendar.id, feeds: [calendar] });
+    }
+    return { sideExternalCalendars: external, sideCampusCalendars: campus };
+  }, [itemsForUi, importedCalendars, campusCalendarFeeds, campusSourceIds, mergedCalendars, feedsForMerge]);
 
   const mentionCalendars = useMemo(() => {
     const rows: MentionCalendar[] = shownCalendars
@@ -599,7 +630,7 @@ export function CalendarApp({
         color: calendarSwatchColor(calendar.id, colors, colorOverrides),
         readOnly: isCalendarReadOnly(sources, calendar.id),
       }));
-    for (const calendar of sideExternalCalendars) {
+    for (const calendar of [...sideExternalCalendars, ...sideCampusCalendars]) {
       if (isAgentCalendarHidden(agentHiddenCalendarIds, calendar.id)) continue;
       rows.push({
         id: calendar.id,
@@ -623,6 +654,7 @@ export function CalendarApp({
   }, [
     shownCalendars,
     sideExternalCalendars,
+    sideCampusCalendars,
     colors,
     colorOverrides,
     sources,
@@ -653,20 +685,9 @@ export function CalendarApp({
   const renameExternal = useCallback((id: string, name: string) => {
     setMergedCalendars((current) => current.map((calendar) => (calendar.id === id ? { ...calendar, name } : calendar)));
     setImportedCalendars((current) => current.map((calendar) => (externalCalendarId(calendar.id) === id ? { ...calendar, name } : calendar)));
+    setCampusCalendarFeeds((current) => current.map((calendar) => (externalCalendarId(calendar.id) === id ? { ...calendar, name } : calendar)));
   }, []);
 
-  //a removed calendar leaves any merge; a merge left with one member goes away
-  const removeImported = useCallback(async (source: ImportedCalendarSource) => {
-    await removeImportedCalendar(source);
-    const id = externalCalendarId(source);
-    setImportedCalendars((current) => current.filter((calendar) => calendar.id !== source));
-    setMergedCalendars((current) =>
-      current
-        .map((calendar) => ({ ...calendar, members: calendar.members.filter((member) => member !== id) }))
-        .filter((calendar) => calendar.members.length >= 2),
-    );
-    await calendar.refresh();
-  }, [calendar]);
 
   //UWaterloo events copy onto any WatAgent event calendar you can write to
   const campusTargets = useMemo(
@@ -687,16 +708,18 @@ export function CalendarApp({
   );
 
   const addImported = useCallback(async (added: ImportedCalendar) => {
-    const isNew = !importedCalendars.some((entry) => entry.id === added.id);
-    setImportedCalendars((current) =>
-      current.some((entry) => entry.id === added.id) ? current : [...current, added],
-    );
+    const campusLink = campusFeedCategories(added.url) != null;
+    const existing = campusLink ? campusCalendarFeeds : importedCalendars;
+    const isNew = !existing.some((entry) => entry.id === added.id);
+    const place = (current: ImportedCalendar[]) => (current.some((entry) => entry.id === added.id) ? current : [...current, added]);
+    if (campusLink) setCampusCalendarFeeds(place);
+    else setImportedCalendars(place);
     if (isNew) setSources((current) => withNewCalendar(current, externalCalendarId(added.id), newCalendarsShown));
     await calendar.refresh();
-  }, [calendar, importedCalendars, newCalendarsShown]);
+  }, [calendar, importedCalendars, campusCalendarFeeds, newCalendarsShown]);
 
   //each enabled category is its own calendar. a link that still lists several is split the next time this runs
-  const campusCalendars = useMemo(() => campusCalendarsOf(importedCalendars), [importedCalendars]);
+  const campusCalendars = useMemo(() => campusCalendarsOf(campusCalendarFeeds), [campusCalendarFeeds]);
   const campusCategoryByFeedId = useMemo(() => {
     const map = new Map<string, string>();
     for (const entry of campusCalendars) {
@@ -705,73 +728,178 @@ export function CalendarApp({
     return map;
   }, [campusCalendars]);
   const campusSources = useMemo(() => new Set(campusCalendars.map((entry) => entry.calendar.id)), [campusCalendars]);
-  const importedRef = useRef(importedCalendars);
+  const campusRef = useRef(campusCalendarFeeds);
   const campusBusy = useRef(false);
-  if (!campusBusy.current) importedRef.current = importedCalendars;
+  if (!campusBusy.current) campusRef.current = campusCalendarFeeds;
   const campusChain = useRef(Promise.resolve());
+  const campusJobs = useRef(0);
+
+  const enqueueCampus = useCallback((work: () => Promise<void>) => {
+    campusJobs.current += 1;
+    campusBusy.current = true;
+    const job = campusChain.current.catch(() => undefined).then(async () => {
+      try {
+        await work();
+      } finally {
+        campusJobs.current = Math.max(0, campusJobs.current - 1);
+        campusBusy.current = campusJobs.current > 0;
+      }
+    });
+    campusChain.current = job.then(() => undefined, () => undefined);
+  }, []);
+
+  //the row and its events leave the screen together. the server archive follows, so a refresh can't bring them back early.
+  const disconnectFeed = useCallback((source: ImportedCalendarSource) => {
+    const id = externalCalendarId(source);
+    let campus: ImportedCalendar | undefined;
+    let external: ImportedCalendar | undefined;
+    let merged: MergedCalendar[] = [];
+    setCampusCalendarFeeds((current) => {
+      campus = current.find((entry) => entry.id === source);
+      const next = current.filter((entry) => entry.id !== source);
+      campusRef.current = next;
+      return next;
+    });
+    setImportedCalendars((current) => {
+      external = current.find((entry) => entry.id === source);
+      return current.filter((entry) => entry.id !== source);
+    });
+    setMergedCalendars((current) => {
+      merged = current;
+      return current
+        .map((entry) => ({ ...entry, members: entry.members.filter((member) => member !== id) }))
+        .filter((entry) => entry.members.length >= 2);
+    });
+    calendar.hideImport(source);
+    return { campus, external, merged };
+  }, [calendar]);
+
+  const restoreFeed = useCallback((source: ImportedCalendarSource, snapshot: { campus?: ImportedCalendar; external?: ImportedCalendar; merged: MergedCalendar[] }) => {
+    calendar.releaseImport(source);
+    if (snapshot.campus) {
+      campusRef.current = [...campusRef.current.filter((entry) => entry.id !== source), snapshot.campus];
+      setCampusCalendarFeeds(campusRef.current);
+    }
+    if (snapshot.external) setImportedCalendars((current) => (current.some((entry) => entry.id === source) ? current : [...current, snapshot.external!]));
+    setMergedCalendars(snapshot.merged);
+  }, [calendar]);
+
+  const removeImported = useCallback((source: ImportedCalendarSource) => {
+    const snapshot = disconnectFeed(source);
+    enqueueCampus(async () => {
+      try {
+        await removeImportedCalendar(source);
+        calendar.releaseImport(source);
+        await calendar.refresh();
+      } catch (err) {
+        restoreFeed(source, snapshot);
+        await calendar.refresh();
+        setNotice(err instanceof Error && err.message ? err.message : "Unable to remove this calendar. Please try again.");
+      }
+    });
+    return Promise.resolve();
+  }, [calendar, disconnectFeed, enqueueCampus, restoreFeed]);
 
   const subscribeCampus = useCallback(
     (next: Array<{ id: string; label: string }>, options?: { quiet?: boolean }) => {
-      const job = campusChain.current.catch(() => undefined).then(async () => {
-        campusBusy.current = true;
-        const wanted = new Map(next.map((entry) => [entry.id, entry.label]));
-        const current = campusCalendarsOf(importedRef.current);
-        const singles = new Map<string, (typeof current)[number]>();
-        const drop: typeof current = [];
-        for (const entry of current) {
-          if (entry.categories.length === 1 && !singles.has(entry.categories[0])) singles.set(entry.categories[0], entry);
-          else if (entry.categories.length !== 1 || singles.has(entry.categories[0])) drop.push(entry);
+      const wanted = new Map(next.map((entry) => [entry.id, entry.label]));
+      const current = campusCalendarsOf(campusRef.current);
+      const singles = new Map<string, (typeof current)[number]>();
+      const drop: typeof current = [];
+      for (const entry of current) {
+        if (entry.categories.length === 1 && !singles.has(entry.categories[0])) singles.set(entry.categories[0], entry);
+        else if (entry.categories.length !== 1 || singles.has(entry.categories[0])) drop.push(entry);
+      }
+      const added: Array<{ id: ImportedCalendarSource; url: string; name: string }> = [];
+      const removed: Array<{ id: ImportedCalendarSource; name: string; snapshot: ReturnType<typeof disconnectFeed> }> = [];
+      const remember = (entry: ImportedCalendar) => {
+        campusRef.current = [...campusRef.current.filter((calendar) => calendar.id !== entry.id), entry];
+        setCampusCalendarFeeds(campusRef.current);
+      };
+      for (const [id, label] of wanted) {
+        const found = singles.get(id);
+        if (found) {
+          if (found.calendar.name !== label && isDefaultCampusCalendarName(found.calendar.name)) remember({ ...found.calendar, name: label });
+          continue;
         }
-        const added: string[] = [];
-        const removed: string[] = [];
+        const url = campusFeedUrl([id]);
+        const feedId = newFeedId();
+        const feedKey = externalCalendarId(feedId);
+        remember({ id: feedId, name: label, url });
+        setColorOverrides((overrides) => withCampusFeedColor(overrides, id, feedKey));
+        setSources((sourcesNow) => withNewCalendar(sourcesNow, feedKey, newCalendarsShown));
+        //events already on the Events page, so the calendar fills without waiting for the save
+        calendar.stageImport(feedId, campusCalendarItems(cachedCampusEvents(), feedId, id));
+        added.push({ id: feedId, url, name: label });
+      }
+      for (const [id, entry] of singles) {
+        if (wanted.has(id)) continue;
+        removed.push({ id: entry.calendar.id, name: entry.calendar.name, snapshot: disconnectFeed(entry.calendar.id) });
+      }
+      for (const entry of drop) {
+        if (entry.categories.length === 0) continue;
+        removed.push({ id: entry.calendar.id, name: entry.calendar.name, snapshot: disconnectFeed(entry.calendar.id) });
+      }
+      flushCalendarPreferencesRef.current?.({ campusCalendars: campusRef.current });
+      if (!options?.quiet) {
+        if (wanted.size === 0 && removed.length > 0) setNotice("Unsubscribed. UWaterloo Events are off your calendars.");
+        else if (added.length === 1 && removed.length === 0) setNotice(`Subscribed. ${added[0].name} is its own calendar under UWaterloo Events.`);
+        else if (removed.length === 1 && added.length === 0) setNotice(`${removed[0].name} is off your calendars.`);
+        else if (added.length > 0 || removed.length > 0) setNotice("Updated your UWaterloo Events calendars.");
+      }
+      if (added.length === 0 && removed.length === 0) return Promise.resolve();
+      enqueueCampus(async () => {
+        const saved = new Set<ImportedCalendarSource>();
+        const archived = new Set<ImportedCalendarSource>();
         try {
-          for (const [id, label] of wanted) {
-            const found = singles.get(id);
-            if (found) {
-              if (found.calendar.name !== label && isDefaultCampusCalendarName(found.calendar.name)) {
-                const name = label;
-                setImportedCalendars((list) => list.map((calendar) => (calendar.id === found.calendar.id ? { ...calendar, name } : calendar)));
-                importedRef.current = importedRef.current.map((calendar) => (calendar.id === found.calendar.id ? { ...calendar, name } : calendar));
-              }
+          for (const feed of added) {
+            if (!campusRef.current.some((entry) => entry.id === feed.id)) {
+              calendar.releaseImport(feed.id);
               continue;
             }
-            const url = campusFeedUrl([id]);
-            const feedId = newFeedId();
-            const feedKey = externalCalendarId(feedId);
-            setColorOverrides((current) => withCampusFeedColor(current, id, feedKey));
-            await syncImportedFeed({ id: feedId, url });
-            await addImported({ id: feedId, name: label, url });
-            importedRef.current = [...importedRef.current.filter((calendar) => calendar.id !== feedId), { id: feedId, name: label, url }];
-            added.push(label);
+            for (let attempt = 0; attempt < 20; attempt++) {
+              try {
+                await syncImportedFeed({ id: feed.id, url: feed.url });
+                break;
+              } catch (err) {
+                if (!importAlreadyRunning(err) || attempt === 19) throw err;
+                await new Promise((resolve) => setTimeout(resolve, 400));
+              }
+            }
+            saved.add(feed.id);
+            if (!campusRef.current.some((entry) => entry.id === feed.id)) {
+              await removeImportedCalendar(feed.id);
+              archived.add(feed.id);
+            }
+            calendar.releaseImport(feed.id);
           }
-          for (const [id, entry] of singles) {
-            if (wanted.has(id)) continue;
-            await removeImported(entry.calendar.id);
-            importedRef.current = importedRef.current.filter((calendar) => calendar.id !== entry.calendar.id);
-            removed.push(entry.calendar.name);
+          for (const feed of removed) {
+            await removeImportedCalendar(feed.id);
+            archived.add(feed.id);
+            calendar.releaseImport(feed.id);
           }
-          for (const entry of drop) {
-            if (entry.categories.length === 0) continue;
-            await removeImported(entry.calendar.id);
-            importedRef.current = importedRef.current.filter((calendar) => calendar.id !== entry.calendar.id);
-          }
-          writeCampusSyncedAt(Date.now());
-          if (options?.quiet) return;
-          if (wanted.size === 0) setNotice("Unsubscribed. UWaterloo Events are off your calendars.");
-          else if (added.length === 1 && removed.length === 0) setNotice(`Subscribed. ${added[0]} is its own calendar under UWaterloo Events.`);
-          else if (removed.length === 1 && added.length === 0) setNotice(`${removed[0]} is off your calendars.`);
-          else if (added.length > 0 || removed.length > 0) setNotice("Updated your UWaterloo Events calendars.");
+          await calendar.refresh();
         } catch (err) {
+          for (const feed of added) {
+            calendar.releaseImport(feed.id);
+            if (saved.has(feed.id) || !campusRef.current.some((entry) => entry.id === feed.id)) continue;
+            calendar.hideImport(feed.id);
+            campusRef.current = campusRef.current.filter((entry) => entry.id !== feed.id);
+          }
+          setCampusCalendarFeeds(campusRef.current);
+          for (const feed of removed) {
+            if (archived.has(feed.id)) continue;
+            restoreFeed(feed.id, feed.snapshot);
+          }
+          await calendar.refresh();
           setNotice(err instanceof Error ? err.message : "Unable to update your UWaterloo event subscriptions.");
         } finally {
-          campusBusy.current = false;
-          flushCalendarPreferencesRef.current?.({ importedCalendars: importedRef.current });
+          flushCalendarPreferencesRef.current?.({ campusCalendars: campusRef.current });
         }
       });
-      campusChain.current = job.then(() => undefined, () => undefined);
-      return job;
+      return Promise.resolve();
     },
-    [removeImported, addImported],
+    [calendar, disconnectFeed, enqueueCampus, newCalendarsShown, restoreFeed],
   );
 
   const campusSplitAttempts = useRef(0);
@@ -787,7 +915,7 @@ export function CalendarApp({
       campusRestoreRef.current = null;
       campusRestoreBusyRef.current = false;
     };
-    if (!campusSubscriptionsMatch(importedCalendars, restore)) {
+    if (!campusSubscriptionsMatch(campusCalendarFeeds, restore)) {
       campusRestoreBusyRef.current = true;
       void subscribeCampus(
         restore.map((sub) => ({ id: sub.categoryId, label: campusCategoryLabel(sub.categoryId) })),
@@ -798,51 +926,92 @@ export function CalendarApp({
       return;
     }
     finish();
-  }, [hydrated, preferencesLoaded, importedCalendars, subscribeCampus]);
+  }, [hydrated, preferencesLoaded, campusCalendarFeeds, subscribeCampus]);
 
   useEffect(() => {
     if (!hydrated || !preferencesLoaded || campusSplitAttempts.current >= 2) return;
-    const needsSplit = importedCalendars.some((calendar) => (campusFeedCategories(calendar.url)?.length ?? 0) > 1);
-    const needsRename = importedCalendars.some((calendar) => {
+    const needsSplit = campusCalendarFeeds.some((calendar) => (campusFeedCategories(calendar.url)?.length ?? 0) > 1);
+    const needsRename = campusCalendarFeeds.some((calendar) => {
       const categories = campusFeedCategories(calendar.url);
       return categories?.length === 1 && isDefaultCampusCalendarName(calendar.name) && calendar.name !== campusCategoryLabel(categories[0]);
     });
     if (!needsSplit && !needsRename) return;
     campusSplitAttempts.current += 1;
     const wanted = new Map<string, string>();
-    for (const calendar of importedCalendars) {
+    for (const calendar of campusCalendarFeeds) {
       for (const id of campusFeedCategories(calendar.url) ?? []) wanted.set(id, campusCategoryLabel(id));
     }
     if (needsSplit) setNotice("UWaterloo Events now has one calendar per category.");
     void subscribeCampus([...wanted].map(([id, label]) => ({ id, label })), { quiet: true });
-  }, [hydrated, preferencesLoaded, importedCalendars, subscribeCampus]);
+  }, [hydrated, preferencesLoaded, campusCalendarFeeds, subscribeCampus]);
 
-  //new events are scraped every few hours; each category calendar catches up when the app opens or Events does
-  const onEvents = section === "events";
+  //scrapedAt is the notification. open and coming back compare it; a match leaves the calendars alone.
+  const [campusSyncNonce, setCampusSyncNonce] = useState(0);
+  useEffect(() => {
+    function onVisible() {
+      if (document.visibilityState === "visible") setCampusSyncNonce((nonce) => nonce + 1);
+    }
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, []);
   const campusSyncKey = campusCalendars.map((entry) => `${entry.calendar.id}\0${entry.calendar.url}`).join("\n");
   useEffect(() => {
     if (!hydrated || !preferencesLoaded || campusCalendars.length === 0) return;
     //a combined feed is about to be split, and that split syncs the new calendars
     if (campusCalendars.some((entry) => entry.categories.length !== 1)) return;
-    if (Date.now() - readCampusSyncedAt() < CAMPUS_SYNC_EVERY_MS) return;
-    writeCampusSyncedAt(Date.now());
     const feeds = campusCalendars.map((entry) => entry.calendar);
+    const categoriesOf = new Map(campusCalendars.map((entry) => [entry.calendar.id, entry.categories]));
+    const controller = new AbortController();
+    let cancelled = false;
+    const catchUp = async () => {
+      if (campusBusy.current) {
+        await campusChain.current.catch(() => undefined);
+        if (cancelled || campusBusy.current) return;
+      }
+      const server = await fetchCampusScrapeAt();
+      if (cancelled || campusBusy.current || !campusScrapeIsNewer(server, readAppliedCampusScrape())) return;
+      const changed: CampusSyncCalendar[] = [];
+      const result = await syncCampusCalendars(
+        feeds.flatMap((calendar) => {
+          const categories = categoriesOf.get(calendar.id) ?? [];
+          return categories.length === 1 ? [{ feedId: calendar.id, categories }] : [];
+        }),
+        timeZone(),
+        async (calendar) => {
+          if (calendar.added === 0 && calendar.updated === 0 && calendar.removed === 0) return;
+          changed.push(calendar);
+          runRulesAfterSync(calendar.feedId as ImportedCalendarSource);
+          await refreshItems();
+        },
+        controller.signal,
+      );
+      writeAppliedCampusScrape(result.updatedAt);
+      if (cancelled || changed.length === 0) return;
+      const notes = changed.map((calendar) => {
+        const name = feeds.find((feed) => feed.id === calendar.feedId)?.name ?? "UWaterloo Events";
+        return formatFeedSyncSummary(name, calendar);
+      });
+      setNotice(notes.length === 1 ? notes[0] : `UWaterloo Events updated (${notes.length} calendars).`);
+    };
     void (async () => {
-      const notes: string[] = [];
-      for (const calendar of feeds) {
+      for (let attempt = 0; attempt < 2 && !cancelled; attempt++) {
         try {
-          const result = await syncImportedFeed(calendar);
-          if (result.added === 0 && result.updated === 0 && result.removed === 0) continue;
-          notes.push(formatFeedSyncSummary(calendar.name, result));
-        } catch {
-          //one category failing leaves the others
+          await catchUp();
+          return;
+        } catch (err) {
+          //the calendar the user just turned on may be using the only import slot
+          if (cancelled || controller.signal.aborted || !importAlreadyRunning(err) || attempt === 1) return;
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+          if (cancelled) return;
+          await campusChain.current.catch(() => undefined);
         }
       }
-      if (notes.length === 0) return;
-      await refreshItems();
-      setNotice(notes.length === 1 ? notes[0] : `UWaterloo Events updated (${notes.length} calendars).`);
     })();
-  }, [hydrated, preferencesLoaded, campusSyncKey, campusCalendars, onEvents, refreshItems]);
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [hydrated, preferencesLoaded, campusSyncKey, campusSyncNonce, campusCalendars, refreshItems]);
 
   useEffect(() => {
     let cancelled = false;
@@ -900,7 +1069,7 @@ export function CalendarApp({
     const own = itemsForUi
       .filter((item) => item.calendar.kind === "event" && !item.pendingApproval && !item.editorDraft)
       .map(timelineItemOf);
-    return mergeTimeline([...own, ...shownOverlayEvents.map(overlayTimelineItemOf)], mergedCalendars, importedCalendars).flatMap((item): KeywordTaskSource[] => {
+    return mergeTimeline([...own, ...shownOverlayEvents.map(overlayTimelineItemOf)], mergedCalendars, feedsForMerge).flatMap((item): KeywordTaskSource[] => {
       const calendarId = item.kind === "gcal_event" ? item.google?.calendarId : timelineItemCalendarId(item);
       if (!calendarId) return [];
       return [{
@@ -915,14 +1084,19 @@ export function CalendarApp({
         description: item.description ?? item.google?.description,
       }];
     });
-  }, [itemsForUi, shownOverlayEvents, mergedCalendars, importedCalendars]);
+  }, [itemsForUi, shownOverlayEvents, mergedCalendars, feedsForMerge]);
   const derivedKeywordTasks = useMemo(() => keywordTasksOf(keywordTasks, keywordTaskSources), [keywordTasks, keywordTaskSources]);
   const keywordTaskCalendars = useMemo<KeywordTaskCalendarOption[]>(
     () => [
       ...sideExternalCalendars.map((calendar) => ({
         id: calendar.id,
         name: calendar.name,
-        group: (isCampusSideCalendar(calendar) ? "UWaterloo Events" : "Imported") as KeywordTaskCalendarOption["group"],
+        group: "Imported" as const,
+      })),
+      ...sideCampusCalendars.map((calendar) => ({
+        id: calendar.id,
+        name: calendar.name,
+        group: "UWaterloo Events" as const,
       })),
       ...sidebarCalendars
         .filter((calendar) => !isExcludedGoogleCalendarName(calendar.name))
@@ -931,7 +1105,7 @@ export function CalendarApp({
         .filter((calendar) => calendar.kind === "event")
         .map((calendar) => ({ id: calendar.id, name: calendar.name, group: "WatAgent" as const })),
     ],
-    [sideExternalCalendars, sidebarCalendars, shownCalendars],
+    [sideExternalCalendars, sideCampusCalendars, sidebarCalendars, shownCalendars],
   );
   const keywordTaskCalendarName = useCallback(
     (id: string) => keywordTaskCalendars.find((calendar) => calendar.id === id)?.name ?? "Calendar",
@@ -962,7 +1136,7 @@ export function CalendarApp({
           if (filterGroups.hidden && filter.hiddenIds.includes(event.calendarId)) return true;
           return googleShown && !isSidebarHidden(filter, event.calendarId) && !filter.mutedGoogleIds.includes(event.calendarId);
         }),
-      }), mergedCalendars, importedCalendars).map((item) => {
+      }), mergedCalendars, feedsForMerge).map((item) => {
         const swatch = (calendarId: string, importSource?: string) => {
           if (importSource) {
             const categoryId = campusCategoryByFeedId.get(importSource);
@@ -985,7 +1159,7 @@ export function CalendarApp({
         };
       });
     },
-    [itemsForUi, busyBlocks, shownOverlayEvents, mergedCalendars, importedCalendars, campusSources, campusCategoryByFeedId, colorOverrides, colors],
+    [itemsForUi, busyBlocks, shownOverlayEvents, mergedCalendars, feedsForMerge, campusSources, campusCategoryByFeedId, colorOverrides, colors],
   );
 
   const itemsForDay = useCallback(
@@ -1675,6 +1849,7 @@ export function CalendarApp({
           colors={colors}
           onColors={setColors}
           externalCalendars={sideExternalCalendars}
+          campusCalendars={sideCampusCalendars}
           onRenameExternal={renameExternal}
           onRefreshCalendars={() => calendar.refresh()}
           onSyncGoogle={() => googlePullRef.current()}
@@ -1833,6 +2008,7 @@ export function CalendarApp({
                 sources={sources}
                 onSources={setSources}
                 importedCalendars={importedCalendars}
+                campusCalendars={campusCalendarFeeds}
                 colors={colors}
                 colorOverrides={colorOverrides}
                 localCalendars={shownCalendars}
@@ -1855,6 +2031,7 @@ export function CalendarApp({
             {section === "settings" ? (
               <SettingsPanel
                 importedCalendars={importedCalendars}
+                campusCalendars={campusCalendarFeeds}
                 mergedCalendars={mergedCalendars}
                 onRenameCalendar={(id, name) => renameExternal(externalCalendarId(id), name)}
                 accountEmail={user.email}

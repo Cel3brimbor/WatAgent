@@ -19,6 +19,13 @@ assert.deepEqual(externalCalendarsOf([learn, portal, manual], imported).map((row
 assert.deepEqual(externalCalendarsOf([], imported).map((row) => row.id), ["ics:portal", "ics:learn"], "a saved link shows before its first events arrive");
 assert.deepEqual(externalCalendarsOf([learn], []).map((row) => [row.id, row.name]), [["ics:learn", "Imported calendar"]], "events without a saved link still get a row");
 assert.deepEqual(externalCalendarsOf([], []), [], "no phantom calendars");
+const talks = "feed-11111111-1111-4111-8111-111111111111" as const;
+const campusItem: CalendarItemDoc = { ...learn, id: "campus", calendar: { ...learn.calendar, importSource: talks } };
+assert.deepEqual(
+  externalCalendarsOf([campusItem], [], new Set([talks])).map((row) => row.name),
+  [],
+  "uwaterloo events never become an imported calendar row",
+);
 const school = { id: "merge-0b5c2f8e-3a4d-4e1f-9c2b-7d6e5f4a3b2c", name: "School", members: ["ics:learn", "ics:portal"] };
 assert.equal(calendarItemVisible(learn, { ...filter, mutedGoogleIds: ["ics:learn"] }, [school]), true, "a member follows its merged calendar");
 assert.equal(calendarItemVisible(learn, { ...filter, mutedGoogleIds: [school.id] }, [school]), false);
@@ -47,8 +54,6 @@ assert.equal(isCalendarReadOnly(ALL_SOURCES, "events"), false);
 assert.equal(withNewCalendar(ALL_SOURCES, "ics:learn", true), ALL_SOURCES, "new calendars show by default");
 assert.deepEqual(withNewCalendar(ALL_SOURCES, "ics:learn", false).mutedGoogleIds, ["ics:learn"], "or start hidden");
 assert.equal(calendarItemVisible(learn, withNewCalendar(filter, "ics:learn", false)), false);
-const talks = "feed-11111111-1111-4111-8111-111111111111" as const;
-const campusItem: CalendarItemDoc = { ...learn, id: "campus", calendar: { ...learn.calendar, importSource: talks } };
 const campusSources = new Set([talks]);
 assert.equal(calendarItemVisible(campusItem, { ...filter, groups: { ...groupsOff, campus: true } }, [], campusSources), true, "uwaterloo events follow their own header");
 assert.equal(calendarItemVisible(campusItem, { ...filter, groups: { ...groupsOff, external: true, campus: false } }, [], campusSources), false, "hiding the uwaterloo header hides those calendars");

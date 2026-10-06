@@ -348,6 +348,7 @@ export function writeSidePanelSections(sections: SidePanelSectionsOpen): void {
 }
 
 const IMPORTED_CALENDARS_KEY = "watagent.calendar.imported.v1";
+const CAMPUS_CALENDARS_KEY = "watagent.calendar.campus.v1";
 const MERGED_CALENDARS_KEY = "watagent.calendar.merged.v1";
 
 function readJson(key: string): unknown {
@@ -365,6 +366,17 @@ export function readImportedCalendars(): ImportedCalendar[] {
 
 export function writeImportedCalendars(calendars: ImportedCalendar[]): void {
   try { window.localStorage.setItem(IMPORTED_CALENDARS_KEY, JSON.stringify(calendars)); }
+  catch { return; }
+}
+
+export function readCampusCalendars(): ImportedCalendar[] {
+  if (typeof window === "undefined") return [];
+  try { return importedCalendarsOf(readJson(CAMPUS_CALENDARS_KEY)); }
+  catch { return []; }
+}
+
+export function writeCampusCalendars(calendars: ImportedCalendar[]): void {
+  try { window.localStorage.setItem(CAMPUS_CALENDARS_KEY, JSON.stringify(calendars)); }
   catch { return; }
 }
 
