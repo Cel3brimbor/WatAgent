@@ -8103,10 +8103,10 @@ h3 {
 @media (max-width: 760px) {
   .app-frame { position: relative; }
   .side-nav, .app-frame.is-nav-collapsed .side-nav { height: 0; min-height: 0; padding: 0; flex: 0 0 0; border: 0; }
-  .side-nav-head { position: absolute; z-index: 20; top: var(--safe-top); left: var(--safe-left); right: var(--safe-right); width: auto; height: 52px; padding: 4px; pointer-events: none; }
+  .side-nav-head, .app-frame.is-nav-collapsed .side-nav-head { position: absolute; z-index: 19; top: var(--safe-top); left: var(--safe-left); right: var(--safe-right); width: auto; height: 52px; padding: 4px; flex-direction: row; pointer-events: none; }
   .side-nav-head .side-nav-brand { display: none; }
   .side-nav-toggle, .side-nav-gear { pointer-events: auto; }
-  .side-nav-gear { margin-left: auto; }
+  .side-nav-gear, .app-frame.is-nav-collapsed .side-nav-gear { margin-left: auto; }
   .mobile-calendar-toolbar { padding: 0 52px; position: relative; z-index: 10; }
   .mobile-calendar-title-row { height: 51px; min-height: 0; gap: 0; }
   .mobile-calendar-date-menu { flex: 1; min-width: 0; }
