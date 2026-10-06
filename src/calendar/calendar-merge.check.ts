@@ -48,12 +48,15 @@ assert.deepEqual(ids(mergeTimeline([learn, { ...learn, id: "copy" }], [])), ["le
 assert.deepEqual(ids(mergeTimeline([portal, { ...portal, id: "room", location: "MC 2038" }], [])), ["portal", "room"], "same time in another room is a different event");
 assert.deepEqual(ids(mergeTimeline([manual, { ...manual, id: "manual-copy" }], [])), ["manual", "manual-copy"], "hand-made events are never hidden");
 
-//nested titles at the same times are copies
+//a longer title, a different end, or another room is not the same imported event
 const formStart = new Date(2026, 8, 29, 11, 30).getTime();
 const form = { ...learn, id: "form", title: "Video Release Form", startUTC: formStart, endUTC: formStart };
 const formDue = { ...portal, id: "form-due", title: "Video Release Form - Due", startUTC: formStart, endUTC: formStart };
-assert.deepEqual(ids(mergeTimeline([formDue, form], [school])), ["form"]);
-assert.deepEqual(ids(mergeTimeline([formDue, { ...form, id: "form-later", endUTC: formStart + 60000 }], [school])), ["form-due", "form-later"]);
+assert.deepEqual(ids(mergeTimeline([formDue, form], [school])).sort(), ["form", "form-due"]);
+assert.deepEqual(ids(mergeTimeline([formDue, { ...form, id: "form-later", endUTC: formStart + 60000 }], [school])).sort(), ["form-due", "form-later"]);
+const cif = { ...learn, id: "cif", title: "Open Rec Badminton", location: "CIF Gym 3" };
+const pac = { ...portal, id: "pac", title: "Open Rec Badminton", location: "PAC Small Gym" };
+assert.deepEqual(ids(mergeTimeline([cif, pac], [school])).sort(), ["cif", "pac"], "the room is part of the event");
 
 //google is last whenever the event also exists on another calendar
 const googleLearn: TimelineItem = { ...learn, id: "g-learn", kind: "gcal_event", importSource: undefined, google: { calendarName: "LEARN calendar" } };
@@ -112,6 +115,26 @@ assert.deepEqual(ids(mergeTimeline([campusCareers, campusTalks], [], campusImpor
 const campusFirst: MergedCalendar = { ...school, members: [`ics:${talksFeed}`, "ics:learn"] };
 assert.deepEqual(ids(mergeTimeline([campusTalks, learn], [campusFirst], campusImported)), ["learn"], "learn still wins when the uwaterloo calendar is ranked first");
 assert.deepEqual(ids(mergeTimeline([campusTalks, manual], [], campusImported)), ["campus-talks", "manual"], "a watagent event is not a learn or portal copy");
+
+//same drop-in name on one day is still a different session when the hours or the room differ
+const badminton = (id: string, hour: number, endHour: number, location: string): TimelineItem => ({
+  id,
+  kind: "event",
+  title: "Open Rec Badminton",
+  startUTC: new Date(2026, 9, 17, hour).getTime(),
+  endUTC: new Date(2026, 9, endHour <= hour ? 18 : 17, endHour).getTime(),
+  allDay: false,
+  importSource: talksFeed,
+  location,
+});
+assert.deepEqual(
+  ids(mergeTimeline([
+    badminton("morning", 6, 17, "CIF Gym 3"),
+    badminton("evening", 18, 0, "CIF Gym 3"),
+    badminton("late", 21, 0, "PAC Small Gym"),
+  ], [], campusImported)).sort(),
+  ["evening", "late", "morning"],
+);
 
 assert.equal(detectCalendarLink(learnUrl), "learn");
 assert.equal(defaultImportedName(learnUrl, []), "LEARN / Brightspace");

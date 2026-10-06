@@ -6,11 +6,27 @@ export function rangesOverlap(startA: number, endA: number, startB: number, endB
 }
 
 const HOUR_MS = 60 * 60 * 1000;
+//past this on the next morning, a session is still going and belongs on that day too
+const MORNING_MS = 6 * HOUR_MS;
+
+function localMidnightUTC(instant: number): number {
+  const date = new Date(instant);
+  date.setHours(0, 0, 0, 0);
+  return date.getTime();
+}
 
 //a saved instant still has to occupy the hour google calendar draws, including the part after midnight
 function drawnEnd(kind: TimelineItem["kind"], allDay: boolean, startUTC: number, endUTC: number): number {
   if (allDay || kind === "task" || endUTC !== startUTC) return endUTC;
   return startUTC + HOUR_MS;
+}
+
+//6:30pm–12:30am is Saturday night. the half hour after midnight is not a Sunday event
+function shownOnDay(startUTC: number, endUTC: number, dayStart: number, dayEnd: number): boolean {
+  const end = endUTC > startUTC ? endUTC : startUTC + HOUR_MS;
+  if (!rangesOverlap(startUTC, end, dayStart, dayEnd)) return false;
+  if (localMidnightUTC(startUTC) === dayStart) return true;
+  return end > dayStart + MORNING_MS;
 }
 
 export type BusyBlock = { startUTC: number; endUTC: number };
@@ -98,17 +114,17 @@ export function aggregateTimeline(input: {
 
   for (const event of input.events) {
     const meta = event.calendar;
-    if (!rangesOverlap(meta.startUTC, meta.endUTC, startDateUTC, endDateUTC)) continue;
+    if (!shownOnDay(meta.startUTC, meta.endUTC, startDateUTC, endDateUTC)) continue;
     push(timelineItemOf(event));
   }
 
   for (const event of input.overlayEvents ?? []) {
-    if (!rangesOverlap(event.startUTC, event.endUTC, startDateUTC, endDateUTC)) continue;
+    if (!shownOnDay(event.startUTC, event.endUTC, startDateUTC, endDateUTC)) continue;
     push(overlayTimelineItemOf(event));
   }
 
   for (const block of input.busyBlocks ?? []) {
-    if (!rangesOverlap(block.startUTC, block.endUTC, startDateUTC, endDateUTC)) continue;
+    if (!shownOnDay(block.startUTC, block.endUTC, startDateUTC, endDateUTC)) continue;
     push({
       id: `gcal-busy:${block.startUTC}:${block.endUTC}`,
       kind: "gcal_busy",
