@@ -8050,3 +8050,51 @@ h3 {
   .calendar-mobile-agenda-empty { text-align: center; color: var(--ink-soft); padding: 1.6rem 0.5rem; font-size: 0.85rem; }
   .calendar-year-month h3 { font-family: -apple-system, BlinkMacSystemFont, sans-serif; color: var(--accent); }
 }
+
+/* Mobile calendar: one add action, two compact control rows, and a date strip. */
+.mobile-calendar-toolbar { display: none; }
+@media (max-width: 760px) {
+  .calendar-toolbar[data-section="calendar"] { display: none; }
+  .mobile-calendar-toolbar { display: block; flex: 0 0 auto; padding: 0 12px 4px; border-bottom: 1px solid var(--line); background: var(--paper); font-family: -apple-system, BlinkMacSystemFont, "Inter Variable", sans-serif; }
+  .mobile-calendar-title-row { display: flex; align-items: center; gap: 4px; min-height: 48px; }
+  .mobile-calendar-title-row h2 { flex: 1; min-width: 0; margin: 0; font: 700 1.4rem/1.2 -apple-system, BlinkMacSystemFont, "Inter Variable", sans-serif; letter-spacing: -0.045em; }
+  .mobile-calendar-agent { padding: 0 8px; min-height: 44px; border: 0; background: transparent; color: var(--accent); font-size: 0.8rem; }
+  .mobile-calendar-agent[aria-pressed="true"] { background: var(--accent-soft); border-radius: 12px; }
+  .mobile-calendar-toolbar .icon-btn { width: 44px; height: 44px; color: var(--accent); }
+  .mobile-calendar-add svg { width: 24px; height: 24px; }
+  .mobile-calendar-controls { display: flex; align-items: center; justify-content: space-between; min-height: 44px; }
+  .mobile-calendar-period { display: flex; align-items: center; }
+  .mobile-calendar-period > button { min-height: 44px; border: 0; background: transparent; color: var(--accent); font-size: 0.85rem; padding-inline: 8px; }
+  .mobile-calendar-controls select { width: auto; min-width: 100px; min-height: 40px; padding: 6px 10px; border: 0; border-radius: 10px; background: var(--hover); color: var(--ink); font-size: 16px; }
+  .mobile-calendar-week-strip { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); padding: 4px 0 2px; }
+  .mobile-calendar-week-strip button { display: flex; flex-direction: column; align-items: center; gap: 3px; border: 0; padding: 3px 0; background: transparent; color: var(--ink); }
+  .mobile-calendar-week-strip span { color: var(--ink-soft); font-size: 0.65rem; }
+  .mobile-calendar-week-strip strong { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; font-size: 1rem; font-weight: 500; }
+  .mobile-calendar-week-strip .is-today strong { color: var(--accent); }
+  .mobile-calendar-week-strip .is-selected strong { background: var(--ink); color: var(--paper); }
+  .mobile-calendar-week-strip .is-selected.is-today strong { background: var(--accent); color: var(--on-accent); }
+  .calendar-all-day-add { display: none; }
+  .calendar-all-day[data-empty="true"], .calendar-week-all-day[data-empty="true"] { display: none; }
+  .calendar-day > .calendar-sticky:has(.calendar-all-day[data-empty="true"]) { padding-bottom: 0; }
+  .calendar-week { min-width: 0; }
+  .calendar-week-head, .calendar-week-all-day, .calendar-week-body { grid-template-columns: 2.3rem repeat(var(--week-days, 7), minmax(0, 1fr)); }
+  .calendar-week-day-head { gap: 3px; padding: 6px 0; border-radius: 0; min-height: 52px; }
+  .calendar-week-day-head > span { font-size: 0.6rem; }
+  .calendar-week-day-head > strong { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; padding: 0; font-size: 1rem; font-weight: 500; }
+  .calendar-week-day-head.is-today { background: transparent; }
+  .calendar-week-day-head.is-today > strong { background: var(--accent); color: var(--on-accent); }
+  .calendar-week .calendar-strip-title { font-size: 0.65rem; }
+  .calendar-week .calendar-strip-time { font-size: 0.55rem; }
+  .calendar-week .calendar-strip-location { display: none; }
+  .calendar-week .calendar-timed-item .calendar-strip { padding: 3px 2px; }
+  .calendar-all-day, .calendar-week-all-day { padding-bottom: 4px; margin-bottom: 2px; }
+  .calendar-mobile-agenda { margin-top: 8px; }
+  .calendar-mobile-agenda header { padding-top: 12px; padding-bottom: 10px; }
+  .calendar-mobile-date { border-top: 0; min-height: 46px; }
+  .calendar-mobile-weekdays { padding-top: 8px; }
+}
+@media (max-width: 760px) {
+  .calendar-week .calendar-strip-title { white-space: normal; overflow-wrap: anywhere; }
+  .calendar-week .calendar-strip-time { display: none; }
+  .calendar-week-all-day .calendar-strip { padding: 3px 2px; }
+}

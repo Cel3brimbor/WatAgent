@@ -76,7 +76,7 @@ export function CalendarWeekView({
             </button>
           ))}
         </div>
-        <div className="calendar-week-all-day">
+        <div className="calendar-week-all-day" data-empty={!days.some((date) => itemsForDay(date).some((item) => item.allDay))}>
           <span className="calendar-all-day-label">All-day</span>
           {days.map((date) => {
             const allDay = itemsForDay(date).filter((item) => item.allDay);

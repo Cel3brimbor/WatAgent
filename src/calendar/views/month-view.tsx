@@ -10,6 +10,7 @@ import { CloseIcon, PlusIcon } from "@/shared/icons";
 
 type Props = {
   focus: Date;
+  onSelectDate: (date: Date) => void;
   weekStartsOn: 0 | 1;
   itemsForDay: (date: Date) => TimelineItem[];
   onOpen: (item: TimelineItem) => void;
@@ -19,6 +20,7 @@ type Props = {
 
 export function CalendarMonthView({
   focus,
+  onSelectDate,
   weekStartsOn,
   itemsForDay,
   onOpen,
@@ -26,12 +28,12 @@ export function CalendarMonthView({
   onCompleteTask,
 }: Props) {
   const cells = monthCells(focus, weekStartsOn);
+  const mobileCells = cells.slice(0, Math.ceil((cells.findLastIndex((cell) => cell.inMonth) + 1) / 7) * 7);
   const labels = weekdayLabels(weekStartsOn);
   const [popKey, setPopKey] = useState<string | null>(null);
   const pop = usePresence(popKey);
   const popRef = useRef<HTMLDivElement | null>(null);
-  const [selectedDay, setSelectedDay] = useState(focus);
-  useEffect(() => setSelectedDay(focus), [focus]);
+  const selectedDay = focus;
   const selectedItems = itemsForDay(selectedDay);
 
   useEffect(() => {
@@ -158,7 +160,7 @@ export function CalendarMonthView({
         {labels.map((label) => <span key={label}>{label.slice(0, 1)}</span>)}
       </div>
       <div className="calendar-mobile-dates" aria-label="Choose a date">
-        {cells.map((cell) => {
+        {mobileCells.map((cell) => {
           const items = itemsForDay(cell.date);
           const selected = cell.date.toDateString() === selectedDay.toDateString();
           return (
@@ -166,7 +168,7 @@ export function CalendarMonthView({
               className={`calendar-mobile-date${cell.inMonth ? "" : " is-outside"}${isToday(cell.date) ? " is-today" : ""}${selected ? " is-selected" : ""}`}
               aria-label={`${cell.date.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" })}, ${items.length} scheduled`}
               aria-pressed={selected} aria-current={isToday(cell.date) ? "date" : undefined}
-              onClick={() => setSelectedDay(cell.date)}>
+              onClick={() => onSelectDate(cell.date)}>
               <span className="calendar-mobile-date-number">{cell.date.getDate()}</span>
               <span className="calendar-mobile-date-dots" aria-hidden="true">
                 {items.slice(0, 3).map((item) => <i key={item.id} style={{ backgroundColor: item.calendarColor ?? item.google?.calendarColor ?? "var(--accent)" }} />)}
@@ -179,7 +181,6 @@ export function CalendarMonthView({
         <header>
           <div><p>{isToday(selectedDay) ? "Today" : selectedDay.toLocaleDateString(undefined, { weekday: "long" })}</p>
             <h3 aria-live="polite">{selectedDay.toLocaleDateString(undefined, { month: "long", day: "numeric" })}</h3></div>
-          <button type="button" className="icon-btn" aria-label="New event on selected day" onClick={() => onCreate(selectedDay)}><PlusIcon /></button>
         </header>
         {selectedItems.length ? selectedItems.map((item) => (
           <div className="calendar-mobile-agenda-row" key={item.id}>

@@ -60,6 +60,7 @@ import { CalendarDayView } from "@/calendar/views/day-view";
 import { CalendarWeekView } from "@/calendar/views/week-view";
 import { CalendarMonthView } from "@/calendar/views/month-view";
 import { CalendarYearView } from "@/calendar/views/year-view";
+import { MobileCalendarToolbar } from "@/calendar/mobile-calendar-toolbar";
 import {
   CalendarItemEditor,
   defaultAllDayDraft,
@@ -1871,6 +1872,15 @@ export function CalendarApp({
         />
       </SideNav>
       <div className="calendar-shell">
+      {section === "calendar" ? <MobileCalendarToolbar
+        focus={focus} view={view} weekStartsOn={weekStartsOn}
+        onDate={(date) => setFocus(startOfLocalDay(date))} onView={setView}
+        onPrevious={() => setFocus((current) => shiftFocus(current, view, -1))}
+        onNext={() => setFocus((current) => shiftFocus(current, view, 1))}
+        onToday={() => setFocus(startOfLocalDay(new Date()))}
+        onCreate={() => setDraft(defaultTimedDraft(focus, 9))}
+        onAgent={() => setChatOpen((value) => !value)} agentOpen={chatOpen}
+      /> : null}
       <header className="calendar-toolbar" data-section={section}>
         <div className="calendar-toolbar-left">
           {section === "calendar" ? (
@@ -2084,6 +2094,7 @@ export function CalendarApp({
             {section === "calendar" && view === "month" ? (
               <CalendarMonthView
                 focus={focus}
+                onSelectDate={(date) => setFocus(startOfLocalDay(date))}
                 weekStartsOn={weekStartsOn}
                 itemsForDay={itemsForDay}
                 onOpen={onOpenItem}

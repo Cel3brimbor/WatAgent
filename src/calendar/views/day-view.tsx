@@ -57,7 +57,7 @@ export function CalendarDayView({
   return (
     <div className="calendar-day">
       <div className="calendar-sticky">
-        <div className="calendar-all-day">
+        <div className="calendar-all-day" data-empty={allDay.length === 0}>
           <span className="calendar-all-day-label">All-day</span>
           <div className="calendar-all-day-items">
             {allDay.map((item) => (
