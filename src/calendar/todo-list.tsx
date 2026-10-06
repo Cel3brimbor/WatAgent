@@ -67,11 +67,11 @@ export function TodoList({ items, onOpen, onComplete, onCreate, keywordTasks = [
   const listRef = useRef<HTMLDivElement>(null);
   const [showOlder, setShowOlder] = useState(false);
   const [doneOpen, setDoneOpen] = useState(false);
-  const [filter, setFilter] = useState<"all" | "today" | "upcoming">("all");
+  const [filter, setFilter] = useState<"all" | "today" | "upcoming" | "completed">("all");
   const now = Date.now();
   const today = startOfLocalDay(new Date(now));
   const recentFrom = today.getTime() - RECENT_DAYS * DAY_MS;
-  const olderCount = keywordTasks.filter((task) => task.dueUTC < recentFrom).length;
+  const olderCount = keywordTasks.filter((task) => !task.done && task.dueUTC < recentFrom).length;
   const rows: Row[] = [
     ...items
       .filter((item) => item.calendar.kind === "task")
@@ -85,7 +85,7 @@ export function TodoList({ items, onOpen, onComplete, onCreate, keywordTasks = [
         item,
       })),
     ...keywordTasks
-      .filter((task) => showOlder || task.dueUTC >= recentFrom)
+      .filter((task) => task.done || showOlder || task.dueUTC >= recentFrom)
       .map((task): Row => ({ kind: "keyword", id: `ktask:${task.key}`, title: task.title, dueUTC: task.dueUTC, allDay: task.allDay, done: task.done, task })),
   ].sort((a, b) => a.dueUTC - b.dueUTC);
   const groups = new Map<GroupId, Row[]>();
@@ -99,9 +99,10 @@ export function TodoList({ items, onOpen, onComplete, onCreate, keywordTasks = [
     { id: "all", label: "All", count: openCount },
     { id: "today", label: "Today", count: (groups.get("overdue")?.length ?? 0) + (groups.get("today")?.length ?? 0) },
     { id: "upcoming", label: "Upcoming", count: (groups.get("week")?.length ?? 0) + (groups.get("later")?.length ?? 0) },
+    { id: "completed", label: "Completed", count: done.length },
   ] as const;
   const visibleGroups = (["overdue", "today", "week", "later"] as const).filter((id) =>
-    filter === "all" || (filter === "today" ? id === "overdue" || id === "today" : id === "week" || id === "later"));
+    filter !== "completed" && (filter === "all" || (filter === "today" ? id === "overdue" || id === "today" : id === "week" || id === "later")));
   const visibleCount = filters.find((entry) => entry.id === filter)!.count;
   //completing a task slides the rest up instead of teleporting
   useFlip(listRef, rows.map((row) => `${row.id}:${row.done}`).join("|"));
@@ -168,8 +169,8 @@ export function TodoList({ items, onOpen, onComplete, onCreate, keywordTasks = [
       {visibleCount === 0 ? (
         <div className="todo-empty" role="status">
           <CheckIcon />
-          <h3>{filter === "today" ? "All clear for today" : filter === "upcoming" ? "A little room ahead" : "You’re all caught up"}</h3>
-          <p>{filter === "upcoming" ? "Future tasks will appear here." : "Add a task when something comes to mind."}</p>
+          <h3>{filter === "completed" ? "No completed tasks yet" : filter === "today" ? "All clear for today" : filter === "upcoming" ? "A little room ahead" : "You’re all caught up"}</h3>
+          <p>{filter === "completed" ? "Tasks you finish will appear here. Uncheck one to reopen it." : filter === "upcoming" ? "Future tasks will appear here." : "Add a task when something comes to mind."}</p>
         </div>
       ) : null}
       {rows.length > 0 ? (
@@ -187,6 +188,12 @@ export function TodoList({ items, onOpen, onComplete, onCreate, keywordTasks = [
               </section>
             );
           })}
+          {filter === "completed" && done.length > 0 ? (
+            <section className="todo-group is-done-group" aria-labelledby="todo-completed-heading">
+              <h3 id="todo-completed-heading" className="todo-group-title">Completed<span className="todo-group-count">{done.length}</span></h3>
+              <ul>{done.map(renderRow)}</ul>
+            </section>
+          ) : null}
           {filter === "all" && done.length > 0 ? (
             <section className="todo-group is-done-group">
               <button type="button" className="todo-group-title todo-group-toggle" aria-expanded={doneOpen} onClick={() => setDoneOpen((open) => !open)}>
@@ -201,7 +208,7 @@ export function TodoList({ items, onOpen, onComplete, onCreate, keywordTasks = [
           ) : null}
         </div>
       ) : null}
-      {olderCount > 0 ? (
+      {filter !== "completed" && olderCount > 0 ? (
         <button type="button" className="smart-tag-link todo-older" onClick={() => setShowOlder((current) => !current)}>
           {showOlder ? "Hide older calendar tasks" : `Show ${olderCount} older calendar task${olderCount === 1 ? "" : "s"}`}
         </button>
