@@ -5,7 +5,7 @@ import { runRulesAfterSync } from "@/agent/rules/rules-client";
 import { importCalendarLink, type CalendarImportProgress } from "@/calendar/client";
 import { defaultImportedName, detectCalendarLink, isCalendarLink, newFeedId } from "@/calendar/imported-calendars";
 import type { ImportedCalendar } from "@/calendar/types";
-import { ChevronRightIcon } from "@/shared/icons";
+import { ChevronRightIcon, EyeIcon, EyeOffIcon } from "@/shared/icons";
 
 function dateValue(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -117,21 +117,22 @@ export function CalendarImportPanel({ importedCalendars, onImported }: {
         It shows under Imported calendars below. Imported calendars are read only. To show two as one, merge them in Calendars.
       </p>
       <form className="calendar-import-form" onSubmit={(event) => void submit(event)} aria-busy={working}>
-        <label className="calendar-editor-field" htmlFor="ics-url">
-          Calendar link
-          <input id="ics-url" className="calendar-editor-input" type={showLink ? "text" : "password"} inputMode="url"
-            placeholder="https://example.com/calendar.ics" maxLength={4096}
-            value={url} onChange={(event) => changeUrl(event.target.value)} disabled={working}
-            aria-describedby="ics-hint ics-detected" autoComplete="off" spellCheck={false} />
-        </label>
-        <p id="ics-detected" className="modal-hint">
-          {saved ? `Already imported as ${saved.name}. Importing syncs it again.` : detected ? DETECTED[detected] : "LEARN and Portal links are detected from the address."}
-        </p>
-        <div className="calendar-import-link-actions">
-          <button type="button" className="ghost-btn" onClick={() => setShowLink((current) => !current)}
-            disabled={working} aria-controls="ics-url" aria-pressed={showLink}>
-            {showLink ? "Hide link" : "Show link"}
-          </button>
+        <div className="calendar-editor-field calendar-import-field">
+          <label htmlFor="ics-url">Calendar link</label>
+          <div className="calendar-import-link">
+            <input id="ics-url" className="calendar-editor-input" type={showLink ? "text" : "password"} inputMode="url"
+              placeholder="https://… or webcal://…" maxLength={4096}
+              value={url} onChange={(event) => changeUrl(event.target.value)} disabled={working}
+              aria-describedby="ics-hint ics-detected" autoComplete="off" spellCheck={false} />
+            <button type="button" className="icon-btn calendar-import-reveal" onClick={() => setShowLink((current) => !current)}
+              disabled={working} aria-controls="ics-url" aria-pressed={showLink} aria-label={showLink ? "Hide link" : "Show link"}
+              title={showLink ? "Hide link" : "Show link"}>
+              {showLink ? <EyeOffIcon /> : <EyeIcon />}
+            </button>
+          </div>
+          <p id="ics-detected" className="calendar-import-detected" data-state={detected && detected !== "other" ? "match" : detected ?? "empty"} aria-live="polite">
+            {saved ? `Already imported as ${saved.name}. Importing syncs it again.` : detected ? DETECTED[detected] : "LEARN and Portal links are detected from the address."}
+          </p>
         </div>
         <div className="calendar-import-range">
           <button type="button" className="calendar-import-range-toggle" onClick={() => setShowRange((current) => !current)}
