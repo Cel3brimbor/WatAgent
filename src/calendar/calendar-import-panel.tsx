@@ -5,6 +5,7 @@ import { runRulesAfterSync } from "@/agent/rules/rules-client";
 import { importCalendarLink, type CalendarImportProgress } from "@/calendar/client";
 import { defaultImportedName, detectCalendarLink, isCalendarLink, newFeedId } from "@/calendar/imported-calendars";
 import type { ImportedCalendar } from "@/calendar/types";
+import { ChevronRightIcon } from "@/shared/icons";
 
 function dateValue(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -25,6 +26,14 @@ const DETECTED = {
   other: "Not recognized as LEARN or Portal. It imports as its own calendar.",
 } as const;
 
+const RANGE_FORMAT = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric" });
+function rangeLabel(from: string, to: string): string {
+  const start = new Date(`${from}T00:00:00`);
+  const end = new Date(`${to}T00:00:00`);
+  if (!Number.isFinite(+start) || !Number.isFinite(+end)) return "Choose dates";
+  return `${RANGE_FORMAT.format(start)} – ${RANGE_FORMAT.format(end)}`;
+}
+
 /** A link that's already saved syncs that calendar again; a new one adds a calendar. */
 export function CalendarImportPanel({ importedCalendars, onImported }: {
   importedCalendars: ImportedCalendar[];
@@ -32,6 +41,7 @@ export function CalendarImportPanel({ importedCalendars, onImported }: {
 }) {
   const [url, setUrl] = useState("");
   const [showLink, setShowLink] = useState(false);
+  const [showRange, setShowRange] = useState(false);
   const [from, setFrom] = useState(() => academicImportRange(new Date()).from);
   const [to, setTo] = useState(() => academicImportRange(new Date()).to);
   const [working, setWorking] = useState(false);
@@ -54,6 +64,7 @@ export function CalendarImportPanel({ importedCalendars, onImported }: {
     end.setDate(end.getDate() + 1);
     if (!Number.isFinite(+start) || !Number.isFinite(+end) || +end <= +start || +end - +start > 366 * 86400000) {
       setError("Choose a valid date range of up to one year.");
+      setShowRange(true);
       return;
     }
     const link = url.trim();
@@ -100,7 +111,7 @@ export function CalendarImportPanel({ importedCalendars, onImported }: {
 
   return (
     <section className="settings-section" aria-labelledby="settings-ics">
-      <h3 id="settings-ics">Calendar link</h3>
+      <h3 id="settings-ics">Add a calendar</h3>
       <p id="ics-hint" className="modal-hint">
         Paste any calendar link, such as LEARN (Brightspace) or Portal. Each new link adds a calendar, and you can add as many as you like.
         It shows under Imported calendars below. Imported calendars are read only. To show two as one, merge them in Calendars.
@@ -122,20 +133,28 @@ export function CalendarImportPanel({ importedCalendars, onImported }: {
             {showLink ? "Hide link" : "Show link"}
           </button>
         </div>
-        <div className="calendar-import-dates">
-          <label className="calendar-editor-field" htmlFor="ics-from">
-            From
-            <input id="ics-from" className="calendar-editor-input" type="date" required
-              value={from} onChange={(event) => setFrom(event.target.value)} disabled={working} />
-          </label>
-          <label className="calendar-editor-field" htmlFor="ics-to">
-            Through
-            <input id="ics-to" className="calendar-editor-input" type="date" required min={from}
-              value={to} onChange={(event) => setTo(event.target.value)} disabled={working} />
-          </label>
+        <div className="calendar-import-range">
+          <button type="button" className="calendar-import-range-toggle" onClick={() => setShowRange((current) => !current)}
+            disabled={working} aria-expanded={showRange} aria-controls="ics-range">
+            <span className="calendar-import-range-label">Events from</span>
+            <span className="calendar-import-range-value">{rangeLabel(from, to)}</span>
+            <ChevronRightIcon />
+          </button>
+          <div id="ics-range" className="calendar-import-dates" hidden={!showRange}>
+            <label className="calendar-editor-field" htmlFor="ics-from">
+              From
+              <input id="ics-from" className="calendar-editor-input" type="date" required
+                value={from} onChange={(event) => setFrom(event.target.value)} disabled={working} />
+            </label>
+            <label className="calendar-editor-field" htmlFor="ics-to">
+              Through
+              <input id="ics-to" className="calendar-editor-input" type="date" required min={from}
+                value={to} onChange={(event) => setTo(event.target.value)} disabled={working} />
+            </label>
+          </div>
         </div>
         {working && progress ? (
-          <div className="calendar-import-status">
+          <div className="calendar-import-status" role="status">
             <progress
               className="calendar-import-meter"
               aria-label={progressLabel}
@@ -145,10 +164,10 @@ export function CalendarImportPanel({ importedCalendars, onImported }: {
           </div>
         ) : null}
         {error ? <p className="calendar-import-error" role="alert">{error}</p> : null}
-        {result ? <p className="settings-status" role="status">{result}</p> : null}
+        {result && !working ? <p className="settings-status" role="status">{result}</p> : null}
         <div className="settings-actions">
           <button type="submit" className="primary-btn" disabled={working || !isCalendarLink(trimmed)}>
-            {working ? "Importing…" : "Import events"}
+            {working ? "Adding…" : "Add calendar"}
           </button>
         </div>
       </form>
