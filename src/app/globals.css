@@ -6752,7 +6752,7 @@ h3 {
 }
 
 .calendar-strip:is(.is-event, .is-gcal-event, .is-task) {
-  background: color-mix(in srgb, var(--strip-color) var(--strip-tint, 16%), var(--paper));
+  background: color-mix(in srgb, var(--strip-color) var(--strip-tint, 16%), var(--strip-surface, var(--paper)));
 }
 
 .calendar-month-day {
@@ -6792,13 +6792,19 @@ h3 {
   --strip-tint: 26%;
 }
 
+/* Timed cards blend where they overlap; text and colored edges stay opaque. */
+.calendar-timed-item .calendar-strip {
+  --strip-surface: transparent;
+  --strip-tint: 22%;
+}
+
 /*tag color stays left of the diagonal; the rest keeps the calendar colour*/
 .calendar-strip.is-tag-half,
 .calendar-strip.is-tag-quarter {
   position: relative;
   isolation: isolate;
   border-left-color: var(--tag-color);
-  background: color-mix(in srgb, var(--strip-color) var(--strip-tint, 16%), var(--paper));
+  background: color-mix(in srgb, var(--strip-color) var(--strip-tint, 16%), var(--strip-surface, var(--paper)));
 }
 
 .calendar-strip.is-tag-half::before,
@@ -6808,7 +6814,7 @@ h3 {
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  background: color-mix(in srgb, var(--tag-color) var(--strip-tint, 16%), var(--paper));
+  background: color-mix(in srgb, var(--tag-color) var(--strip-tint, 16%), var(--strip-surface, var(--paper)));
 }
 
 .calendar-strip.is-tag-half::before {
