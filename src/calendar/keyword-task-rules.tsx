@@ -1,5 +1,7 @@
 "use client";
 
+import { CommitTextInput } from "@/shared/responsive-text-input";
+
 import { useMemo, useState } from "react";
 import {
   KEYWORD_TASK_LIMITS,
@@ -173,25 +175,25 @@ function RuleEditor({
     <div className="ktask-editor">
       <label className="ktask-field">
         <span>Name</span>
-        <input
+        <CommitTextInput
           type="text"
           className="smart-tag-input"
           value={rule.name}
           placeholder="e.g. Coursework"
           maxLength={KEYWORD_TASK_LIMITS.name}
-          onChange={(event) => onPatch({ name: event.target.value })}
+          onCommit={(name) => onPatch({ name })}
         />
       </label>
       <label className="ktask-field">
         <span>Keywords</span>
-        <input
+        <CommitTextInput
           type="text"
           className="smart-tag-input"
           value={rule.keywords}
           placeholder="assignment, quiz, exam"
           maxLength={KEYWORD_TASK_LIMITS.keywords}
           spellCheck={false}
-          onChange={(event) => onPatch({ keywords: event.target.value })}
+          onCommit={(keywords) => onPatch({ keywords })}
         />
         <small>Separate keywords with commas. Case doesn’t matter.</small>
       </label>

@@ -2,6 +2,7 @@
 
 import {
   Fragment,
+  startTransition,
   useCallback,
   useEffect,
   useId,
@@ -1210,7 +1211,7 @@ export function CalendarMap({
         <aside ref={inspectorRef} className={styles.inspector} aria-label="Calendar details and navigation">
           <label className={styles.field}>
             Find a calendar
-            <input type="search" value={query} placeholder="Search calendars…" onChange={(event) => setQuery(event.target.value)} />
+            <CalendarSearchInput onQuery={setQuery} />
           </label>
           {query.trim() ? (
             <div className={styles.searchResults}>
@@ -1335,4 +1336,14 @@ export function CalendarMap({
       </p>
     </section>
   );
+}
+
+// Keep urgent typing separate from rendering the graph and its search results.
+function CalendarSearchInput({ onQuery }: { onQuery: (query: string) => void }) {
+  const [text, setText] = useState("");
+  return <input type="search" value={text} placeholder="Search calendars…" onChange={(event) => {
+    const next = event.target.value;
+    setText(next);
+    startTransition(() => onQuery(next));
+  }} />;
 }

@@ -38,7 +38,7 @@ type Props = {
   //false while the exit transition plays
   open?: boolean;
   onChange: (draft: CalendarDraft) => void;
-  onSave: () => void;
+  onSave: (draft: CalendarDraft) => void;
   onCancel: () => void;
   onDelete?: () => void;
   /** Event calendars the picker offers. */
@@ -70,17 +70,31 @@ const KIND_OPTIONS: SegmentOption<CalendarItemKind>[] = [
 ];
 
 export function CalendarItemEditor({
-  draft,
+  draft: initialDraft,
   open = true,
   readOnly = false,
-  onChange,
-  onSave,
+  onChange: updateDraft,
+  onSave: saveDraft,
   onCancel,
   onDelete,
   calendars = [],
   defaultCalendarId = "events",
   readOnlyCalendarIds = [],
 }: Props) {
+  // Text stays local while typing so the calendar is not rebuilt per keystroke.
+  const [draft, setDraft] = useState(initialDraft);
+  const [previousDraft, setPreviousDraft] = useState(initialDraft);
+  if (initialDraft !== previousDraft) {
+    setPreviousDraft(initialDraft);
+    setDraft(initialDraft);
+  }
+  function onChange(next: CalendarDraft) {
+    setDraft(next);
+    updateDraft(next);
+  }
+  function onSave() {
+    saveDraft(draft);
+  }
   const ref = useRef<HTMLDivElement>(null);
   const allDayId = useId();
   const eventCalendars = calendars.filter((calendar) => calendar.kind === "event");
@@ -97,6 +111,9 @@ export function CalendarItemEditor({
         className="calendar-editor"
         role="dialog"
         aria-modal="true"
+        onBlur={() => {
+          if (open && draft !== initialDraft) updateDraft(draft);
+        }}
         aria-label={draft.id || draft.google ? "Edit item" : "New item"}
         onKeyDown={(event) => {
           if (readOnly) return;
@@ -122,7 +139,7 @@ export function CalendarItemEditor({
             maxLength={200}
             aria-label="Title"
             readOnly={readOnly}
-            onChange={(event) => onChange({ ...draft, title: event.target.value })}
+            onChange={(event) => setDraft({ ...draft, title: event.target.value })}
             onKeyDown={(event) => {
               if (event.key === "Enter" && !event.metaKey && !event.ctrlKey && !event.nativeEvent.isComposing) {
                 event.preventDefault();
@@ -237,7 +254,7 @@ export function CalendarItemEditor({
                 <LocationField
                   labelId={locationFieldId}
                   value={draft.location ?? ""}
-                  onChange={(location) => onChange({ ...draft, location })}
+                  onChange={(location) => setDraft({ ...draft, location })}
                 />
                 <label className="calendar-editor-cell is-multiline">
                   <span className="calendar-editor-cell-label">Notes</span>
@@ -247,7 +264,7 @@ export function CalendarItemEditor({
                     maxLength={4000}
                     rows={3}
                     placeholder="Add a short description"
-                    onChange={(event) => onChange({ ...draft, description: event.target.value })}
+                    onChange={(event) => setDraft({ ...draft, description: event.target.value })}
                   />
                 </label>
               </div>

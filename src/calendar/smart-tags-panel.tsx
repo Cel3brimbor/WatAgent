@@ -1,5 +1,7 @@
 "use client";
 
+import { CommitTextInput } from "@/shared/responsive-text-input";
+
 import { useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
 import { CALENDAR_PALETTE } from "@/calendar/preferences";
 import {
@@ -271,7 +273,7 @@ function SmartTagEditor({
 
   return (
     <div className="smart-tag-editor">
-      <input
+      <CommitTextInput
         type="text"
         className="smart-tag-input"
         value={tag.name}
@@ -279,7 +281,7 @@ function SmartTagEditor({
         aria-label="Tag name"
         maxLength={SMART_TAG_LIMITS.name}
         autoFocus={!tag.name}
-        onChange={(event) => onPatch({ name: event.target.value })}
+        onCommit={(name) => onPatch({ name })}
       />
 
       <div className="side-cal-swatches smart-tag-swatches" role="group" aria-label="Tag color">
@@ -350,7 +352,7 @@ function SmartTagEditor({
                 </select>
               </div>
               <div className="smart-tag-rule-row is-value">
-                <input
+                <CommitTextInput
                   type="text"
                   className={`smart-tag-input${error ? " is-invalid" : ""}`}
                   value={rule.value}
@@ -359,7 +361,7 @@ function SmartTagEditor({
                   aria-invalid={Boolean(error)}
                   maxLength={SMART_TAG_LIMITS.value}
                   spellCheck={false}
-                  onChange={(event) => patchRule(rule.id, { value: event.target.value })}
+                  onCommit={(value) => patchRule(rule.id, { value })}
                 />
                 {tag.rules.length > 1 ? (
                   <button

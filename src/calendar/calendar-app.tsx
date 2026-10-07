@@ -1539,8 +1539,7 @@ export function CalendarApp({
     };
   }
 
-  function saveDraft() {
-    if (!draft) return;
+  function saveDraft(draft: CalendarDraft) {
     if (isCalendarReadOnly(sources, calendarIdForDraft(draft, calendar.items, localCalendars))) {
       setNotice("This calendar is read-only.");
       return;
@@ -2248,6 +2247,7 @@ export function CalendarApp({
 
       {shownDraft ? (
         <CalendarItemEditor
+          key={shownDraft.google?.eventId ?? shownDraft.id ?? "new-item"}
           draft={shownDraft}
           open={editor.open}
           readOnly={draftReadOnly}
