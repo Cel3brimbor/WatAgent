@@ -462,6 +462,9 @@ export function CalendarApp({
     };
   }, [chatOpen]);
   const [streamingAssistantId, setStreamingAssistantId] = useState<string | null>(null);
+  const [settlingAssistantId, setSettlingAssistantId] = useState<string | null>(null);
+  const [holdLabel, setHoldLabel] = useState<string | null>(null);
+  const settleTimerRef = useRef(0);
   const [googlePeek, setGooglePeek] = useState<{ item: TimelineItem; anchor: DOMRect } | null>(null);
   const [googleDelete, setGoogleDelete] = useState<(GoogleDraftTarget & { title: string }) | null>(null);
   const [itemDelete, setItemDelete] = useState<{ id: string; title: string; kind: "event" | "task"; calendarName?: string } | null>(null);
@@ -1645,6 +1648,9 @@ export function CalendarApp({
     const nameAfterReply =
       calendar.activeChatRef()?.titleSource !== "user" &&
       !history.some((message) => message.role === "assistant" && message.content.trim());
+    window.clearTimeout(settleTimerRef.current);
+    setSettlingAssistantId(null);
+    setHoldLabel(null);
     setStreamingAssistantId(assistantId);
     setBusy(true);
     setError(null);
@@ -1656,6 +1662,7 @@ export function CalendarApp({
     let assistantText = "";
     let announcedTool = "";
     let nameThisChat = false;
+    let replaceNext = false;
     const THOUGHT_CAP = 16_000;
 
     function thoughtTextLength(): number {
@@ -1758,12 +1765,26 @@ export function CalendarApp({
             return;
           }
           if (event.type === "content-reset") {
-            assistantText = "";
-            schedule();
+            //keep the current text until the replacement arrives, so the bubble does not flash empty
+            replaceNext = true;
             return;
           }
           if (event.type === "content") {
             closeThought();
+            if (replaceNext) {
+              assistantText = event.content;
+              replaceNext = false;
+              if (rafId) cancelAnimationFrame(rafId);
+              rafId = 0;
+              writeAssistant();
+              setHoldLabel(null);
+              window.clearTimeout(settleTimerRef.current);
+              setSettlingAssistantId(assistantId);
+              settleTimerRef.current = window.setTimeout(() => {
+                setSettlingAssistantId((current) => (current === assistantId ? null : current));
+              }, 240);
+              return;
+            }
             assistantText += event.content;
             schedule();
             return;
@@ -1779,6 +1800,11 @@ export function CalendarApp({
             return;
           }
           if (event.type === "status") {
+            //matches OUTPUT_HOLD_LABEL from the guarded loop. the reply stays in progress until the stream closes.
+            if (event.label === "Finishing up…") {
+              setHoldLabel(event.label);
+              return;
+            }
             announcedTool = event.label;
             return;
           }
@@ -1815,6 +1841,7 @@ export function CalendarApp({
         controller.signal,
       );
       if (rafId) cancelAnimationFrame(rafId);
+      if (replaceNext) assistantText = "";
       if (!controller.signal.aborted) {
         writeAssistant();
         if (assistantText.trim()) nameThisChat = true;
@@ -1830,6 +1857,8 @@ export function CalendarApp({
     } finally {
       closeThought();
       writeAssistant();
+      //the stream stays open through the output check, so this is the first finished state
+      setHoldLabel(null);
       setBusy(false);
       setStreamingAssistantId(null);
       calendar.persistActiveChat();
@@ -2136,6 +2165,8 @@ export function CalendarApp({
           error={error}
           restriction={restriction}
           streamingAssistantId={streamingAssistantId}
+          settlingAssistantId={settlingAssistantId}
+          holdLabel={holdLabel}
           onSend={(payload) => void handleSend(payload)}
           onStop={() => abortRef.current?.abort()}
           onError={setError}

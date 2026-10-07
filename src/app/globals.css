@@ -5022,6 +5022,11 @@ select {
   overflow-wrap: anywhere;
 }
 
+.bubble-answer {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .bubble-body .md-pre,
 .bubble-body .md-table-wrap {
   max-width: 100%;

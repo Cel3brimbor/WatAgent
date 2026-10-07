@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import type { AgentEffort } from "@/agent/agent-effort";
 import { useAgentEffort } from "@/agent/use-agent-effort";
 import { AgentActivity } from "@/agent/agent-activity";
@@ -22,6 +22,63 @@ import { usePresence } from "@/shared/use-presence";
 //matches the panel's width/sheet transition in globals.css
 const PANEL_EXIT_MS = 320;
 
+const SETTLE_EASE = "cubic-bezier(0.23, 1, 0.32, 1)";
+
+function AssistantAnswer({
+  settling,
+  holdLabel,
+  children,
+}: {
+  settling: boolean;
+  holdLabel: string | null;
+  children: ReactNode;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const heightRef = useRef(0);
+  const wasSettling = useRef(false);
+  const animRef = useRef<Animation | null>(null);
+
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const next = el.getBoundingClientRect().height;
+    const prev = heightRef.current;
+    const started = settling && !wasSettling.current;
+    wasSettling.current = settling;
+    if (started && prev > 0 && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      const shrinking = prev > next + 12;
+      el.style.overflow = "hidden";
+      const anim = el.animate(
+        shrinking
+          ? [
+              { height: `${prev}px`, opacity: 0.45 },
+              { height: `${next}px`, opacity: 1 },
+            ]
+          : [{ opacity: 0.45 }, { opacity: 1 }],
+        { duration: 240, easing: SETTLE_EASE },
+      );
+      const clear = () => {
+        el.style.overflow = "";
+      };
+      anim.onfinish = clear;
+      anim.oncancel = clear;
+      animRef.current = anim;
+    }
+    heightRef.current = next;
+  });
+
+  useEffect(() => {
+    return () => animRef.current?.cancel();
+  }, []);
+
+  return (
+    <div className="bubble-answer" ref={ref}>
+      {children}
+      {holdLabel ? <p className="bubble-status">{holdLabel}</p> : null}
+    </div>
+  );
+}
+
 type SendPayload = {
   text: string;
   effort: AgentEffort;
@@ -38,6 +95,8 @@ type Props = {
   error: string | null;
   restriction: { message: string; reason: string | null } | null;
   streamingAssistantId: string | null;
+  settlingAssistantId: string | null;
+  holdLabel: string | null;
   onSend: (payload: SendPayload) => void;
   onStop: () => void;
   onError: (message: string | null) => void;
@@ -73,6 +132,8 @@ export function CalendarChatPanel({
   error,
   restriction,
   streamingAssistantId,
+  settlingAssistantId,
+  holdLabel,
   onSend,
   onStop,
   onError,
@@ -275,7 +336,9 @@ export function CalendarChatPanel({
                             onEditItem={onEditCalendarItem}
                           />
                         ) : (
-                          <MessageContent content={m.content} />
+                          <AssistantAnswer settling={settlingAssistantId === m.id} holdLabel={streaming ? holdLabel : null}>
+                            <MessageContent content={m.content} />
+                          </AssistantAnswer>
                         )}
                       </div>
                     </article>
