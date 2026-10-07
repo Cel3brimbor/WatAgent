@@ -2216,7 +2216,7 @@ select {
   position: absolute;
   left: 2px;
   right: 2px;
-  z-index: 20;
+  z-index: 10002;
   display: flex;
   flex-direction: column;
   gap: 0.05rem;
@@ -2287,6 +2287,7 @@ select {
 .calendar-day-slots,
 .calendar-week-col {
   position: relative;
+  isolation: isolate;
   border-left: 1px solid var(--line);
   touch-action: pan-y;
   cursor: pointer;
@@ -2315,9 +2316,15 @@ select {
 
 .calendar-timed-item {
   position: absolute;
+  z-index: var(--timed-z, 1);
   display: flex;
   min-width: 0;
   pointer-events: auto;
+}
+
+/* Keyboard navigation reveals the full card without changing its time/width. */
+.calendar-timed-item:has(:focus-visible) {
+  z-index: 10000;
 }
 
 .calendar-timed-item .calendar-strip {
@@ -2353,7 +2360,7 @@ select {
   right: 0;
   height: 2px;
   background: var(--danger);
-  z-index: 2;
+  z-index: 10001;
   pointer-events: none;
 }
 
