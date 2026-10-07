@@ -125,7 +125,7 @@ import { requestChatTitle } from "@/agent/chat-title";
 import { readAgentStream } from "@/agent/stream";
 import { cloneActivity } from "@/agent/agent-activity";
 import type { ActivityPart, ChatMessage, ThoughtSegment, ToolEventRecord } from "@/agent/types";
-import { apiFetch, apiJson, errorFromResponse } from "@/shared/api-base";
+import { ApiError, apiFetch, apiJson, errorFromResponse } from "@/shared/api-base";
 import { uid } from "@/shared/ids";
 import { ChevronLeftIcon, ChevronRightIcon, CloseIcon } from "@/shared/icons";
 import { SegmentedControl, type SegmentOption } from "@/shared/segmented-control";
@@ -379,6 +379,7 @@ export function CalendarApp({
   const [agentHiddenCalendarIds, setAgentHiddenCalendarIds] = useState<string[]>(() => readAgentHiddenIds());
   const [newCalendarsShown, setNewCalendarsShown] = useState(() => readNewCalendarsShown());
   const [googleConnected, setGoogleConnected] = useState<boolean | null>(null);
+  const googleRelinkRef = useRef(false);
   const [section, setSection] = useState<AppSection>("calendar");
   const [navCollapsed, setNavCollapsed] = useState(() => {
     if (typeof window === "undefined") return false;
@@ -1016,9 +1017,10 @@ export function CalendarApp({
 
   useEffect(() => {
     let cancelled = false;
+    googleRelinkRef.current = false;
     void getGoogleCalendarStatus()
       .then((status) => {
-        if (!cancelled) setGoogleConnected(status.connected);
+        if (!cancelled && !googleRelinkRef.current) setGoogleConnected(status.connected);
       })
       .catch(() => {
         if (!cancelled) setGoogleConnected(false);
@@ -1222,6 +1224,10 @@ export function CalendarApp({
     };
   }, []);
   useEffect(() => {
+    if (googleConnected === false) {
+      googlePullRef.current = async () => null;
+      return;
+    }
     if (seenGoogleVersionRef.current !== googleVersion) {
       seenGoogleVersionRef.current = googleVersion;
       coveredRef.current = [];
@@ -1235,7 +1241,22 @@ export function CalendarApp({
       let lastSyncedAt: number | null = null;
       for (const chunk of chunks) {
         if (!mountedRef.current || pullGenRef.current.get(key) !== gen) return null;
-        const pulled = await syncFromGoogle(chunk);
+        let pulled: Awaited<ReturnType<typeof syncFromGoogle>>;
+        try {
+          pulled = await syncFromGoogle(chunk);
+        } catch (err) {
+          if (
+            err instanceof ApiError &&
+            err.status === 409 &&
+            err.message === "Google Calendar needs to be linked again."
+          ) {
+            googleRelinkRef.current = true;
+            setGoogleConnected(false);
+            setNotice("Google Calendar needs to be linked again.");
+            return null;
+          }
+          throw err;
+        }
         if (!mountedRef.current || pullGenRef.current.get(key) !== gen) return null;
         setBusyBlocks((prev) =>
           mergeTimed(prev, pulled.busyBlocks, chunk, (block) => `${block.startUTC}:${block.endUTC}`),
@@ -1271,7 +1292,7 @@ export function CalendarApp({
       window.clearInterval(timer);
       window.removeEventListener("focus", onFocus);
     };
-  }, [focus, view, weekStartsOn, syncFromGoogle, googleVersion]);
+  }, [focus, view, weekStartsOn, syncFromGoogle, googleVersion, googleConnected]);
 
   useEffect(() => {
     let timer = 0;

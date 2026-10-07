@@ -1,8 +1,47 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "framework": "nextjs",
-  "rewrites": [
-    { "source": "/api/:path*", "destination": "https://43-153-114-223.sslip.io/api/:path*" },
-    { "source": "/api/:path*/", "destination": "https://43-153-114-223.sslip.io/api/:path*" }
-  ]
+  "routes": [
+    {
+      "src": "/((?!api(?:/|$)).*)",
+      "headers": {
+        "Strict-Transport-Security": "max-age=63072000; includeSubDomains",
+        "X-Content-Type-Options": "nosniff",
+        "X-Frame-Options": "DENY",
+        "Referrer-Policy": "strict-origin-when-cross-origin",
+        "Permissions-Policy": "camera=(), microphone=(), geolocation=(self), payment=(), usb=()",
+        "Cross-Origin-Opener-Policy": "same-origin",
+        "Content-Security-Policy": "frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'",
+        "Content-Security-Policy-Report-Only": "default-src 'self'; script-src 'self' 'sha256-+6KFBlcl5wkjeK/kbIbYFTkM2ThDRgsMw+TRm3eheBw=' 'sha256-+ksaqz5bztH46GuD6CZqU3JDGCOyeF2PWswupLAVskM=' 'sha256-0nZXgcOlps3QLTpi+OL5sc5vwD7ILF4/zqVCElXul/g=' 'sha256-1OgXUFVQm8hPGXaNrsCgcEbR7/JONB3AFquNwXseMaU=' 'sha256-BQGKT4b+sUzLROdxz7nyilX0H78YuUzE5OljYJrgtOM=' 'sha256-CudkoP/JT53XuCzmDDR5Xh3dUSlGMk33OSm6VsxJwcc=' 'sha256-DHyZZGnjXhoFYCU7pGK91g0frOn3CdoAYeNIwxif2yQ=' 'sha256-HV4GCAhmiWij+unrlXiXbyf7bxBHTGiXukIJOujhu8Q=' 'sha256-HesWKZH/DCFNWfRhEuMwJRHNGDRmo25TWaEDGBq2YlQ=' 'sha256-MjN51vPKovvxJ5lidp56hbh8J46MIsJdHns2WLo2FSw=' 'sha256-OBTN3RiyCV4Bq7dFqZ5a2pAXjnCcCYeTJMO2I/LYKeo=' 'sha256-VVCLWc22Pvz3nqrUivaDgkoEMJf5cRV4wVPZ3W0itbY=' 'sha256-WronqTGMg+hynvUy0qOpiJzgWJUgdpkK9U5iYheLLBA=' 'sha256-ZQtaLTVJBVbpEzKEj5mHBDi74TqSpi3tlUF2Au1OoQY=' 'sha256-aeNVLOr1T3ciNHkw58aEmbIdmxl4wgVdT/+UQOMbaAg=' 'sha256-bg+CWjI8RppcgHYH6RuW4z4OnLAUEUPDXRoYUo9Tyok=' 'sha256-goot1f6UerPCZAYw0kU+zaAilYJVu8/VGrb3vdGYt9M=' 'sha256-iXk/rVT8fUJ6aggEzpytKzYPNuKaDYCmIEAkedoLarE=' 'sha256-m1/9NkXBQlGfCvlI7P+tKd3hDcJH7S7R1FoatRTRF3I=' 'sha256-qBQ7RdQKJEJuW7Fj1MbGjDbF6lnRdfu+KV0V4A5MTRg=' 'sha256-uFC+7jddSAyPk3syjpF0adT0c32nqO5fSYeabWWALlQ=' 'sha256-v+COVUwLq+SrJZ4sEOVfLE77AKvKzZwM8caL+AZoUz8=' 'sha256-vF2/5Zr1erBOoKHZbG5yl+p/xaBdb4tbtX21zxR/BEo=' 'sha256-xLP5QIbvR88RAxDKoSWqs6CVxNIRu17hhr7S/Q6hlU0=' 'sha256-xz80fPjhAczg/tByXnm3xfZrdAUWODPmQtD4solyj1c='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; frame-src 'none'; manifest-src 'self'"
+      },
+      "continue": true
+    },
+    {
+      "src": "/api/(.*)",
+      "headers": {
+        "x-vercel-enable-rewrite-caching": "0"
+      },
+      "continue": true
+    },
+    {
+      "src": "/api/(.*)",
+      "dest": "${API_ORIGIN}/api/$1",
+      "env": [
+        "API_ORIGIN"
+      ],
+      "transforms": [
+        {
+          "type": "request.headers",
+          "op": "set",
+          "target": {
+            "key": "x-watagent-proxy-secret"
+          },
+          "args": "${VERCEL_PROXY_SECRET}",
+          "env": [
+            "VERCEL_PROXY_SECRET"
+          ]
+        }
+      ]
+    }
+  ],
+  "framework": "nextjs"
 }

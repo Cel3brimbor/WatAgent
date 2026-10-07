@@ -1,11 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SearchInput } from "@/shared/responsive-text-input";
-import { fetchCampusEvents } from "@/campus/campus-client";
+import { fetchCampusEvents, fetchCampusEventsStatus } from "@/campus/campus-client";
 import {
   campusCategoryLabel,
   campusDays,
+  campusOvernightSession,
+  campusFreshnessLabel,
   campusEventIcs,
   campusFeedUrl,
   campusPlacements,
@@ -23,6 +25,7 @@ import {
 } from "@/campus/campus-events";
 import { CampusSubscriptions } from "@/campus/campus-subscriptions";
 import { formatTime } from "@/calendar/date-utils";
+import { apiIsLocal } from "@/shared/config";
 import type { CalendarItemDoc } from "@/calendar/types";
 import { ContextMenu, menuStateFromElement, type ContextMenuItem, type ContextMenuPosition } from "@/shared/context-menu";
 import { CheckIcon, ChevronDownIcon } from "@/shared/icons";
@@ -43,31 +46,88 @@ type Props = {
 //rows rendered at first; the rest wait behind "Show more" so a busy term doesn't build hundreds of cards
 const PAGE = 40;
 const LOADING_POLL_MS = 15_000;
+//the status line is small, so the bar can move while a sport page is still loading
+const UPDATING_POLL_MS = 2_000;
 
 type Load = { data: CampusEventsPayload | null; error: string | null; loading: boolean };
 
 function useCampusEvents() {
   const [state, setState] = useState<Load>({ data: null, error: null, loading: true });
-  const load = useCallback(async () => {
-    setState((current) => ({ ...current, loading: true }));
+  const dataRef = useRef(state.data);
+  dataRef.current = state.data;
+  const busy = useRef(false);
+  const listAt = useRef(0);
+  const load = useCallback(async (quiet = false) => {
+    if (quiet && busy.current) return;
+    busy.current = true;
+    if (!quiet) setState((current) => ({ ...current, loading: true }));
     try {
       const data = await fetchCampusEvents();
+      listAt.current = Date.now();
       setState({ data, error: null, loading: false });
     } catch (err) {
       setState((current) => ({ ...current, loading: false, error: err instanceof Error ? err.message : "Unable to load UWaterloo events." }));
+    } finally {
+      busy.current = false;
     }
   }, []);
   useEffect(() => {
     void load();
   }, [load]);
-  //the server's first scrape takes about a minute; check back until it's done
-  const collecting = state.data?.status === "loading";
+  //a local api's scrape moves the bar. a remote api is one download when its list is newer.
+  const watching = apiIsLocal() && (state.data?.updating === true || state.data?.status === "loading");
   useEffect(() => {
-    if (!collecting) return;
-    const timer = window.setTimeout(() => void load(), LOADING_POLL_MS);
-    return () => window.clearTimeout(timer);
-  }, [collecting, state.data, load]);
-  return { ...state, reload: load };
+    let cancelled = false;
+    const timer = window.setInterval(() => {
+      void (async () => {
+        let status: Awaited<ReturnType<typeof fetchCampusEventsStatus>> | null = null;
+        try {
+          status = await fetchCampusEventsStatus();
+        } catch {
+          return;
+        }
+        if (cancelled) return;
+        const current = dataRef.current;
+        const sameProgress = current?.progress?.done === status.progress?.done && current?.progress?.total === status.progress?.total && current?.progress?.label === status.progress?.label;
+        if (current && (status.updating !== current.updating || !sameProgress)) {
+          setState((prev) => (prev.data ? { ...prev, data: { ...prev.data, updating: status.updating, progress: status.progress } } : prev));
+        }
+        const listStale = !current || status.updatedAt !== current.updatedAt || status.status !== current.status;
+        const runDue = apiIsLocal() && (status.updating || status.status === "loading") && Date.now() - listAt.current >= LOADING_POLL_MS;
+        if (listStale || runDue) void load(true);
+      })();
+    }, watching ? UPDATING_POLL_MS : LOADING_POLL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [load, watching]);
+  return { ...state, reload: () => load(false) };
+}
+
+function CampusUpdateMeter({ progress, fromServer = false }: { progress: CampusEventsPayload["progress"]; fromServer?: boolean }) {
+  const open = fromServer || progress == null || progress.total <= 0;
+  const max = Math.max(progress?.total ?? 1, 1);
+  const done = progress?.done ?? 0;
+  const caption = fromServer ? "Updating from Server" : progress?.label ? `${progress.label} · ${done} of ${progress.total}` : "Currently updating";
+  return (
+    <div className={styles.meterBlock}>
+      <div
+        className={styles.meter}
+        role="progressbar"
+        aria-label={caption}
+        aria-valuemin={0}
+        {...(open ? {} : { "aria-valuemax": max, "aria-valuenow": done, "aria-valuetext": caption })}
+      >
+        <span
+          className={styles.meterFill}
+          data-indeterminate={open || undefined}
+          style={open ? undefined : { width: `${Math.min(100, Math.max(done === 0 ? 8 : 0, (done / max) * 100))}%` }}
+        />
+      </div>
+      <p className={styles.meterCaption}>{caption}</p>
+    </div>
+  );
 }
 
 function dayHeading(date: Date, now: number): string {
@@ -100,6 +160,7 @@ function whenLines(event: CampusEvent): { main: string; end?: string; until?: st
     return lastDay > startUTC ? { main: "All day", until: `until ${monthDay(lastDay)}` } : { main: "All day" };
   }
   if (sameDay(startUTC, endUTC)) return { main: formatTime(startUTC), end: formatTime(endUTC) };
+  if (campusOvernightSession(startUTC, endUTC)) return { main: formatTime(startUTC), end: formatTime(endUTC) };
   return { main: formatTime(startUTC), until: `until ${monthDay(endUTC)}` };
 }
 
@@ -113,16 +174,6 @@ function downloadIcs(event: CampusEvent) {
   link.click();
   link.remove();
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
-function updatedLabel(updatedAt: number | null, now: number): string {
-  if (updatedAt == null) return "";
-  const minutes = Math.max(0, Math.round((now - updatedAt) / 60_000));
-  if (minutes < 1) return "Updated just now";
-  if (minutes < 60) return `Updated ${minutes} min ago`;
-  const hours = Math.round(minutes / 60);
-  if (hours < 24) return `Updated ${hours} hour${hours === 1 ? "" : "s"} ago`;
-  return `Updated ${new Date(updatedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
 }
 
 //re-reads the clock each minute, so finished events leave the list and memos stay steady between ticks
@@ -372,9 +423,13 @@ export function CampusEventsSection({ items, calendars, onAdd, subscriptions, on
     const link = campusFeedUrl(subscribed);
     return link.startsWith("https://") ? link : null;
   })();
+  //localhost is the scraper. the hosted app only downloads the list that API already has.
+  const scrapingHere = apiIsLocal() && Boolean(data && (data.updating || data.status === "loading"));
+  const pulling = !apiIsLocal() && loading;
   const subtitle = [
     data ? `${upcoming.length} upcoming` : "",
-    data ? updatedLabel(data.updatedAt, now) : "",
+    data ? campusFreshnessLabel(data.updatedAt, now, scrapingHere) : "",
+    !data && pulling ? "Updating from Server" : "",
   ].filter(Boolean).join(" · ");
 
   return (
@@ -383,6 +438,8 @@ export function CampusEventsSection({ items, calendars, onAdd, subscriptions, on
         <div>
           <h2 id="campus-heading">UWaterloo events</h2>
           <p>{subtitle || "Talks, workshops, games and dates from around campus"}</p>
+          {scrapingHere ? <CampusUpdateMeter progress={data?.progress ?? null} /> : null}
+          {pulling ? <CampusUpdateMeter progress={null} fromServer /> : null}
         </div>
       </div>
       {data && data.categories.length > 0 ? (

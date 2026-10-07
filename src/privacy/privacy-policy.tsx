@@ -1,6 +1,6 @@
 //TODO: replace with a monitored address before launch, and have the text reviewed by a lawyer.
 export const PRIVACY_CONTACT_EMAIL = "privacy@example.com";
-export const PRIVACY_UPDATED = "October 4, 2026";
+export const PRIVACY_UPDATED = "October 6, 2026";
 
 export function PrivacyPolicy() {
   return (
@@ -78,9 +78,9 @@ export function PrivacyPolicy() {
 
         <h2>Retention and deletion</h2>
         <p>
-          We keep your data while your account is active. Email {PRIVACY_CONTACT_EMAIL} to ask us to delete your
-          account and its data. You can also revoke WatAgent&apos;s access at any time in your Google Account
-          under Security → Third-party access.
+          We keep your data while your account is active. You can delete your account in Settings. If you cannot
+          sign in, email {PRIVACY_CONTACT_EMAIL} and we will delete it. You can also revoke WatAgent&apos;s access
+          at any time in your Google Account under Security → Third-party access.
         </p>
 
         <h2>Your choices</h2>

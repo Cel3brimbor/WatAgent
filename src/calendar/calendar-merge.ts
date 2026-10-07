@@ -15,23 +15,13 @@ function googleFeedOf(item: TimelineItem): "learn" | "portal" | undefined {
   return undefined;
 }
 
-function sameLocalDay(a: number, b: number): boolean {
-  const left = new Date(a);
-  const right = new Date(b);
-  return left.getFullYear() === right.getFullYear() && left.getMonth() === right.getMonth() && left.getDate() === right.getDate();
-}
-
-function titlesNest(a: string, b: string): boolean {
-  if (!a || !b || a === b) return false;
-  return a.length < b.length ? b.includes(a) : a.includes(b);
-}
-
+//imported copies collapse only when the title, times and room all match. another gym is another session
 function duplicatePair(a: TimelineItem, b: TimelineItem): boolean {
   const left = normalizedCalendarTitle(a.title);
   const right = normalizedCalendarTitle(b.title);
-  if (!left || !right) return false;
-  if (left === right && sameLocalDay(a.startUTC, b.startUTC)) return true;
-  return titlesNest(left, right) && a.startUTC === b.startUTC && a.endUTC === b.endUTC;
+  if (!left || !right || left !== right) return false;
+  if (a.startUTC !== b.startUTC || a.endUTC !== b.endUTC || a.allDay !== b.allDay) return false;
+  return normalizedCalendarTitle(a.location ?? "") === normalizedCalendarTitle(b.location ?? "");
 }
 
 //tasks, the open editor's draft and pending Agent changes never hide or get hidden
@@ -197,7 +187,7 @@ export function sharedEventCounts(items: TimelineItem[], merged: MergedCalendar[
   const distinct = dropSameFeedCopies(items);
   for (const calendar of merged) {
     for (const member of calendar.members) counts.set(member, 0);
-    //every duplicate pair starts on the same local day, so grouping per day finds the same groups
+    //exact copies share a start, so grouping per day finds the same groups
     const byDay = new Map<string, TimelineItem[]>();
     for (const item of distinct) {
       if (!competes(item) || !calendar.members.includes(memberOf(item) ?? "")) continue;

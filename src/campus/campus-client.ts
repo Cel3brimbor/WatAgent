@@ -1,4 +1,4 @@
-import { campusEventsOf, type CampusEvent, type CampusEventsPayload } from "@/campus/campus-events";
+import { campusEventsMetaOf, campusEventsOf, type CampusEvent, type CampusEventsMeta, type CampusEventsPayload } from "@/campus/campus-events";
 import { ApiError, apiFetch, apiJson } from "@/shared/api-base";
 
 export type CampusSyncCalendar = {
@@ -32,6 +32,11 @@ function syncCalendarOf(raw: unknown): CampusSyncCalendar | null {
     removed: count(row.removed),
     unchanged: count(row.unchanged),
   };
+}
+
+/** Scrape time and whether a run is in progress, without the event list. */
+export async function fetchCampusEventsStatus(): Promise<CampusEventsMeta> {
+  return campusEventsMetaOf(await apiJson<unknown>("/api/campus-events/status"));
 }
 
 /** Just the scrape time, so opening the app does not download the event list to decide. */
