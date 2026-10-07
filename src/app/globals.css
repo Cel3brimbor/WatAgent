@@ -3523,6 +3523,11 @@ select {
   letter-spacing: -0.005em;
 }
 
+.settings-delete-form {
+  display: grid;
+  gap: 0.5rem;
+}
+
 .settings-toggle {
   justify-content: space-between;
   gap: 1rem;
