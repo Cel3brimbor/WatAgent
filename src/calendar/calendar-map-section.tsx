@@ -454,7 +454,7 @@ export function CalendarMapSection({
   }
 
   function setShown(id: string, shown: boolean) {
-    if (isBuiltinLocalCalendarId(id) && !shown) return;
+    if (id === "tasks" && !shown) return;
     onSources((current) => {
       if (id === GOOGLE) return { ...current, google: shown };
       if (id === "events") return { ...current, events: shown };
@@ -554,7 +554,7 @@ export function CalendarMapSection({
 
   function showState(id: string): { shown: boolean | null; showBlocked?: string } {
     if (memberOf.has(id)) return { shown: null };
-    if (isBuiltinLocalCalendarId(id)) return { shown: true, showBlocked: "This calendar always stays visible." };
+    if (id === "tasks") return { shown: true, showBlocked: "This calendar always stays visible." };
     const shown = shownOnGrid(id);
     return {
       shown,

@@ -95,11 +95,10 @@ export function setCalendarReadOnly(filter: CalendarSourceFilter, id: string, re
   return protectBuiltinCalendarSources({ ...filter, readOnlyCalendarIds: [...ids] });
 }
 
-/** Agent Main and Tasks stay visible, editable, and out of the Hidden list. */
+/** Built-ins stay editable and out of the Hidden list; Tasks also stays visible. */
 export function protectBuiltinCalendarSources(filter: CalendarSourceFilter): CalendarSourceFilter {
   return {
     ...filter,
-    events: true,
     tasks: true,
     hiddenIds: filter.hiddenIds.filter((id) => !isBuiltinLocalCalendarId(id)),
     readOnlyCalendarIds: filter.readOnlyCalendarIds.filter((id) => !isBuiltinLocalCalendarId(id)),
