@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { CalendarPreview } from "./preview";
+import { ProductStage } from "./preview";
 import styles from "./product.module.css";
 
 export const metadata: Metadata = {
@@ -26,7 +26,7 @@ export default function ProductPage() {
         </section>
         <section id="preview" className={styles.previewSection} aria-label="Interactive product preview">
           <div className={styles.previewCaption}><span>YOUR CALENDAR, WITH AN ASSISTANT</span><span>↓ Explore WatAgent</span></div>
-          <CalendarPreview />
+          <ProductStage />
 
         </section>
         <section id="features" className={styles.features}>
