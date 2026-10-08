@@ -62,6 +62,27 @@ const learnQuiz: TimelineItem = { ...learn, id: "exercise-due", title: "Exercise
 assert.deepEqual(ids(mergeTimeline([portalQuiz, learnQuiz], [{ ...school, members: ["ics:portal", "ics:learn"] }])), ["exercise-due"], "learn keeps the quiz link when portal is ranked first");
 const lateDue: TimelineItem = { ...learnQuiz, id: "late-due", startUTC: quizStart + 3600000, endUTC: quizStart + 2 * 3600000 };
 assert.deepEqual(ids(mergeTimeline([portalQuiz, lateDue], [school])), ["late-due"], "same-day due-variants merge even when the clocks differ");
+const assignDay = new Date(2026, 9, 9).getTime();
+const portalAssign: TimelineItem = { ...portal, id: "a4-portal", title: "Assignment #4 due", startUTC: assignDay, endUTC: assignDay + 86400000, allDay: true, description: undefined };
+const learnAssign: TimelineItem = { ...learn, id: "a4-learn", title: "Assignment #4 due", startUTC: new Date(2026, 9, 9, 23, 59).getTime(), endUTC: new Date(2026, 9, 9, 23, 59).getTime() + 3600000, allDay: false, description: "ECE 105" };
+assert.deepEqual(ids(mergeTimeline([portalAssign, learnAssign], [school])), ["a4-learn"], "the first merged member's copy shows");
+assert.deepEqual(
+  ids(mergeTimeline([{ ...portalAssign, location: "ECE 105" }, learnAssign], [school])),
+  ["a4-learn"],
+  "learn and portal still merge when only one copy has a room",
+);
+assert.deepEqual(
+  ids(mergeTimeline([portalAssign, { ...learnAssign, title: "ECE 105 Assignment #4 due" }], [school])),
+  ["a4-learn"],
+  "assignment number matches when learn adds the course name",
+);
+const portalEarly = { ...portalAssign, startUTC: new Date(2026, 9, 8).getTime(), endUTC: new Date(2026, 9, 9).getTime() };
+const learnLate = { ...learnAssign, startUTC: new Date(2026, 9, 9, 23, 59).getTime(), endUTC: new Date(2026, 9, 9, 23, 59).getTime() + 3600000 };
+assert.deepEqual(
+  ids(mergeTimeline([portalEarly, learnLate], [school])),
+  ["a4-learn"],
+  "all-day and timed copies still merge when their local midnights are a day apart",
+);
 const nextQuiz: TimelineItem = { ...learnQuiz, id: "next-quiz", startUTC: new Date(2026, 9, 10, 22).getTime(), endUTC: new Date(2026, 9, 10, 23).getTime() };
 assert.deepEqual(ids(mergeTimeline([portalQuiz, nextQuiz], [school])).sort(), ["exercise", "next-quiz"], "a due on another day stays");
 const lab: TimelineItem = { ...portal, id: "lab", title: "Lab", startUTC: quizStart, endUTC: quizStart + 3600000 };

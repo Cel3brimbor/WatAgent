@@ -14,7 +14,9 @@ const source = (key: string, title: string, calendarId: string, day: number, ext
   key, title, calendarId, startUTC: at(day), endUTC: at(day) + 3600000, allDay: false, ...extra,
 });
 const learn = "ics:learn";
+const portal = "ics:portal";
 const rule: KeywordTaskRule = { ...newKeywordTaskRule([learn]), keywords: "Assignment, quiz" };
+const mergeRule: KeywordTaskRule = { ...newKeywordTaskRule(["merge-x"]), keywords: "assignment" };
 const sources = [
   source("a2", "CS 246 Assignment 2 - Due", learn, 9),
   source("q1", "MATH 135 Quiz 1", learn, 7),
@@ -35,6 +37,16 @@ assert.deepEqual(keys({ rules: [rule, { ...rule, id: "again" }], doneKeys: [] })
 //merged calendars: picking the merge covers its members' events
 const merged = [source("m", "Quiz 2", learn, 10, { mergedCalendarId: "merge-x" })];
 assert.equal(keywordTasksOf({ rules: [{ ...rule, calendarIds: ["merge-x"] }], doneKeys: [] }, merged).length, 1);
+
+const dupAssign = [
+  source("p4", "Assignment #4 due", portal, 9, { mergedCalendarId: "merge-x", allDay: true, startUTC: new Date(2026, 9, 9).getTime(), endUTC: new Date(2026, 9, 10).getTime() }),
+  source("l4", "ECE 105 Assignment #4 due", learn, 9, { mergedCalendarId: "merge-x", description: "ECE 105" }),
+];
+assert.deepEqual(
+  keywordTasksOf({ rules: [mergeRule], doneKeys: [] }, dupAssign).map((task) => task.key),
+  ["l4"],
+  "one assignment number on one day becomes one keyword task",
+);
 
 //due dates
 const end = keywordTasksOf({ rules: [{ ...rule, due: "end" }], doneKeys: [] }, sources)[0];

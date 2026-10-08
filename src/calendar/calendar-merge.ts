@@ -39,12 +39,51 @@ function sameRoom(a: TimelineItem, b: TimelineItem): boolean {
   return normalizedCalendarTitle(a.location ?? "") === normalizedCalendarTitle(b.location ?? "");
 }
 
+function localMidnight(utc: number): number {
+  const date = new Date(utc);
+  date.setHours(0, 0, 0, 0);
+  return date.getTime();
+}
+
+//portal and learn rarely agree on location; one empty copy should not block dedupe
+function schoolRoomCompatible(a: TimelineItem, b: TimelineItem): boolean {
+  const left = normalizedCalendarTitle(a.location ?? "");
+  const right = normalizedCalendarTitle(b.location ?? "");
+  if (left === right) return true;
+  return !left || !right;
+}
+
+function assignmentDueKey(title: string): string | null {
+  const text = normalizedCalendarTitle(title);
+  const match = text.match(/\bassignment\s*#?\s*(\d+)\b/);
+  return match ? `assignment-${match[1]}` : null;
+}
+
+function schoolTitlesMatch(a: TimelineItem, b: TimelineItem): boolean {
+  const left = normalizedCalendarTitle(a.title);
+  const right = normalizedCalendarTitle(b.title);
+  if (left && left === right) return true;
+  if (dueVariant(a, b)) return true;
+  const ak = assignmentDueKey(a.title);
+  const bk = assignmentDueKey(b.title);
+  return ak != null && ak === bk;
+}
+
+//all-day portal dues and 11:59pm learn dues can sit on adjacent local midnights after ics import
+function schoolDueDaysAlign(a: TimelineItem, b: TimelineItem, imported: ImportedCalendar[]): boolean {
+  if (sameLocalDay(a.startUTC, b.startUTC)) return true;
+  if (!isSchool(feedRole(a, imported)) || !isSchool(feedRole(b, imported))) return false;
+  if (!a.allDay && !b.allDay) return false;
+  return Math.abs(localMidnight(a.startUTC) - localMidnight(b.startUTC)) <= 86400000;
+}
+
 //the same title at the same time in another gym is another session. learn and portal due-variants still collapse
 function duplicatePair(a: TimelineItem, b: TimelineItem, imported: ImportedCalendar[]): boolean {
   const left = normalizedCalendarTitle(a.title);
   const right = normalizedCalendarTitle(b.title);
   if (!left || !right) return false;
   if (left === right && a.startUTC === b.startUTC && a.endUTC === b.endUTC && a.allDay === b.allDay && sameRoom(a, b)) return true;
+  if (schoolCrossFeedPair(a, b, imported)) return true;
   return schoolDuePair(a, b, imported);
 }
 
@@ -105,8 +144,14 @@ function isSchool(role: FeedRole | undefined): boolean {
 
 //learn and portal publish the quiz and its "- Due" to-do as two events on the same day
 function schoolDuePair(a: TimelineItem, b: TimelineItem, imported: ImportedCalendar[]): boolean {
-  if (!dueVariant(a, b) || !sameLocalDay(a.startUTC, b.startUTC)) return false;
+  if (!dueVariant(a, b) || !schoolDueDaysAlign(a, b, imported)) return false;
   return isSchool(feedRole(a, imported)) && isSchool(feedRole(b, imported));
+}
+
+function schoolCrossFeedPair(a: TimelineItem, b: TimelineItem, imported: ImportedCalendar[]): boolean {
+  if (!isSchool(feedRole(a, imported)) || !isSchool(feedRole(b, imported))) return false;
+  if (!schoolTitlesMatch(a, b) || !schoolDueDaysAlign(a, b, imported) || !schoolRoomCompatible(a, b)) return false;
+  return true;
 }
 
 function localDayKey(utc: number): string {
@@ -220,7 +265,8 @@ function preferredCopy(item: TimelineItem, current: TimelineItem, rank: (entry: 
  * Google is last: its copy hides when the event is also on another calendar.
  * Between Google's own LEARN and Portal subscriptions, the Portal copy hides.
  * UWaterloo event calendars lose to LEARN and Portal, and their own copies of one event show once.
- * LEARN and Portal due-variants on the same day count as one event. The earlier member shows, unless only the other copy has details.
+ * LEARN and Portal copies with the same title on the same day count as one event, even when the clocks differ.
+ * Due-variants on the same day count as one event too. The earlier member shows, unless only the other copy has details.
  */
 export function mergeTimeline(items: TimelineItem[], merged: MergedCalendar[], imported: ImportedCalendar[] = []): TimelineItem[] {
   const copies = dropSameFeedCopies(items);

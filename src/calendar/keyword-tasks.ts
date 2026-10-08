@@ -67,6 +67,45 @@ function searchText(source: KeywordTaskSource, field: KeywordTaskRule["field"]):
   return parts.join("\n").toLowerCase();
 }
 
+function localDayKey(utc: number): string {
+  const date = new Date(utc);
+  return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+}
+
+function assignmentTaskSlot(title: string, dueUTC: number): string | null {
+  const text = title.toLowerCase().replace(/\s+/g, " ").trim();
+  const match = text.match(/\bassignment\s*#?\s*(\d+)\b/);
+  return match ? `assignment-${match[1]}|${localDayKey(dueUTC)}` : null;
+}
+
+function sourceDetail(task: KeywordTask): number {
+  return (task.source.description?.trim().length ?? 0) + task.title.length;
+}
+
+//portal and learn can still surface as two keyword tasks when merge misses a pair
+export function dedupeSchoolAssignmentTasks(tasks: KeywordTask[]): KeywordTask[] {
+  const kept = new Map<string, KeywordTask>();
+  const order: KeywordTask[] = [];
+  for (const task of tasks) {
+    const slot = assignmentTaskSlot(task.title, task.dueUTC);
+    if (!slot) {
+      order.push(task);
+      continue;
+    }
+    const prev = kept.get(slot);
+    if (!prev) {
+      kept.set(slot, task);
+      order.push(task);
+      continue;
+    }
+    if (sourceDetail(task) <= sourceDetail(prev)) continue;
+    const index = order.indexOf(prev);
+    if (index >= 0) order[index] = task;
+    kept.set(slot, task);
+  }
+  return order;
+}
+
 /** The first keyword the event holds, or null. */
 export function matchedKeyword(rule: KeywordTaskRule, source: KeywordTaskSource): string | null {
   const picked = rule.calendarIds.includes(source.calendarId)
@@ -123,7 +162,7 @@ export function keywordTasksOf(config: KeywordTasks, sources: KeywordTaskSource[
       break;
     }
   }
-  return tasks.sort((a, b) => a.dueUTC - b.dueUTC || a.title.localeCompare(b.title));
+  return dedupeSchoolAssignmentTasks(tasks.sort((a, b) => a.dueUTC - b.dueUTC || a.title.localeCompare(b.title)));
 }
 
 /** Checking a task off keeps its key; the oldest keys fall off past the limit. */

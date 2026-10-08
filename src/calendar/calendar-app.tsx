@@ -114,7 +114,7 @@ import {
   type CampusSubscriptionPref,
 } from "@/campus/campus-subscription-prefs";
 import { cachedCampusEvents, fetchCampusScrapeAt, syncCampusCalendars, type CampusSyncCalendar } from "@/campus/campus-client";
-import { deadlineTasksOf, keywordTasksOf, readKeywordTasks, withKeywordTaskDone, type KeywordTasks, type KeywordTaskSource } from "@/calendar/keyword-tasks";
+import { deadlineTasksOf, dedupeSchoolAssignmentTasks, keywordTasksOf, readKeywordTasks, withKeywordTaskDone, type KeywordTasks, type KeywordTaskSource } from "@/calendar/keyword-tasks";
 import { KeywordTaskRules, type KeywordTaskCalendarOption } from "@/calendar/keyword-task-rules";
 import { AccessError, plainReason } from "@/auth/access";
 import { CalendarChatPanel } from "@/agent/calendar-chat-panel";
@@ -1125,7 +1125,7 @@ export function CalendarApp({
     return deadlineTasksOf(sources, keywordTasks.doneKeys).filter((task) => !seen.has(task.key));
   }, [mergedTaskItems, feedsForMerge, derivedKeywordTasks, keywordTasks.doneKeys]);
   const listedTasks = useMemo(
-    () => [...derivedKeywordTasks, ...deadlineTasks].sort((a, b) => a.dueUTC - b.dueUTC || a.title.localeCompare(b.title)),
+    () => dedupeSchoolAssignmentTasks([...derivedKeywordTasks, ...deadlineTasks].sort((a, b) => a.dueUTC - b.dueUTC || a.title.localeCompare(b.title))),
     [derivedKeywordTasks, deadlineTasks],
   );
   const keywordTaskCalendars = useMemo<KeywordTaskCalendarOption[]>(
