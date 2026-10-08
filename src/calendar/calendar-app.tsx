@@ -16,7 +16,7 @@ import {
 } from "@/calendar/date-utils";
 import { removeImportedCalendar } from "@/calendar/client";
 import { calendarItemVisible, externalCalendarId, externalCalendarsOf } from "@/calendar/external-calendars";
-import { mergeTimeline } from "@/calendar/calendar-merge";
+import { bottomDeadlines, mergeTimeline, pinBottomDeadlines } from "@/calendar/calendar-merge";
 import { feedOfCalendarId, mergedByMember, newFeedId } from "@/calendar/imported-calendars";
 import { formatFeedSyncSummary, syncImportedFeed } from "@/calendar/calendar-sync";
 import { type SideExternalCalendar } from "@/calendar/calendar-side-panel";
@@ -114,7 +114,7 @@ import {
   type CampusSubscriptionPref,
 } from "@/campus/campus-subscription-prefs";
 import { cachedCampusEvents, fetchCampusScrapeAt, syncCampusCalendars, type CampusSyncCalendar } from "@/campus/campus-client";
-import { keywordTasksOf, readKeywordTasks, withKeywordTaskDone, type KeywordTasks, type KeywordTaskSource } from "@/calendar/keyword-tasks";
+import { deadlineTasksOf, keywordTasksOf, readKeywordTasks, withKeywordTaskDone, type KeywordTasks, type KeywordTaskSource } from "@/calendar/keyword-tasks";
 import { KeywordTaskRules, type KeywordTaskCalendarOption } from "@/calendar/keyword-task-rules";
 import { AccessError, plainReason } from "@/auth/access";
 import { CalendarChatPanel } from "@/agent/calendar-chat-panel";
@@ -1065,12 +1065,43 @@ export function CalendarApp({
     [calendar.displayItems, overlayEvents],
   );
 
-  //every event, each merged duplicate once, that a keyword rule could turn into a task
-  const keywordTaskSources = useMemo<KeywordTaskSource[]>(() => {
-    const own = itemsForUi
-      .filter((item) => item.calendar.kind === "event" && !item.pendingApproval && !item.editorDraft)
-      .map(timelineItemOf);
-    return mergeTimeline([...own, ...shownOverlayEvents.map(overlayTimelineItemOf)], mergedCalendars, feedsForMerge).flatMap((item): KeywordTaskSource[] => {
+  //every event, each merged duplicate once, that a keyword rule or a late deadline could turn into a task
+  const mergedTaskItems = useMemo(
+    () =>
+      mergeTimeline(
+        [
+          ...itemsForUi
+            .filter((item) => item.calendar.kind === "event" && !item.pendingApproval && !item.editorDraft)
+            .map(timelineItemOf),
+          ...shownOverlayEvents.map(overlayTimelineItemOf),
+        ],
+        mergedCalendars,
+        feedsForMerge,
+      ),
+    [itemsForUi, shownOverlayEvents, mergedCalendars, feedsForMerge],
+  );
+  const keywordTaskSources = useMemo<KeywordTaskSource[]>(
+    () =>
+      mergedTaskItems.flatMap((item): KeywordTaskSource[] => {
+        const calendarId = item.kind === "gcal_event" ? item.google?.calendarId : timelineItemCalendarId(item);
+        if (!calendarId) return [];
+        return [{
+          key: item.id,
+          calendarId,
+          mergedCalendarId: item.mergedCalendarId,
+          title: item.title,
+          startUTC: item.startUTC,
+          endUTC: item.endUTC,
+          allDay: item.allDay,
+          location: item.location ?? item.google?.location,
+          description: item.description ?? item.google?.description,
+        }];
+      }),
+    [mergedTaskItems],
+  );
+  const derivedKeywordTasks = useMemo(() => keywordTasksOf(keywordTasks, keywordTaskSources), [keywordTasks, keywordTaskSources]);
+  const deadlineTasks = useMemo(() => {
+    const sources = bottomDeadlines(mergedTaskItems, feedsForMerge).flatMap((item): KeywordTaskSource[] => {
       const calendarId = item.kind === "gcal_event" ? item.google?.calendarId : timelineItemCalendarId(item);
       if (!calendarId) return [];
       return [{
@@ -1080,13 +1111,18 @@ export function CalendarApp({
         title: item.title,
         startUTC: item.startUTC,
         endUTC: item.endUTC,
-        allDay: item.allDay,
+        allDay: false,
         location: item.location ?? item.google?.location,
         description: item.description ?? item.google?.description,
       }];
     });
-  }, [itemsForUi, shownOverlayEvents, mergedCalendars, feedsForMerge]);
-  const derivedKeywordTasks = useMemo(() => keywordTasksOf(keywordTasks, keywordTaskSources), [keywordTasks, keywordTaskSources]);
+    const seen = new Set(derivedKeywordTasks.map((task) => task.key));
+    return deadlineTasksOf(sources, keywordTasks.doneKeys).filter((task) => !seen.has(task.key));
+  }, [mergedTaskItems, feedsForMerge, derivedKeywordTasks, keywordTasks.doneKeys]);
+  const listedTasks = useMemo(
+    () => [...derivedKeywordTasks, ...deadlineTasks].sort((a, b) => a.dueUTC - b.dueUTC || a.title.localeCompare(b.title)),
+    [derivedKeywordTasks, deadlineTasks],
+  );
   const keywordTaskCalendars = useMemo<KeywordTaskCalendarOption[]>(
     () => [
       ...sideExternalCalendars.map((calendar) => ({
@@ -1129,7 +1165,7 @@ export function CalendarApp({
     (date: Date, filter: CalendarSourceFilter) => {
       const filterGroups = calendarGroupsOf(filter.groups);
       const googleShown = filter.google && filterGroups.other;
-      return mergeTimeline(aggregateTimeline({
+      return pinBottomDeadlines(mergeTimeline(aggregateTimeline({
         focus: date,
         events: itemsForUi.filter((item) => calendarItemVisible(item, filter, mergedCalendars, campusSources)),
         busyBlocks: !googleShown || shownOverlayEvents.length > 0 ? [] : busyBlocks,
@@ -1137,7 +1173,7 @@ export function CalendarApp({
           if (filterGroups.hidden && filter.hiddenIds.includes(event.calendarId)) return true;
           return googleShown && !isSidebarHidden(filter, event.calendarId) && !filter.mutedGoogleIds.includes(event.calendarId);
         }),
-      }), mergedCalendars, feedsForMerge).map((item) => {
+      }), mergedCalendars, feedsForMerge), date, feedsForMerge).map((item) => {
         const swatch = (calendarId: string, importSource?: string) => {
           if (importSource) {
             const categoryId = campusCategoryByFeedId.get(importSource);
@@ -1969,7 +2005,7 @@ export function CalendarApp({
                 }}
                 onComplete={calendar.completeTask}
                 onCreate={() => setDraft({ ...defaultAllDayDraft(startOfLocalDay(new Date())), kind: "task" })}
-                keywordTasks={derivedKeywordTasks}
+                keywordTasks={listedTasks}
                 calendarName={keywordTaskCalendarName}
                 onKeywordComplete={(key, done) => setKeywordTasks((current) => withKeywordTaskDone(current, key, done))}
                 onKeywordOpen={(task) => {

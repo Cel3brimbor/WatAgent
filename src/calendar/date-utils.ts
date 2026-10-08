@@ -130,6 +130,11 @@ export function formatGoogleWhen(startUTC: number, endUTC: number, allDay: boole
   return `${googleDate(start)} · ${googleClock(start)} – ${googleDate(end)} · ${googleClock(end)}`;
 }
 
+export function formatDueWhen(startUTC: number): string {
+  const start = new Date(startUTC);
+  return `${googleDate(start)} · ${googleClock(start)}`;
+}
+
 export function formatTime(utc: number): string {
   return new Date(utc).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
 }

@@ -2,7 +2,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import type { TimelineItem } from "@/calendar/types";
-import { formatGoogleWhen } from "@/calendar/date-utils";
+import { formatDueWhen, formatGoogleWhen } from "@/calendar/date-utils";
 
 type Props = {
   item: TimelineItem;
@@ -69,7 +69,7 @@ export function GoogleEventCard({ item, anchor, open = true, onClose, onEdit, on
     return { left, top, origin: originFor(anchor, left, top, width) };
   });
   const details = item.google;
-  const when = formatGoogleWhen(item.startUTC, item.endUTC, item.allDay);
+  const when = item.pinned ? formatDueWhen(item.startUTC) : formatGoogleWhen(item.startUTC, item.endUTC, item.allDay);
   const location = (details?.location ?? item.location)?.trim() || "";
   const description = (details?.description ?? item.description)?.trim() || "";
   const calendarName = details?.calendarName?.trim() || calendarLabel?.trim() || "Agent Main";

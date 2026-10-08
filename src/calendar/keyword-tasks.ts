@@ -76,6 +76,25 @@ export function matchedKeyword(rule: KeywordTaskRule, source: KeywordTaskSource)
   return smartTagTerms(rule.keywords).find((term) => text.includes(term)) ?? null;
 }
 
+/**late school deadlines, already chosen, become tasks due at the deadline*/
+export function deadlineTasksOf(sources: KeywordTaskSource[], doneKeys: string[]): KeywordTask[] {
+  const done = new Set(doneKeys);
+  return sources
+    .map((source) => ({
+      key: source.key,
+      title: source.title,
+      dueUTC: source.startUTC,
+      allDay: false,
+      calendarId: source.calendarId,
+      keyword: "deadline",
+      ruleId: "deadline",
+      ruleName: "Due",
+      done: done.has(source.key),
+      source,
+    }))
+    .sort((a, b) => a.dueUTC - b.dueUTC || a.title.localeCompare(b.title));
+}
+
 /** One task per event, from the first enabled rule that matches it, soonest due first. */
 export function keywordTasksOf(config: KeywordTasks, sources: KeywordTaskSource[]): KeywordTask[] {
   const rules = config.rules.filter((rule) => rule.enabled && rule.calendarIds.length > 0 && smartTagTerms(rule.keywords).length > 0);

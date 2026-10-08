@@ -42,9 +42,9 @@ export function CalendarDayView({
 }: Props) {
   const now = useNowMs();
   const dayStart = startOfLocalDay(focus);
-  const allDay = items.filter((item) => item.allDay);
+  const topped = items.filter((item) => item.allDay || item.pinned);
   const timed = layoutOverlappingBlocks(
-    items.filter((item) => !item.allDay),
+    items.filter((item) => !item.allDay && !item.pinned),
     dayStart.getTime(),
   );
   const nowTop = nowLineTop(now, dayStart.getTime());
@@ -60,7 +60,7 @@ export function CalendarDayView({
         <div className="calendar-all-day">
           <span className="calendar-all-day-label">All-day</span>
           <div className="calendar-all-day-items">
-            {allDay.map((item) => (
+            {topped.map((item) => (
               <TimelineStrip
                 key={item.id}
                 item={item}

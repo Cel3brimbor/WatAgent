@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mergeTimeline, normalizedCalendarTitle, sharedEventCounts } from "./calendar-merge";
+import { isBottomDeadline, mergeTimeline, normalizedCalendarTitle, pinBottomDeadlines, sharedEventCounts } from "./calendar-merge";
 import {
   defaultImportedName,
   detectCalendarLink,
@@ -53,7 +53,24 @@ const formStart = new Date(2026, 8, 29, 11, 30).getTime();
 const form = { ...learn, id: "form", title: "Video Release Form", startUTC: formStart, endUTC: formStart };
 const formDue = { ...portal, id: "form-due", title: "Video Release Form - Due", startUTC: formStart, endUTC: formStart };
 assert.deepEqual(ids(mergeTimeline([formDue, form], [school])), ["form"]);
-assert.deepEqual(ids(mergeTimeline([formDue, { ...form, id: "form-later", endUTC: formStart + 60000 }], [school])), ["form-due", "form-later"]);
+assert.deepEqual(ids(mergeTimeline([formDue, { ...form, id: "form-later", endUTC: formStart + 60000 }], [school])), ["form-later"], "a due-variant on the same day is one event");
+
+//portal "Exercise 01" and learn "Exercise 01 - Due" are one quiz. the copy with the link shows
+const quizStart = new Date(2026, 9, 9, 22).getTime();
+const portalQuiz: TimelineItem = { ...portal, id: "exercise", title: "Exercise 01", startUTC: quizStart, endUTC: quizStart + 3600000, description: undefined };
+const learnQuiz: TimelineItem = { ...learn, id: "exercise-due", title: "Exercise 01 - Due", startUTC: quizStart, endUTC: quizStart + 3600000, description: "Quizzes: Exercise 01" };
+assert.deepEqual(ids(mergeTimeline([portalQuiz, learnQuiz], [{ ...school, members: ["ics:portal", "ics:learn"] }])), ["exercise-due"], "learn keeps the quiz link when portal is ranked first");
+const lateDue: TimelineItem = { ...learnQuiz, id: "late-due", startUTC: quizStart + 3600000, endUTC: quizStart + 2 * 3600000 };
+assert.deepEqual(ids(mergeTimeline([portalQuiz, lateDue], [school])), ["late-due"], "same-day due-variants merge even when the clocks differ");
+const nextQuiz: TimelineItem = { ...learnQuiz, id: "next-quiz", startUTC: new Date(2026, 9, 10, 22).getTime(), endUTC: new Date(2026, 9, 10, 23).getTime() };
+assert.deepEqual(ids(mergeTimeline([portalQuiz, nextQuiz], [school])).sort(), ["exercise", "next-quiz"], "a due on another day stays");
+const lab: TimelineItem = { ...portal, id: "lab", title: "Lab", startUTC: quizStart, endUTC: quizStart + 3600000 };
+const labDue: TimelineItem = { ...learn, id: "lab-due", title: "Lab 1 - Due", startUTC: quizStart + 30 * 60000, endUTC: quizStart + 90 * 60000 };
+assert.deepEqual(ids(mergeTimeline([lab, labDue], [school])).sort(), ["lab", "lab-due"], "a shorter name inside a different title is not a copy");
+assert.deepEqual(ids(mergeTimeline([portalQuiz, { ...portalQuiz, id: "portal-due", title: "Exercise 01 - Due", description: "quiz link" }], [])), ["portal-due"], "one feed keeps the due copy that has details");
+const hours: TimelineItem = { ...portal, id: "h1", title: "Office hours", startUTC: quizStart, endUTC: quizStart + 3600000 };
+const hoursLater: TimelineItem = { ...hours, id: "h2", startUTC: quizStart + 4 * 3600000, endUTC: quizStart + 5 * 3600000 };
+assert.deepEqual(ids(mergeTimeline([hours, hoursLater], [])).sort(), ["h1", "h2"], "two same-titled events on one feed stay");
 
 //google is last whenever the event also exists on another calendar
 const googleLearn: TimelineItem = { ...learn, id: "g-learn", kind: "gcal_event", importSource: undefined, google: { calendarName: "LEARN calendar" } };
@@ -117,5 +134,22 @@ assert.equal(detectCalendarLink(learnUrl), "learn");
 assert.equal(defaultImportedName(learnUrl, []), "LEARN / Brightspace");
 assert.equal(defaultImportedName(learnUrl, [{ name: "LEARN / Brightspace" }, { name: "LEARN / Brightspace 2" }]), "LEARN / Brightspace 3");
 assert.equal(defaultImportedName("https://example.com/a.ics", []), "Imported calendar");
+
+//an 11:59pm due sits with the all-day items on the day it is due, and not on the next morning
+const dueStart = new Date(2026, 9, 7, 23, 59).getTime();
+const deliverable: TimelineItem = { ...learn, id: "deliverable", title: "Group Deliverable 1 (Part 1) submission [Sec 003 Groups 21-40] - Due", startUTC: dueStart, endUTC: dueStart + 3600000 };
+const wednesday = new Date(2026, 9, 7);
+const thursday = new Date(2026, 9, 8);
+assert.equal(isBottomDeadline(deliverable, []), true);
+assert.equal(pinBottomDeadlines([deliverable], wednesday, [])[0]?.pinned, true);
+assert.deepEqual(pinBottomDeadlines([deliverable], thursday, []), []);
+const eveningQuiz: TimelineItem = { ...learn, id: "evening", title: "Exercise 01", startUTC: quizStart, endUTC: quizStart + 3600000 };
+assert.equal(pinBottomDeadlines([eveningQuiz], new Date(2026, 9, 9), [])[0]?.pinned, undefined, "a 10pm quiz stays on the grid");
+const nightLab: TimelineItem = { ...learn, id: "night-lab", title: "Night lab", startUTC: new Date(2026, 9, 7, 23, 30).getTime(), endUTC: new Date(2026, 9, 8, 0, 30).getTime() };
+assert.equal(pinBottomDeadlines([nightLab], wednesday, [])[0]?.pinned, undefined, "a class that starts at 11:30 stays timed");
+const ownLate: TimelineItem = { ...deliverable, id: "own-late", importSource: undefined };
+assert.equal(pinBottomDeadlines([ownLate], wednesday, [])[0]?.pinned, undefined, "a hand-made event stays where it was placed");
+const morning: TimelineItem = { ...learn, id: "morning", title: "Lecture", startUTC: new Date(2026, 9, 7, 9).getTime(), endUTC: new Date(2026, 9, 7, 10).getTime() };
+assert.deepEqual(ids(pinBottomDeadlines([morning, deliverable], wednesday, [])), ["deliverable", "morning"], "deadlines sort above timed events");
 
 console.log("Merged calendar, shared count, imported list and migration checks passed.");

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {
+  deadlineTasksOf,
   keywordTasksOf,
   newKeywordTaskRule,
   parseKeywordTasksFromUnknown,
@@ -51,5 +52,10 @@ assert.deepEqual(parseKeywordTasksFromUnknown(null), { rules: [], doneKeys: [] }
 const parsed = parseKeywordTasksFromUnknown({ rules: [{ id: "r", keywords: "exam", calendarIds: [learn, learn, 4], due: "soon", field: "x" }], doneKeys: ["a", "a", 3] });
 assert.deepEqual(parsed.rules[0], { id: "r", name: "", keywords: "exam", field: "title", calendarIds: [learn], due: "start", enabled: true });
 assert.deepEqual(parsed.doneKeys, ["a"]);
+
+const deadline = deadlineTasksOf([source("deliverable", "Group Deliverable - Due", learn, 7)], ["deliverable"]);
+assert.equal(deadline[0]?.dueUTC, at(7));
+assert.equal(deadline[0]?.done, true);
+assert.equal(deadlineTasksOf([source("deliverable", "Group Deliverable - Due", learn, 7)], []).length, 1);
 
 console.log("Keyword task checks passed.");

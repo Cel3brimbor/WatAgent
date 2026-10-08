@@ -79,11 +79,11 @@ export function CalendarWeekView({
         <div className="calendar-week-all-day">
           <span className="calendar-all-day-label">All-day</span>
           {days.map((date) => {
-            const allDay = itemsForDay(date).filter((item) => item.allDay);
+            const topped = itemsForDay(date).filter((item) => item.allDay || item.pinned);
             const tone = `${isToday(date) ? " is-today" : ""}${date.getDay() % 6 === 0 ? " is-weekend" : ""}`;
             return (
               <div key={`${date.toISOString()}-all`} className={`calendar-week-all-day-col${tone}`}>
-                {allDay.map((item) => (
+                {topped.map((item) => (
                   <TimelineStrip
                     key={item.id}
                     item={item}
@@ -115,8 +115,9 @@ export function CalendarWeekView({
         </div>
         {days.map((date, dayIndex) => {
           const dayStart = startOfLocalDay(date);
+          const dayItems = itemsForDay(date);
           const timed = layoutOverlappingBlocks(
-            itemsForDay(date).filter((item) => !item.allDay),
+            dayItems.filter((item) => !item.allDay && !item.pinned),
             dayStart.getTime(),
           );
           const nowTop = isToday(date) ? nowLineTop(now, dayStart.getTime()) : null;

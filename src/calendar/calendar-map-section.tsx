@@ -296,7 +296,10 @@ export function CalendarMapSection({
     return { saved, pending };
   }, [items]);
 
-  const shared = useMemo(() => sharedEventCounts(items.map(timelineItemOf), mergedCalendars), [items, mergedCalendars]);
+  const shared = useMemo(
+    () => sharedEventCounts(items.map(timelineItemOf), mergedCalendars, importedCalendars),
+    [items, mergedCalendars, importedCalendars],
+  );
 
   function shownOnGrid(id: string): boolean {
     if (id === GOOGLE) return sources.google && groups.other;
