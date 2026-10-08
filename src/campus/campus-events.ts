@@ -26,13 +26,48 @@ export type CampusEvent = {
 
 export type CampusEventsStatus = "ready" | "loading" | "off";
 
+/** How far the current scrape has read. done sources are finished; label is the one being read. */
+export type CampusScrapeProgress = { done: number; total: number; label: string };
+
 export type CampusEventsPayload = {
   status: CampusEventsStatus;
   updatedAt: number | null;
+  /** A scrape is running. The list is still the last finished one until that run ends. */
+  updating: boolean;
+  progress: CampusScrapeProgress | null;
   categories: CampusCategory[];
   sources: CampusSource[];
   events: CampusEvent[];
 };
+
+export type CampusEventsMeta = {
+  status: CampusEventsStatus;
+  updatedAt: number | null;
+  updating: boolean;
+  progress: CampusScrapeProgress | null;
+};
+
+function scrapeProgressOf(raw: unknown): CampusScrapeProgress | null {
+  if (!raw || typeof raw !== "object") return null;
+  const rec = raw as Record<string, unknown>;
+  const done = rec.done;
+  const total = rec.total;
+  const label = typeof rec.label === "string" ? rec.label.replace(/\s+/g, " ").trim().slice(0, 120) : "";
+  if (typeof done !== "number" || typeof total !== "number" || !Number.isFinite(done) || !Number.isFinite(total) || total <= 0) return null;
+  return { done: Math.max(0, Math.min(Math.floor(done), Math.floor(total))), total: Math.max(1, Math.floor(total)), label };
+}
+
+/** "Updated Oct 5", or "Currently updating" while a scrape is still reading. */
+export function campusFreshnessLabel(updatedAt: number | null, now: number, updating: boolean): string {
+  if (updating) return "Currently updating";
+  if (updatedAt == null) return "";
+  const minutes = Math.max(0, Math.round((now - updatedAt) / 60_000));
+  if (minutes < 1) return "Updated just now";
+  if (minutes < 60) return `Updated ${minutes} min ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `Updated ${hours} hour${hours === 1 ? "" : "s"} ago`;
+  return `Updated ${new Date(updatedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
+}
 
 /** The backend path that serves campus events as an .ics feed. A calendar link to it is a subscription. */
 export const CAMPUS_FEED_PATH = "/api/campus-events/feed.ics";
@@ -181,7 +216,23 @@ export function campusEventsOf(raw: unknown): CampusEventsPayload {
   const events = Array.isArray(rec.events) ? rec.events.map((entry) => campusEventOf(entry, known)).filter((event): event is CampusEvent => event != null) : [];
   const status: CampusEventsStatus = rec.status === "loading" || rec.status === "off" ? rec.status : "ready";
   const updatedAt = typeof rec.updatedAt === "number" && Number.isFinite(rec.updatedAt) ? rec.updatedAt : null;
-  return { status, updatedAt, categories, sources, events: events.sort((a, b) => a.startUTC - b.startUTC) };
+  return {
+    status,
+    updatedAt,
+    updating: rec.updating === true,
+    progress: scrapeProgressOf(rec.progress),
+    categories,
+    sources,
+    events: events.sort((a, b) => a.startUTC - b.startUTC),
+  };
+}
+
+/** The small status payload. A missing updating flag means this server isn't reporting a run. */
+export function campusEventsMetaOf(raw: unknown): CampusEventsMeta {
+  const rec = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  const status: CampusEventsStatus = rec.status === "loading" || rec.status === "off" ? rec.status : "ready";
+  const updatedAt = typeof rec.updatedAt === "number" && Number.isFinite(rec.updatedAt) ? rec.updatedAt : null;
+  return { status, updatedAt, updating: rec.updating === true, progress: scrapeProgressOf(rec.progress) };
 }
 
 /** The subscription link for these categories; none means every event. Calendar links must be https or webcal, so a plain-http API (development) gets webcal. */
@@ -257,6 +308,19 @@ export function localSpan(event: CampusEvent): { startUTC: number; endUTC: numbe
     return { startUTC: localDate(event.startDate).getTime(), endUTC: localDate(event.endDate).getTime() };
   }
   return { startUTC: event.startUTC, endUTC: event.endUTC };
+}
+
+//drop-in hours that cross midnight but finish before morning; not a multi-day event.
+export function campusOvernightSession(startUTC: number, endUTC: number): boolean {
+  if (endUTC <= startUTC) return false;
+  const span = endUTC - startUTC;
+  if (span > 20 * 60 * 60 * 1000) return false;
+  const start = new Date(startUTC);
+  const end = new Date(endUTC);
+  const startDay = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+  const endDay = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+  const dayGap = (endDay.getTime() - startDay.getTime()) / 86_400_000;
+  return dayGap === 1;
 }
 
 function plain(text: string): string {

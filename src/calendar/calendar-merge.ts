@@ -21,11 +21,6 @@ function sameLocalDay(a: number, b: number): boolean {
   return left.getFullYear() === right.getFullYear() && left.getMonth() === right.getMonth() && left.getDate() === right.getDate();
 }
 
-function titlesNest(a: string, b: string): boolean {
-  if (!a || !b || a === b) return false;
-  return a.length < b.length ? b.includes(a) : a.includes(b);
-}
-
 //"exercise 01 - due" shares its name with "exercise 01"
 function dueCore(title: string): string {
   return normalizedCalendarTitle(title).replace(/\s*[-–—:]*\s*due$/, "").trim();
@@ -40,13 +35,17 @@ function dueVariant(a: TimelineItem, b: TimelineItem): boolean {
   return core.length > 0 && core === dueCore(b.title);
 }
 
+function sameRoom(a: TimelineItem, b: TimelineItem): boolean {
+  return normalizedCalendarTitle(a.location ?? "") === normalizedCalendarTitle(b.location ?? "");
+}
+
+//the same title at the same time in another gym is another session. learn and portal due-variants still collapse
 function duplicatePair(a: TimelineItem, b: TimelineItem, imported: ImportedCalendar[]): boolean {
   const left = normalizedCalendarTitle(a.title);
   const right = normalizedCalendarTitle(b.title);
   if (!left || !right) return false;
-  if (left === right && sameLocalDay(a.startUTC, b.startUTC)) return true;
-  if (schoolDuePair(a, b, imported)) return true;
-  return titlesNest(left, right) && a.startUTC === b.startUTC && a.endUTC === b.endUTC;
+  if (left === right && a.startUTC === b.startUTC && a.endUTC === b.endUTC && a.allDay === b.allDay && sameRoom(a, b)) return true;
+  return schoolDuePair(a, b, imported);
 }
 
 //tasks, the open editor's draft and pending Agent changes never hide or get hidden
@@ -259,7 +258,7 @@ export function sharedEventCounts(items: TimelineItem[], merged: MergedCalendar[
   const distinct = dropSameFeedCopies(items);
   for (const calendar of merged) {
     for (const member of calendar.members) counts.set(member, 0);
-    //every duplicate pair starts on the same local day, so grouping per day finds the same groups
+    //exact copies share a start, so grouping per day finds the same groups
     const byDay = new Map<string, TimelineItem[]>();
     for (const item of distinct) {
       if (!competes(item) || !calendar.members.includes(memberOf(item) ?? "")) continue;

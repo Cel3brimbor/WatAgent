@@ -125,7 +125,7 @@ import { requestChatTitle } from "@/agent/chat-title";
 import { readAgentStream } from "@/agent/stream";
 import { cloneActivity } from "@/agent/agent-activity";
 import type { ActivityPart, ChatMessage, ThoughtSegment, ToolEventRecord } from "@/agent/types";
-import { apiFetch, apiJson, errorFromResponse } from "@/shared/api-base";
+import { ApiError, apiFetch, apiJson, errorFromResponse } from "@/shared/api-base";
 import { uid } from "@/shared/ids";
 import { ChevronLeftIcon, ChevronRightIcon, CloseIcon } from "@/shared/icons";
 import { SegmentedControl, type SegmentOption } from "@/shared/segmented-control";
@@ -379,6 +379,7 @@ export function CalendarApp({
   const [agentHiddenCalendarIds, setAgentHiddenCalendarIds] = useState<string[]>(() => readAgentHiddenIds());
   const [newCalendarsShown, setNewCalendarsShown] = useState(() => readNewCalendarsShown());
   const [googleConnected, setGoogleConnected] = useState<boolean | null>(null);
+  const googleRelinkRef = useRef(false);
   const [section, setSection] = useState<AppSection>("calendar");
   const [navCollapsed, setNavCollapsed] = useState(() => {
     if (typeof window === "undefined") return false;
@@ -461,6 +462,9 @@ export function CalendarApp({
     };
   }, [chatOpen]);
   const [streamingAssistantId, setStreamingAssistantId] = useState<string | null>(null);
+  const [settlingAssistantId, setSettlingAssistantId] = useState<string | null>(null);
+  const [holdLabel, setHoldLabel] = useState<string | null>(null);
+  const settleTimerRef = useRef(0);
   const [googlePeek, setGooglePeek] = useState<{ item: TimelineItem; anchor: DOMRect } | null>(null);
   const [googleDelete, setGoogleDelete] = useState<(GoogleDraftTarget & { title: string }) | null>(null);
   const [itemDelete, setItemDelete] = useState<{ id: string; title: string; kind: "event" | "task"; calendarName?: string } | null>(null);
@@ -1016,9 +1020,10 @@ export function CalendarApp({
 
   useEffect(() => {
     let cancelled = false;
+    googleRelinkRef.current = false;
     void getGoogleCalendarStatus()
       .then((status) => {
-        if (!cancelled) setGoogleConnected(status.connected);
+        if (!cancelled && !googleRelinkRef.current) setGoogleConnected(status.connected);
       })
       .catch(() => {
         if (!cancelled) setGoogleConnected(false);
@@ -1258,6 +1263,10 @@ export function CalendarApp({
     };
   }, []);
   useEffect(() => {
+    if (googleConnected === false) {
+      googlePullRef.current = async () => null;
+      return;
+    }
     if (seenGoogleVersionRef.current !== googleVersion) {
       seenGoogleVersionRef.current = googleVersion;
       coveredRef.current = [];
@@ -1271,7 +1280,22 @@ export function CalendarApp({
       let lastSyncedAt: number | null = null;
       for (const chunk of chunks) {
         if (!mountedRef.current || pullGenRef.current.get(key) !== gen) return null;
-        const pulled = await syncFromGoogle(chunk);
+        let pulled: Awaited<ReturnType<typeof syncFromGoogle>>;
+        try {
+          pulled = await syncFromGoogle(chunk);
+        } catch (err) {
+          if (
+            err instanceof ApiError &&
+            err.status === 409 &&
+            err.message === "Google Calendar needs to be linked again."
+          ) {
+            googleRelinkRef.current = true;
+            setGoogleConnected(false);
+            setNotice("Google Calendar needs to be linked again.");
+            return null;
+          }
+          throw err;
+        }
         if (!mountedRef.current || pullGenRef.current.get(key) !== gen) return null;
         setBusyBlocks((prev) =>
           mergeTimed(prev, pulled.busyBlocks, chunk, (block) => `${block.startUTC}:${block.endUTC}`),
@@ -1307,7 +1331,7 @@ export function CalendarApp({
       window.clearInterval(timer);
       window.removeEventListener("focus", onFocus);
     };
-  }, [focus, view, weekStartsOn, syncFromGoogle, googleVersion]);
+  }, [focus, view, weekStartsOn, syncFromGoogle, googleVersion, googleConnected]);
 
   useEffect(() => {
     let timer = 0;
@@ -1660,6 +1684,9 @@ export function CalendarApp({
     const nameAfterReply =
       calendar.activeChatRef()?.titleSource !== "user" &&
       !history.some((message) => message.role === "assistant" && message.content.trim());
+    window.clearTimeout(settleTimerRef.current);
+    setSettlingAssistantId(null);
+    setHoldLabel(null);
     setStreamingAssistantId(assistantId);
     setBusy(true);
     setError(null);
@@ -1671,6 +1698,7 @@ export function CalendarApp({
     let assistantText = "";
     let announcedTool = "";
     let nameThisChat = false;
+    let replaceNext = false;
     const THOUGHT_CAP = 16_000;
 
     function thoughtTextLength(): number {
@@ -1773,12 +1801,26 @@ export function CalendarApp({
             return;
           }
           if (event.type === "content-reset") {
-            assistantText = "";
-            schedule();
+            //keep the current text until the replacement arrives, so the bubble does not flash empty
+            replaceNext = true;
             return;
           }
           if (event.type === "content") {
             closeThought();
+            if (replaceNext) {
+              assistantText = event.content;
+              replaceNext = false;
+              if (rafId) cancelAnimationFrame(rafId);
+              rafId = 0;
+              writeAssistant();
+              setHoldLabel(null);
+              window.clearTimeout(settleTimerRef.current);
+              setSettlingAssistantId(assistantId);
+              settleTimerRef.current = window.setTimeout(() => {
+                setSettlingAssistantId((current) => (current === assistantId ? null : current));
+              }, 240);
+              return;
+            }
             assistantText += event.content;
             schedule();
             return;
@@ -1794,6 +1836,11 @@ export function CalendarApp({
             return;
           }
           if (event.type === "status") {
+            //matches OUTPUT_HOLD_LABEL from the guarded loop. the reply stays in progress until the stream closes.
+            if (event.label === "Finishing up…") {
+              setHoldLabel(event.label);
+              return;
+            }
             announcedTool = event.label;
             return;
           }
@@ -1830,6 +1877,7 @@ export function CalendarApp({
         controller.signal,
       );
       if (rafId) cancelAnimationFrame(rafId);
+      if (replaceNext) assistantText = "";
       if (!controller.signal.aborted) {
         writeAssistant();
         if (assistantText.trim()) nameThisChat = true;
@@ -1845,6 +1893,8 @@ export function CalendarApp({
     } finally {
       closeThought();
       writeAssistant();
+      //the stream stays open through the output check, so this is the first finished state
+      setHoldLabel(null);
       setBusy(false);
       setStreamingAssistantId(null);
       calendar.persistActiveChat();
@@ -2151,6 +2201,8 @@ export function CalendarApp({
           error={error}
           restriction={restriction}
           streamingAssistantId={streamingAssistantId}
+          settlingAssistantId={settlingAssistantId}
+          holdLabel={holdLabel}
           onSend={(payload) => void handleSend(payload)}
           onStop={() => abortRef.current?.abort()}
           onError={setError}

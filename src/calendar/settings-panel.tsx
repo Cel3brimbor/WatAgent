@@ -12,6 +12,8 @@ import {
 import type { ImportedCalendar, ImportedCalendarSource, MergedCalendar } from "@/calendar/types";
 import { ImportedCalendarsPanel } from "@/calendar/imported-calendars-panel";
 import { CalendarImportPanel } from "@/calendar/calendar-import-panel";
+import { signOut } from "@/auth/session";
+import { ApiError, apiJson } from "@/shared/api-base";
 import { isNativeShell } from "@/shared/platform";
 import { Switch } from "@/shared/switch";
 import { MoonIcon, SunIcon, SystemIcon } from "@/shared/icons";
@@ -89,6 +91,10 @@ export function SettingsPanel({
 }: Props) {
   const [status, setStatus] = useState<GoogleCalendarStatus | null>(null);
   const [working, setWorking] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState("");
+  const [deleteWorking, setDeleteWorking] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [teaTheme, setTeaTheme] = useTeaTheme();
   const [colorScheme, setColorScheme] = useColorScheme();
   const tea = TEA_THEMES.flatMap((group) => group.themes).find((theme) => theme.id === teaTheme);
@@ -142,6 +148,27 @@ export function SettingsPanel({
       onNotice("Google Calendar could not be unlinked.");
     } finally {
       setWorking(false);
+    }
+  }
+
+  async function deleteAccount() {
+    if (deleteConfirm !== "DELETE" || deleteWorking) return;
+    setDeleteWorking(true);
+    setDeleteError(null);
+    try {
+      await apiJson("/api/account", {
+        method: "DELETE",
+        body: JSON.stringify({ confirm: "DELETE" }),
+      });
+      await signOut().catch(() => undefined);
+      window.location.replace("/login/");
+    } catch (err) {
+      setDeleteError(
+        err instanceof ApiError && err.message.length <= 180
+          ? err.message
+          : "Your account could not be deleted. Try again.",
+      );
+      setDeleteWorking(false);
     }
   }
 
@@ -294,6 +321,63 @@ export function SettingsPanel({
             </div>
           </fieldset>
         ))}
+      </section>
+
+      <section className="settings-section" aria-labelledby="settings-delete">
+        <h3 id="settings-delete">Delete account</h3>
+        <p className="modal-hint">
+          Permanently deletes your account and the calendar data stored with it. This cannot be undone.
+        </p>
+        {deleteOpen ? (
+          <form
+            className="settings-delete-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void deleteAccount();
+            }}
+          >
+            <label className="modal-hint" htmlFor="settings-delete-confirm">
+              Type DELETE to confirm
+            </label>
+            <input
+              id="settings-delete-confirm"
+              className="calendar-editor-input"
+              value={deleteConfirm}
+              autoComplete="off"
+              autoCapitalize="characters"
+              spellCheck={false}
+              onChange={(event) => setDeleteConfirm(event.target.value)}
+            />
+            {deleteError ? (
+              <p className="modal-hint" role="alert">
+                {deleteError}
+              </p>
+            ) : null}
+            <div className="settings-actions">
+              <button
+                type="button"
+                className="ghost-btn"
+                disabled={deleteWorking}
+                onClick={() => {
+                  setDeleteOpen(false);
+                  setDeleteConfirm("");
+                  setDeleteError(null);
+                }}
+              >
+                Cancel
+              </button>
+              <button type="submit" className="danger-btn" disabled={deleteWorking || deleteConfirm !== "DELETE"}>
+                {deleteWorking ? "Deleting…" : "Delete account"}
+              </button>
+            </div>
+          </form>
+        ) : (
+          <div className="settings-actions">
+            <button type="button" className="danger-btn" onClick={() => setDeleteOpen(true)}>
+              Delete account
+            </button>
+          </div>
+        )}
       </section>
 
       <div className="settings-actions">

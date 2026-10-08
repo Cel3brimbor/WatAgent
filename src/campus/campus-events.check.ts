@@ -4,7 +4,10 @@ import {
   campusDays,
   campusEventIcs,
   campusEventMeta,
+  campusEventsMetaOf,
   campusEventsOf,
+  campusFreshnessLabel,
+  campusOvernightSession,
   campusFeedCategories,
   campusFeedUrl,
   campusScrapeIsNewer,
@@ -79,7 +82,22 @@ assert.deepEqual(payload.events[0].categories, ["talks"]);
 assert.deepEqual(payload.events[1].categories, ["other"]);
 assert.deepEqual(payload.sources.map((source) => source.id), ["uw-events"]);
 assert.equal(campusEventsOf({ status: "loading" }).status, "loading");
+assert.equal(campusEventsOf({ status: "ready", updating: true }).updating, true);
+assert.equal(campusEventsOf({ status: "ready" }).updating, false);
 assert.equal(campusEventsOf(null).events.length, 0);
+assert.deepEqual(campusEventsMetaOf({ status: "ready", updatedAt: 1_790_000_000_000, updating: true }), {
+  status: "ready",
+  updatedAt: 1_790_000_000_000,
+  updating: true,
+  progress: null,
+});
+assert.deepEqual(campusEventsMetaOf({ updating: true, progress: { done: 9.2, total: 11, label: "  Warriors athletics · Football  " } }).progress, {
+  done: 9,
+  total: 11,
+  label: "Warriors athletics · Football",
+});
+assert.equal(campusFreshnessLabel(1_000, 1_000 + 10_000, false), "Updated just now");
+assert.equal(campusFreshnessLabel(1_000, 1_000 + 10_000, true), "Currently updating");
 
 //subscription links: webcal for a plain-http API, https stays https, and they read back
 assert.equal(campusFeedUrl(["careers", "talks"], "http://localhost:43117"), "webcal://localhost:43117/api/campus-events/feed.ics?categories=careers,talks");
@@ -114,6 +132,8 @@ assert.deepEqual(toggledCategories(["academic", "talks"], "talks", false, catego
 
 //calendar items: all-day events on local midnights, timed ones as they are
 assert.deepEqual(localSpan(readingWeek), { startUTC: new Date(2026, 9, 10).getTime(), endUTC: new Date(2026, 9, 19).getTime() });
+assert.equal(campusOvernightSession(Date.parse("2026-10-17T22:30:00Z"), Date.parse("2026-10-18T04:30:00Z")), true);
+assert.equal(campusOvernightSession(Date.parse("2026-10-10T04:00:00Z"), Date.parse("2026-10-19T04:00:00Z")), false);
 assert.deepEqual(campusEventMeta(lecture, "events"), {
   kind: "event",
   startUTC: lecture.startUTC,

@@ -11,6 +11,16 @@ function httpOrigin(raw: string | undefined, fallback: string): string {
 
 export const API_BASE_URL = httpOrigin(process.env.NEXT_PUBLIC_API_BASE_URL, "http://localhost:4000");
 
+/** True when this app talks to an API on this machine. The hosted site reads a remote API and does not scrape. */
+export function apiIsLocal(): boolean {
+  try {
+    const host = new URL(API_BASE_URL).hostname;
+    return host === "localhost" || host === "127.0.0.1" || host === "[::1]";
+  } catch {
+    return false;
+  }
+}
+
 export const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() ?? "";
 
 export const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim() ?? "";
