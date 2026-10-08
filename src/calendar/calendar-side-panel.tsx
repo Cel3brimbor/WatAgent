@@ -218,7 +218,7 @@ export function CalendarSidePanel({
   const smartTagCalendars = allRows.map((row) => ({ id: row.id, name: row.name, google: Boolean(row.google) }));
 
   function toggle(id: string, checked: boolean) {
-    if (isBuiltinLocalCalendarId(id) && !checked) return;
+    if (id === "tasks" && !checked) return;
     if (externalById(id) || isCustom(id)) {
       onSources({ ...sources, mutedGoogleIds: checked ? sources.mutedGoogleIds.filter((item) => item !== id) : [...new Set([...sources.mutedGoogleIds, id])] });
       return;
@@ -661,7 +661,7 @@ function CalendarGroup({
                   aria-pressed={groupOn && row.checked}
                   aria-label={`${groupOn && row.checked ? "Hide" : "Show"} ${row.name}`}
                   onClick={() => {
-                    if (!groupOn || isBuiltinLocalCalendarId(row.id)) return;
+                    if (!groupOn || row.id === "tasks") return;
                     onToggleRow?.(row.id, !row.checked);
                   }}
                 >

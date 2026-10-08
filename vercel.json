@@ -25,16 +25,23 @@
     {
       "src": "/api/(.*)",
       "dest": "${API_ORIGIN}/api/$1",
-      "env": ["API_ORIGIN"],
+      "env": [
+        "API_ORIGIN"
+      ],
       "transforms": [
         {
           "type": "request.headers",
           "op": "set",
-          "target": { "key": "x-watagent-proxy-secret" },
+          "target": {
+            "key": "x-watagent-proxy-secret"
+          },
           "args": "${VERCEL_PROXY_SECRET}",
-          "env": ["VERCEL_PROXY_SECRET"]
+          "env": [
+            "VERCEL_PROXY_SECRET"
+          ]
         }
       ]
     }
-  ]
+  ],
+  "framework": "nextjs"
 }

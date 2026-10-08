@@ -9,7 +9,11 @@ function httpOrigin(raw: string | undefined, fallback: string): string {
   }
 }
 
-export const API_BASE_URL = httpOrigin(process.env.NEXT_PUBLIC_API_BASE_URL, "http://localhost:4000");
+// Hosted web builds can proxy /api through their own origin for session cookies.
+// Native and local builds keep the explicit backend URL.
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL === "same-origin"
+  ? ""
+  : httpOrigin(process.env.NEXT_PUBLIC_API_BASE_URL, "http://localhost:4000");
 
 /** True when this app talks to an API on this machine. The hosted site reads a remote API and does not scrape. */
 export function apiIsLocal(): boolean {

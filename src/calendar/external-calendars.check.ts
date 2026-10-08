@@ -7,7 +7,8 @@ const portal: CalendarItemDoc = { ...learn, id: "b", calendar: { ...learn.calend
 const manual: CalendarItemDoc = { ...learn, id: "c", calendar: { ...learn.calendar, importSource: undefined } };
 const filter = { ...ALL_SOURCES, events: false, tasks: false, google: false };
 assert.equal(calendarItemVisible(learn, filter), true, "imports are independent of WatAgent/Google visibility");
-assert.equal(calendarItemVisible(manual, filter), true, "Agent Main always stays visible");
+assert.equal(calendarItemVisible(manual, filter), false, "unchecking Agent Main hides its events");
+assert.equal(calendarItemVisible(manual, { ...filter, events: true }), true, "checking Agent Main shows its events again");
 const task: CalendarItemDoc = { ...manual, id: "t", calendar: { ...manual.calendar, kind: "task" } };
 assert.equal(calendarItemVisible(task, filter), true, "Tasks always stays visible");
 assert.equal(calendarItemVisible(learn, { ...filter, mutedGoogleIds: ["ics:learn"] }), false);
@@ -31,7 +32,7 @@ assert.equal(calendarItemVisible(learn, { ...filter, mutedGoogleIds: ["ics:learn
 assert.equal(calendarItemVisible(learn, { ...filter, mutedGoogleIds: [school.id] }, [school]), false);
 const groupsOff = { watagent: true, external: false, campus: true, other: true, smartTags: true, hidden: false };
 assert.equal(calendarItemVisible(learn, { ...filter, groups: groupsOff }), false, "hiding the external group keeps each calendar's own check");
-assert.equal(calendarItemVisible(manual, { ...filter, events: true, groups: { ...groupsOff, watagent: false, external: true } }), true, "agent main stays visible when its header is off");
+assert.equal(calendarItemVisible(manual, { ...filter, events: true, groups: { ...groupsOff, watagent: false, external: true } }), false, "Agent Main follows its group visibility");
 assert.equal(calendarItemVisible(learn, { ...filter, hiddenIds: ["ics:learn"], groups: { ...groupsOff, external: true } }), false);
 assert.equal(calendarItemVisible(learn, { ...filter, hiddenIds: ["ics:learn"], groups: { ...groupsOff, external: true, hidden: true } }), true, "the hidden header shows those calendars without clearing the list");
 const locked = protectBuiltinCalendarSources({
@@ -41,7 +42,7 @@ const locked = protectBuiltinCalendarSources({
   hiddenIds: ["events", "tasks", "ics:learn"],
   readOnlyCalendarIds: ["events", "tasks", "cal-00000000-0000-4000-8000-000000000001"],
 });
-assert.equal(locked.events, true);
+assert.equal(locked.events, false, "normalizing preferences preserves Agent Main visibility");
 assert.equal(locked.tasks, true);
 assert.deepEqual(locked.hiddenIds, ["ics:learn"]);
 assert.deepEqual(locked.readOnlyCalendarIds, ["cal-00000000-0000-4000-8000-000000000001"]);

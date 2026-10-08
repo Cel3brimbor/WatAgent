@@ -10,6 +10,7 @@ import { CloseIcon, PlusIcon } from "@/shared/icons";
 
 type Props = {
   focus: Date;
+  onSelectDate: (date: Date) => void;
   weekStartsOn: 0 | 1;
   itemsForDay: (date: Date) => TimelineItem[];
   onOpen: (item: TimelineItem) => void;
@@ -19,6 +20,7 @@ type Props = {
 
 export function CalendarMonthView({
   focus,
+  onSelectDate,
   weekStartsOn,
   itemsForDay,
   onOpen,
@@ -26,10 +28,13 @@ export function CalendarMonthView({
   onCompleteTask,
 }: Props) {
   const cells = monthCells(focus, weekStartsOn);
+  const mobileCells = cells.slice(0, Math.ceil((cells.findLastIndex((cell) => cell.inMonth) + 1) / 7) * 7);
   const labels = weekdayLabels(weekStartsOn);
   const [popKey, setPopKey] = useState<string | null>(null);
   const pop = usePresence(popKey);
   const popRef = useRef<HTMLDivElement | null>(null);
+  const selectedDay = focus;
+  const selectedItems = itemsForDay(selectedDay);
 
   useEffect(() => {
     if (!popKey) return;
@@ -49,7 +54,8 @@ export function CalendarMonthView({
   }, [popKey]);
 
   return (
-    <div className="calendar-month">
+    <div className="calendar-month-layout">
+    <div className="calendar-month calendar-month-desktop">
       <div className="calendar-sticky">
         <div className="calendar-month-weekdays">
           {labels.map((label) => (
@@ -148,6 +154,42 @@ export function CalendarMonthView({
           );
         })}
       </div>
+    </div>
+    <div className="calendar-month-mobile">
+      <div className="calendar-mobile-weekdays" aria-hidden="true">
+        {labels.map((label) => <span key={label}>{label.slice(0, 1)}</span>)}
+      </div>
+      <div className="calendar-mobile-dates" aria-label="Choose a date">
+        {mobileCells.map((cell) => {
+          const items = itemsForDay(cell.date);
+          const selected = cell.date.toDateString() === selectedDay.toDateString();
+          return (
+            <button key={cell.date.toDateString()} type="button"
+              className={`calendar-mobile-date${cell.inMonth ? "" : " is-outside"}${isToday(cell.date) ? " is-today" : ""}${selected ? " is-selected" : ""}`}
+              aria-label={`${cell.date.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" })}, ${items.length} scheduled`}
+              aria-pressed={selected} aria-current={isToday(cell.date) ? "date" : undefined}
+              onClick={() => onSelectDate(cell.date)}>
+              <span className="calendar-mobile-date-number">{cell.date.getDate()}</span>
+              <span className="calendar-mobile-date-dots" aria-hidden="true">
+                {items.slice(0, 3).map((item) => <i key={item.id} style={{ backgroundColor: item.calendarColor ?? item.google?.calendarColor ?? "var(--accent)" }} />)}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      <section className="calendar-mobile-agenda" aria-label="Selected day agenda">
+        <header>
+          <div><p>{isToday(selectedDay) ? "Today" : selectedDay.toLocaleDateString(undefined, { weekday: "long" })}</p>
+            <h3 aria-live="polite">{selectedDay.toLocaleDateString(undefined, { month: "long", day: "numeric" })}</h3></div>
+        </header>
+        {selectedItems.length ? selectedItems.map((item) => (
+          <div className="calendar-mobile-agenda-row" key={item.id}>
+            <span className="calendar-mobile-agenda-time">{item.allDay ? "all-day" : new Date(item.startUTC).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}</span>
+            <TimelineStrip item={item} layout="card" onOpen={onOpen} onCompleteTask={onCompleteTask} />
+          </div>
+        )) : <p className="calendar-mobile-agenda-empty">No events. A little room in your day.</p>}
+      </section>
+    </div>
     </div>
   );
 }

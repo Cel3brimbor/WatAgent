@@ -97,6 +97,40 @@
   border-color: var(--line-strong);
 }
 
+.departmentFilters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  margin-bottom: 1rem;
+  font-size: 0.85rem;
+}
+
+.departmentFilters select {
+  flex: 1 1 15rem;
+  min-width: 0;
+  max-width: 100%;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--line);
+  border-radius: 0.6rem;
+  background: var(--panel-solid);
+  color: var(--ink);
+  font: inherit;
+}
+
+.departmentCheckbox {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.departmentFilters p {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+}
+
 /*subscriptions: a one-line summary that opens into a switch per category, like the keyword task rules*/
 .subscriptions {
   margin-bottom: 1rem;

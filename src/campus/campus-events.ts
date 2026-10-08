@@ -6,6 +6,9 @@ import { newId } from "@/shared/ids";
 /** One category the backend sorts UWaterloo events into, like "careers" or "talks". Drop-in sports carry group "drop-ins". */
 export type CampusCategory = { id: string; label: string; hint: string; group?: "drop-ins" };
 export type CampusSource = { id: string; name: string; url: string };
+export type CampusFaculty = { id: string; label: string };
+export type CampusDepartment = { id: string; label: string; faculties: string[] };
+export type DepartmentRelevance = { departments: Array<{ id: string; confidence: number; method: "source" | "jev" }>; campusWide: boolean };
 
 /** One occurrence of a public UWaterloo event. All-day events carry their Toronto dates, end exclusive. */
 export type CampusEvent = {
@@ -22,6 +25,7 @@ export type CampusEvent = {
   endDate?: string;
   categories: string[];
   tags: string[];
+  departmentRelevance?: DepartmentRelevance;
 };
 
 export type CampusEventsStatus = "ready" | "loading" | "off";
@@ -37,6 +41,8 @@ export type CampusEventsPayload = {
   progress: CampusScrapeProgress | null;
   categories: CampusCategory[];
   sources: CampusSource[];
+  faculties: CampusFaculty[];
+  departments: CampusDepartment[];
   events: CampusEvent[];
 };
 
@@ -145,7 +151,7 @@ function httpsLink(raw: unknown): string | null {
   }
 }
 
-function campusEventOf(raw: unknown, known: Set<string>): CampusEvent | null {
+function campusEventOf(raw: unknown, known: Set<string>, departments: Set<string>): CampusEvent | null {
   if (!raw || typeof raw !== "object") return null;
   const rec = raw as Record<string, unknown>;
   const id = line(rec.id, 200);
@@ -176,7 +182,29 @@ function campusEventOf(raw: unknown, known: Set<string>): CampusEvent | null {
     ...(allDay ? { startDate, endDate } : {}),
     categories: categories.length > 0 ? categories : ["other"],
     tags,
+    departmentRelevance: departmentRelevanceOf(rec.departmentRelevance, departments),
   };
+}
+
+function departmentRelevanceOf(raw: unknown, known: Set<string>): DepartmentRelevance {
+  const rec = raw && typeof raw === "object" ? raw as Record<string, unknown> : {};
+  const entries = Array.isArray(rec.departments) ? rec.departments.flatMap((raw) => {
+    if (!raw || typeof raw !== "object") return [];
+    const { id, confidence, method } = raw as Record<string, unknown>;
+    return typeof id === "string" && known.has(id) && typeof confidence === "number" && confidence >= 0.8 && confidence <= 1 &&
+      (method === "source" || method === "jev") ? [{ id, confidence, method }] : [];
+  }) : [];
+  return { departments: [...new Map(entries.map((entry) => [entry.id, entry])).values()] as DepartmentRelevance["departments"], campusWide: rec.campusWide === true };
+}
+
+/** Department choices match independently of event type; general campus events are optional. */
+export function eventInCampusDepartment(event: CampusEvent, department: string, includeCampusWide = true): boolean {
+  if (!department) return true;
+  const relevance = event.departmentRelevance;
+  if (department === "campus-wide") return relevance?.campusWide === true;
+  if (department === "unclassified") return !relevance?.campusWide && !relevance?.departments.length;
+  return relevance?.departments.some((entry) => entry.id === department && entry.confidence >= 0.8) === true ||
+    (includeCampusWide && relevance?.campusWide === true);
 }
 
 /**
@@ -213,7 +241,21 @@ export function campusEventsOf(raw: unknown): CampusEventsPayload {
         return sourceId && label && link ? [{ id: sourceId, name: label, url: link }] : [];
       })
     : [];
-  const events = Array.isArray(rec.events) ? rec.events.map((entry) => campusEventOf(entry, known)).filter((event): event is CampusEvent => event != null) : [];
+  const faculties: CampusFaculty[] = Array.isArray(rec.faculties) ? rec.faculties.flatMap((entry) => {
+    if (!entry || typeof entry !== "object") return [];
+    const { id, label } = entry as Record<string, unknown>;
+    return typeof id === "string" && CATEGORY_ID.test(id) && line(label, 80) ? [{ id, label: line(label, 80)! }] : [];
+  }) : [];
+  const facultyIds = new Set(faculties.map((entry) => entry.id));
+  const departments: CampusDepartment[] = Array.isArray(rec.departments) ? rec.departments.flatMap((entry) => {
+    if (!entry || typeof entry !== "object") return [];
+    const { id, label, faculties: rawFaculties } = entry as Record<string, unknown>;
+    const groups = Array.isArray(rawFaculties) ? rawFaculties.filter((id): id is string => typeof id === "string" && facultyIds.has(id)) : [];
+    return typeof id === "string" && /^[a-z][a-z-]{0,79}$/.test(id) && line(label, 120) && groups.length
+      ? [{ id, label: line(label, 120)!, faculties: groups }] : [];
+  }) : [];
+  const departmentIds = new Set(departments.map((entry) => entry.id));
+  const events = Array.isArray(rec.events) ? rec.events.map((entry) => campusEventOf(entry, known, departmentIds)).filter((event): event is CampusEvent => event != null) : [];
   const status: CampusEventsStatus = rec.status === "loading" || rec.status === "off" ? rec.status : "ready";
   const updatedAt = typeof rec.updatedAt === "number" && Number.isFinite(rec.updatedAt) ? rec.updatedAt : null;
   return {
@@ -223,6 +265,8 @@ export function campusEventsOf(raw: unknown): CampusEventsPayload {
     progress: scrapeProgressOf(rec.progress),
     categories,
     sources,
+    faculties,
+    departments,
     events: events.sort((a, b) => a.startUTC - b.startUTC),
   };
 }
@@ -233,11 +277,13 @@ export function campusEventsMetaOf(raw: unknown): CampusEventsMeta {
   const status: CampusEventsStatus = rec.status === "loading" || rec.status === "off" ? rec.status : "ready";
   const updatedAt = typeof rec.updatedAt === "number" && Number.isFinite(rec.updatedAt) ? rec.updatedAt : null;
   return { status, updatedAt, updating: rec.updating === true, progress: scrapeProgressOf(rec.progress) };
+
 }
 
 /** The subscription link for these categories; none means every event. Calendar links must be https or webcal, so a plain-http API (development) gets webcal. */
 export function campusFeedUrl(categories: string[], base = API_BASE_URL): string {
-  const url = new URL(CAMPUS_FEED_PATH, base);
+  const origin = base || (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
+  const url = new URL(CAMPUS_FEED_PATH, origin);
   const ids = categories.filter((id) => CATEGORY_ID.test(id));
   url.search = ids.length > 0 ? `?categories=${ids.join(",")}` : "";
   return url.protocol === "http:" ? `webcal:${url.href.slice("http:".length)}` : url.href;

@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 export type AppSection = "calendar" | "tasks" | "events" | "map" | "settings";
 
@@ -22,15 +22,43 @@ const BARS: Array<{ id: AppSection; label: string }> = [
 ];
 
 export function SideNav({ section, collapsed, onSection, onToggle, advanced = true, children }: Props) {
+  const [mobile, setMobile] = useState(false);
+  const [calendarsOpen, setCalendarsOpen] = useState(false);
+  useEffect(() => {
+    const query = window.matchMedia("(max-width: 760px)");
+    const update = () => {
+      setMobile(query.matches);
+      setCalendarsOpen(false);
+    };
+    update();
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
+  useEffect(() => {
+    if (!calendarsOpen) return;
+    const close = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.stopPropagation();
+        setCalendarsOpen(false);
+      }
+    };
+    window.addEventListener("keydown", close);
+    return () => window.removeEventListener("keydown", close);
+  }, [calendarsOpen]);
+  const selectSection = (value: AppSection) => {
+    setCalendarsOpen(false);
+    onSection(value);
+  };
   return (
     <nav className="side-nav" aria-label="Sections">
       <div className="side-nav-head">
         <button
           type="button"
           className="side-nav-toggle"
-          aria-expanded={!collapsed}
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          onClick={onToggle}
+          aria-expanded={mobile ? calendarsOpen : !collapsed}
+          aria-controls="calendar-sidebar"
+          aria-label={mobile ? (calendarsOpen ? "Close calendar list" : "Show calendar list") : collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          onClick={() => mobile ? setCalendarsOpen((value) => !value) : onToggle()}
         >
           <MenuIcon />
         </button>
@@ -43,7 +71,7 @@ export function SideNav({ section, collapsed, onSection, onToggle, advanced = tr
           aria-current={section === "settings" ? "page" : undefined}
           aria-label="Settings"
           title="Settings"
-          onClick={() => onSection("settings")}
+          onClick={() => selectSection("settings")}
         >
           <BarIcon id="settings" />
         </button>
@@ -56,14 +84,17 @@ export function SideNav({ section, collapsed, onSection, onToggle, advanced = tr
             className={`side-nav-bar${section === bar.id ? " is-active" : ""}`}
             aria-current={section === bar.id ? "page" : undefined}
             aria-label={bar.label}
-            onClick={() => onSection(bar.id)}
+            onClick={() => selectSection(bar.id)}
           >
             <BarIcon id={bar.id} />
             <span className="side-nav-label">{bar.label}</span>
           </button>
         ))}
       </div>
-      <div className="side-nav-extra">{children}</div>
+      {mobile && calendarsOpen ? (
+        <button type="button" className="mobile-nav-scrim" aria-label="Close calendar list" onClick={() => setCalendarsOpen(false)} />
+      ) : null}
+      <div id="calendar-sidebar" className={`side-nav-extra${mobile && calendarsOpen ? " is-mobile-open" : ""}`}>{children}</div>
     </nav>
   );
 }

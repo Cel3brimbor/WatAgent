@@ -1,0 +1,138 @@
+/* Use the same appearance tokens and fonts as the calendar, including saved themes. */
+.page {
+  min-height: 100vh;
+  color: var(--ink);
+  background: var(--paper);
+  font-family: var(--font-body);
+}
+.page a { color: inherit; text-decoration: none; }
+.page a:focus-visible, .page button:focus-visible, .page summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+}
+.skip { position: absolute; top: -70px; left: 20px; z-index: 10; padding: 12px; background: var(--panel-solid); }
+.skip:focus { top: 10px; }
+.nav { max-width: 1376px; margin: auto; padding: 25px 48px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--line); }
+.brand { font-family: var(--font-display); font-size: 27px; font-weight: 600; letter-spacing: -1px; }
+.nav nav { display: flex; gap: 32px; align-items: center; font-size: 13px; }
+.navCta { border: 1px solid var(--line); background: var(--panel-solid); padding: 10px 17px; border-radius: var(--radius); }
+.navCta span { margin-left: 16px; }
+.hero { text-align: center; padding: 70px 24px 58px; }
+.eyebrow, .label { font-size: 10px; letter-spacing: 1.7px; font-weight: 600; color: var(--ink-soft); }
+.eyebrow { display: flex; justify-content: center; align-items: center; gap: 9px; }
+.eyebrow > span { height: 6px; width: 6px; border-radius: 50%; background: var(--accent); }
+.hero h1 { font-family: var(--font-display); font-size: clamp(48px, 6.2vw, 84px); font-weight: 450; line-height: 1.08; letter-spacing: -3.5px; margin: 24px 0; }
+.page em { font-weight: 400; color: var(--accent); }
+.hero > p { font-size: 16px; line-height: 1.8; color: var(--ink-soft); margin: 0; }
+.actions { display: flex; justify-content: center; align-items: center; gap: 28px; margin-top: 30px; }
+.primary { display: inline-flex; align-items: center; justify-content: center; gap: 30px; background: var(--accent); color: var(--on-accent) !important; padding: 15px 22px; border-radius: var(--radius); font-size: 13px; transition: background .2s; }
+.primary:hover { background: var(--accent-deep); }
+.secondary { font-size: 13px; }
+.secondary span { margin-left: 12px; }
+.heroNote { font-size: 8px; letter-spacing: 1.6px; color: var(--ink-soft); margin-top: 25px; }
+.previewSection { max-width: 1376px; margin: auto; padding: 0 48px; }
+.previewCaption { display: flex; justify-content: space-between; margin-bottom: 15px; font-size: 9px; letter-spacing: 1.1px; color: var(--ink-soft); }
+.previewCaption > span:last-child { font-family: var(--font-display); font-style: italic; font-size: 14px; letter-spacing: 0; }
+.productDemo { border: 1px solid var(--line-strong); border-radius: 10px; background: var(--paper); box-shadow: var(--shadow); overflow: hidden; }
+.demoFrame { display: grid; grid-template-columns: 205px minmax(0, 1fr); }
+.demoSidebar { padding: 18px 10px; background: var(--nav-bg); border-right: 1px solid var(--line); }
+.demoWordmark { font: 600 23px var(--font-display); padding: 0 10px 22px; letter-spacing: -.7px; }
+.demoSidebar nav { display: grid; gap: 5px; }
+.demoSidebar nav a { width: 100%; min-height: 35px; padding-left: 14px; }
+.sourceList { padding: 12px 10px; }
+.sourceList h3 { font-size: 9px; letter-spacing: 1px; color: var(--ink-soft); margin: 24px 0 12px; }
+.sourceList p { display: flex; align-items: center; gap: 9px; font-size: 12px; margin: 13px 0; }
+.sourceList i { width: 11px; height: 11px; border-radius: 3px; background: var(--event-color); }
+.sourceList .taskSwatch { background: var(--task-color); }
+.sourceList .sourceHint { color: var(--ink-soft); font-size: 11px; line-height: 1.8; }
+.demoMain { min-width: 0; }
+.demoToolbar { min-height: 76px; }
+.agentLink { color: var(--accent) !important; font-size: 12px; white-space: nowrap; }
+.demoCalendar { height: 560px; overflow: auto; padding: 10px; }
+.demoCalendar :global(.calendar-month-grid) { grid-auto-rows: minmax(90px, 1fr); }
+.demoCalendar :global(.calendar-month-cell) { min-height: 90px; }
+.demoFootnote { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 14px 20px; border-top: 1px solid var(--line); font-size: 10px; color: var(--ink-soft); }
+.demoFootnote strong { color: var(--ink); }
+.demoFootnote button { background: var(--panel-solid); border: 1px solid var(--line); color: var(--ink); border-radius: 5px; padding: 5px 9px; cursor: pointer; }
+.features { max-width: 1280px; margin: 95px auto 0; padding: 0 48px; }
+.sectionIntro { text-align: center; }
+.sectionIntro h2, .closing h2 { font: 400 49px/1.12 var(--font-display); letter-spacing: -1.8px; margin: 20px 0; }
+.sectionIntro > p { font-size: 14px; color: var(--ink-soft); line-height: 1.7; }
+.featureGrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 36px; margin-top: 50px; }
+.featureNumber { font-size: 8px; letter-spacing: 1.4px; color: var(--ink-soft); }
+.featureGrid h3 { font: 400 24px var(--font-display); letter-spacing: -.5px; margin: 25px 0 12px; }
+.featureGrid article > p { font-size: 13px; line-height: 1.8; color: var(--ink-soft); margin: 0; }
+.miniCalendars, .miniChat, .miniEvent { height: 175px; margin-top: 18px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--nav-bg); padding: 24px; display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 7px; }
+.miniCalendars span { background: var(--panel-solid); border: 1px solid var(--line); padding: 8px; border-radius: 5px; font-size: 8px; }
+.miniCalendars b { width: 100%; text-align: center; font-size: 23px; color: var(--accent); line-height: 1; }
+.miniCalendars strong { font-size: 10px; font-weight: 500; background: var(--panel-solid); border: 1px solid var(--accent); padding: 10px 25px; border-radius: var(--radius); }
+.miniChat { background: var(--panel-solid); flex-direction: column; align-items: flex-start; gap: 15px; }
+.miniChat span { align-self: flex-end; border: 1px solid var(--line); background: var(--nav-bg); padding: 11px; border-radius: var(--radius); font-size: 10px; }
+.miniChat strong { font-size: 11px; font-weight: 500; }
+.miniChat i { font-style: normal; font-size: 9px; line-height: 1.5; color: var(--ink-soft); }
+.miniEvent { background: var(--panel-solid); flex-direction: column; align-items: flex-start; gap: 10px; }
+.miniEvent > span { font-size: 7px; letter-spacing: 1.5px; color: var(--accent); }
+.miniEvent strong { font: 400 25px/1.1 var(--font-display); }
+.miniEvent > div { font-size: 8px; color: var(--ink-soft); }
+.faq { max-width: 1184px; margin: 100px auto 0; border-top: 1px solid var(--line); padding: 50px 0; display: grid; grid-template-columns: 1fr 1.3fr; gap: 60px; }
+.faq h2 { font: 400 32px var(--font-display); letter-spacing: -.8px; margin: 10px 0; }
+.faq details { border-bottom: 1px solid var(--line); padding: 20px 0; }
+.faq summary { font-size: 13px; cursor: pointer; list-style: none; display: flex; justify-content: space-between; gap: 15px; }
+.faq summary::-webkit-details-marker { display: none; }
+.faq summary span { color: var(--accent); }
+.faq details[open] summary span { transform: rotate(45deg); }
+.faq details p { font-size: 12px; line-height: 1.8; color: var(--ink-soft); max-width: 480px; margin: 14px 0 0; }
+.closing { text-align: center; background: var(--nav-bg); border-block: 1px solid var(--line); margin-top: 25px; padding: 65px 24px 70px; }
+.closing h2 { font-size: 55px; margin-bottom: 28px; }
+.footer { max-width: 1280px; margin: auto; padding: 34px 48px; display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.footer > span, .footer > a:last-child { font-size: 10px; color: var(--ink-soft); }
+.footer .brand { font-size: 22px; }
+@media (max-width: 1100px) {
+  .demoFrame { grid-template-columns: 165px minmax(0, 1fr); }
+  .demoToolbar { padding: 14px; }
+  .demoToolbar :global(.calendar-toolbar-left) { flex-basis: 100%; }
+  .demoToolbar :global(.calendar-toolbar-right) { width: 100%; justify-content: space-between; }
+  .faq { margin-inline: 48px; }
+  .featureGrid { gap: 24px; }
+  .miniCalendars, .miniChat, .miniEvent { padding: 16px; }
+}
+@media (max-width: 760px) {
+  .nav { padding: 20px 22px; }
+  .nav nav { gap: 14px; }
+  .nav nav > a:not(:last-child) { display: none; }
+  .brand { font-size: 24px; }
+  .hero { padding: 50px 22px 42px; }
+  .eyebrow { font-size: 7px; letter-spacing: 1.3px; }
+  .hero h1 { font-size: 50px; letter-spacing: -2px; }
+  .hero > p { font-size: 14px; }
+  .desktopBreak { display: none; }
+  .actions { flex-direction: column; gap: 22px; }
+  .heroNote { font-size: 7px; }
+  .previewSection { padding: 0 16px; }
+  .previewCaption { font-size: 7px; }
+  .previewCaption > span:last-child { display: none; }
+  .demoFrame { grid-template-columns: minmax(0, 1fr); }
+  .demoSidebar { display: none; }
+  .page .productDemo .demoToolbar { display: flex; flex-wrap: wrap; padding: 14px; gap: 10px; }
+  .demoToolbar :global(.calendar-toolbar-right) { gap: 8px; flex-wrap: wrap; }
+  .demoToolbar :global(.segmented) { width: auto; }
+  .demoToolbar :global(.segmented-option) { padding-inline: 12px; }
+  .demoCalendar { height: 580px; padding: 5px; }
+  .demoFootnote { flex-wrap: wrap; justify-content: flex-start; gap: 6px 15px; padding: 12px; }
+  .features { margin-top: 65px; padding: 0 24px; }
+  .sectionIntro h2 { font-size: 37px; letter-spacing: -1px; }
+  .featureGrid { grid-template-columns: 1fr; gap: 38px; margin-top: 35px; }
+  .featureGrid h3 { margin-top: 20px; }
+  .miniCalendars, .miniChat, .miniEvent { padding: 25px; }
+  .miniCalendars span { font-size: 10px; }
+  .miniChat span { font-size: 12px; }
+  .miniChat strong { font-size: 13px; }
+  .miniChat i { font-size: 11px; }
+  .miniEvent strong { font-size: 30px; }
+  .faq { margin: 60px 24px 0; grid-template-columns: 1fr; gap: 10px; padding: 30px 0; }
+  .faq h2 { font-size: 30px; }
+  .closing { padding: 50px 20px; }
+  .closing h2 { font-size: 42px; }
+  .footer { padding: 28px 24px; flex-wrap: wrap; }
+  .footer > span { order: 3; width: 100%; }
+}

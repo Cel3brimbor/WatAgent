@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { SearchInput } from "@/shared/responsive-text-input";
 import { fetchCampusEvents, fetchCampusEventsStatus } from "@/campus/campus-client";
 import {
   campusCategoryLabel,
@@ -11,6 +12,7 @@ import {
   campusFeedUrl,
   campusPlacements,
   eventInCampusCategory,
+  eventInCampusDepartment,
   googleCalendarLink,
   icsFileName,
   isDropInSport,
@@ -187,6 +189,8 @@ function useMinute(): number {
 export function CampusEventsSection({ items, calendars, onAdd, subscriptions, onSubscribe }: Props) {
   const { data, error, loading, reload } = useCampusEvents();
   const [category, setCategory] = useState<string | null>(null);
+  const [department, setDepartment] = useState("");
+  const [includeCampusWide, setIncludeCampusWide] = useState(true);
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const [limit, setLimit] = useState(PAGE);
@@ -196,11 +200,12 @@ export function CampusEventsSection({ items, calendars, onAdd, subscriptions, on
   const [pendingCategories, setPendingCategories] = useState<string[] | null>(null);
   const savedCategories = subscriptions.flatMap((entry) => entry.categories);
   const subscribed = pendingCategories ?? savedCategories;
-  const feedIds = subscriptions.map((entry) => entry.feedId);
+  const feedIds = useMemo(() => subscriptions.map((entry) => entry.feedId), [subscriptions]);
   const placementOf = useMemo(() => campusPlacements(items, feedIds), [items, feedIds]);
 
   const labels = useMemo(() => new Map((data?.categories ?? []).map((entry) => [entry.id, entry.label])), [data]);
   const sourceNames = useMemo(() => new Map((data?.sources ?? []).map((entry) => [entry.id, entry.name])), [data]);
+  const departmentLabels = useMemo(() => new Map((data?.departments ?? []).map((entry) => [entry.id, entry.label])), [data]);
   const upcoming = useMemo(() => (data?.events ?? []).filter((event) => localSpan(event).endUTC > now), [data, now]);
   const counts = useMemo(() => {
     const found = new Map<string, number>();
@@ -212,8 +217,8 @@ export function CampusEventsSection({ items, calendars, onAdd, subscriptions, on
     return found;
   }, [upcoming]);
   const shown = useMemo(
-    () => upcoming.filter((event) => eventInCampusCategory(event, category) && matchesCampusQuery(event, query)),
-    [upcoming, category, query],
+    () => upcoming.filter((event) => eventInCampusCategory(event, category) && eventInCampusDepartment(event, department, includeCampusWide) && matchesCampusQuery(event, query)),
+    [upcoming, category, department, includeCampusWide, query],
   );
   const days = useMemo(() => campusDays(shown, now), [shown, now]);
 
@@ -322,6 +327,10 @@ export function CampusEventsSection({ items, calendars, onAdd, subscriptions, on
                 {labels.get(id) ?? "Other"}
               </span>
             ))}
+            {next.departmentRelevance?.departments.map(({ id }) => (
+              <span key={`department:${id}`} className={styles.tag}>{departmentLabels.get(id) ?? id}</span>
+            ))}
+            {next.departmentRelevance?.campusWide ? <span className={styles.tag}>Campus-wide</span> : null}
             {more.length > 0 ? (
               <button type="button" className={styles.more} aria-expanded={open} onClick={() => toggleExpanded(series.key)}>
                 {open ? "Hide other dates" : `${more.length} more date${more.length === 1 ? "" : "s"}`}
@@ -371,13 +380,15 @@ export function CampusEventsSection({ items, calendars, onAdd, subscriptions, on
     if (days.length === 0) {
       return (
         <div className={styles.empty}>
-          <p>No events match{query.trim() ? ` “${query.trim()}”` : ""}{category ? ` in ${labels.get(category) ?? "this category"}` : ""}.</p>
+          <p>No events match{query.trim() ? ` “${query.trim()}”` : ""}{category ? ` in ${labels.get(category) ?? "this category"}` : ""}{department ? ` for ${departmentLabels.get(department) ?? (department === "campus-wide" ? "Campus-wide" : "Not yet classified")}` : ""}.</p>
           <button
             type="button"
             className="ghost-btn"
             onClick={() => {
               setQuery("");
               setCategory(null);
+              setDepartment("");
+              setLimit(PAGE);
             }}
           >
             Show all events
@@ -441,17 +452,39 @@ export function CampusEventsSection({ items, calendars, onAdd, subscriptions, on
           feedLink={feedLink}
         />
       ) : null}
-      <input
-        type="search"
+      <SearchInput
         className={styles.search}
         placeholder="Search events"
         aria-label="Search UWaterloo events"
-        value={query}
-        onChange={(event) => {
-          setQuery(event.target.value);
+        onQuery={(query) => {
+          setQuery(query);
           setLimit(PAGE);
         }}
       />
+      {data && data.departments.length > 0 ? (
+        <div className={styles.departmentFilters}>
+          <label htmlFor="campus-department">Relevant to</label>
+          <select id="campus-department" value={department} onChange={(event) => { setDepartment(event.target.value); setLimit(PAGE); }}>
+            <option value="">All departments</option>
+            <option value="campus-wide">Campus-wide</option>
+            <option value="unclassified">Not yet classified</option>
+            {data.faculties.map((faculty) => (
+              <optgroup key={faculty.id} label={faculty.label}>
+                {data.departments.filter((entry) => entry.faculties.includes(faculty.id)).map((entry) => (
+                  <option key={entry.id} value={entry.id}>{entry.label}</option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+          {department && department !== "campus-wide" && department !== "unclassified" ? (
+            <label className={styles.departmentCheckbox}>
+              <input type="checkbox" checked={includeCampusWide} onChange={(event) => { setIncludeCampusWide(event.target.checked); setLimit(PAGE); }} />
+              Include campus-wide events
+            </label>
+          ) : null}
+          <p>{shown.length} matching events. Events may match several departments. Subscriptions still follow event types.</p>
+        </div>
+      ) : null}
       {chips.length > 0 ? (
         <div className={styles.chips} role="group" aria-label="Filter by category">
           <button type="button" className={styles.chip} aria-pressed={category == null} onClick={() => setCategory(null)}>

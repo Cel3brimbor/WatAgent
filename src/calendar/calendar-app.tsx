@@ -60,6 +60,7 @@ import { CalendarDayView } from "@/calendar/views/day-view";
 import { CalendarWeekView } from "@/calendar/views/week-view";
 import { CalendarMonthView } from "@/calendar/views/month-view";
 import { CalendarYearView } from "@/calendar/views/year-view";
+import { MobileCalendarToolbar } from "@/calendar/mobile-calendar-toolbar";
 import {
   CalendarItemEditor,
   defaultAllDayDraft,
@@ -77,7 +78,6 @@ import { useCalendarPreferencesSync, type CalendarPreferencesState } from "@/cal
 import {
   BUILTIN_CALENDARS,
   isBuiltinLocalCalendarId,
-  isPrimaryEventCalendarId,
   PRIMARY_EVENT_CALENDAR_NAME,
   calendarIdField,
   defaultEventCalendarId,
@@ -1599,8 +1599,7 @@ export function CalendarApp({
     };
   }
 
-  function saveDraft() {
-    if (!draft) return;
+  function saveDraft(draft: CalendarDraft) {
     if (isCalendarReadOnly(sources, calendarIdForDraft(draft, calendar.items, localCalendars))) {
       setNotice("This calendar is read-only.");
       return;
@@ -1958,7 +1957,16 @@ export function CalendarApp({
         />
       </SideNav>
       <div className="calendar-shell">
-      <header className="calendar-toolbar">
+      {section === "calendar" ? <MobileCalendarToolbar
+        focus={focus} view={view} weekStartsOn={weekStartsOn}
+        onDate={(date) => setFocus(startOfLocalDay(date))} onView={setView}
+        onPrevious={() => setFocus((current) => shiftFocus(current, view, -1))}
+        onNext={() => setFocus((current) => shiftFocus(current, view, 1))}
+        onToday={() => setFocus(startOfLocalDay(new Date()))}
+        onCreate={() => setDraft(defaultTimedDraft(focus, 9))}
+        onAgent={() => setChatOpen((value) => !value)} agentOpen={chatOpen}
+      /> : null}
+      <header className="calendar-toolbar" data-section={section}>
         <div className="calendar-toolbar-left">
           {section === "calendar" ? (
             <h2 aria-live="polite">{formatFocusLabel(focus, view, weekStartsOn)}</h2>
@@ -2171,6 +2179,7 @@ export function CalendarApp({
             {section === "calendar" && view === "month" ? (
               <CalendarMonthView
                 focus={focus}
+                onSelectDate={(date) => setFocus(startOfLocalDay(date))}
                 weekStartsOn={weekStartsOn}
                 itemsForDay={itemsForDay}
                 onOpen={onOpenItem}
@@ -2326,6 +2335,7 @@ export function CalendarApp({
 
       {shownDraft ? (
         <CalendarItemEditor
+          key={shownDraft.google?.eventId ?? shownDraft.id ?? "new-item"}
           draft={shownDraft}
           open={editor.open}
           readOnly={draftReadOnly}
