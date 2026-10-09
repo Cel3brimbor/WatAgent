@@ -2,14 +2,14 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 
-export type AppSection = "calendar" | "tasks" | "events" | "map" | "settings";
+export type AppSection = "calendar" | "tasks" | "events" | "displays" | "map" | "settings";
 
 type Props = {
   section: AppSection;
   collapsed: boolean;
   onSection: (section: AppSection) => void;
   onToggle: () => void;
-  /** False hides the Calendars section. */
+  /** False hides the Configuration section. */
   advanced?: boolean;
   children?: ReactNode;
 };
@@ -18,7 +18,8 @@ const BARS: Array<{ id: AppSection; label: string }> = [
   { id: "calendar", label: "Calendar" },
   { id: "tasks", label: "Tasks" },
   { id: "events", label: "Events" },
-  { id: "map", label: "Calendars" },
+  { id: "displays", label: "Quick Displays" },
+  { id: "map", label: "Configuration" },
 ];
 
 export function SideNav({ section, collapsed, onSection, onToggle, advanced = true, children }: Props) {
@@ -131,6 +132,16 @@ function BarIcon({ id }: { id: AppSection }) {
       <svg viewBox="0 0 16 16" aria-hidden="true">
         <path d="M2.25 4.25h11.5v2.2a1.55 1.55 0 0 0 0 3.1v2.2H2.25v-2.2a1.55 1.55 0 0 0 0-3.1z" />
         <path d="M10 4.75v1.1M10 7.45v1.1M10 10.15v1.1" />
+      </svg>
+    );
+  }
+  if (id === "displays") {
+    return (
+      <svg viewBox="0 0 16 16" aria-hidden="true">
+        <rect x="2.2" y="2.2" width="4.7" height="4.7" rx="1.15" />
+        <rect x="9.1" y="2.2" width="4.7" height="4.7" rx="1.15" />
+        <rect x="2.2" y="9.1" width="4.7" height="4.7" rx="1.15" />
+        <rect x="9.1" y="9.1" width="4.7" height="4.7" rx="1.15" />
       </svg>
     );
   }

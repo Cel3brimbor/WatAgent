@@ -114,7 +114,7 @@ export function CalendarImportPanel({ importedCalendars, onImported }: {
       <h3 id="settings-ics">Add a calendar</h3>
       <p id="ics-hint" className="modal-hint">
         Paste any calendar link, such as LEARN (Brightspace) or Portal. Each new link adds a calendar, and you can add as many as you like.
-        It shows under Imported calendars below. Imported calendars are read only. To show two as one, merge them in Calendars.
+        It shows under Imported calendars below. Imported calendars are read only. To show two as one, merge them in Configuration.
       </p>
       <form className="calendar-import-form" onSubmit={(event) => void submit(event)} aria-busy={working}>
         <div className="calendar-editor-field calendar-import-field">

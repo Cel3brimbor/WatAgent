@@ -83,7 +83,7 @@ export function ImportedCalendarsPanel({ calendars, mergedCalendars, googleConne
       <h3 id="settings-imported-calendars">Imported calendars</h3>
       <p className="modal-hint">
         Every calendar link you&apos;ve imported. Their events are read only and change only when the calendar syncs.
-        When two list the same events, combine them in Calendars so they show as one.
+        When two list the same events, combine them in Configuration so they show as one.
       </p>
       <ol className="calendar-priority-list" aria-label="Imported calendars">
         {calendars.map((calendar) => {

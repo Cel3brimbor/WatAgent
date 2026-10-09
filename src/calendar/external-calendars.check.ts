@@ -10,7 +10,8 @@ assert.equal(calendarItemVisible(learn, filter), true, "imports are independent 
 assert.equal(calendarItemVisible(manual, filter), false, "unchecking Agent Main hides its events");
 assert.equal(calendarItemVisible(manual, { ...filter, events: true }), true, "checking Agent Main shows its events again");
 const task: CalendarItemDoc = { ...manual, id: "t", calendar: { ...manual.calendar, kind: "task" } };
-assert.equal(calendarItemVisible(task, filter), true, "Tasks always stays visible");
+assert.equal(calendarItemVisible(task, filter), false, "a task on Agent Main hides with Agent Main");
+assert.equal(calendarItemVisible(task, { ...filter, events: true }), true, "a task shows on Agent Main");
 assert.equal(calendarItemVisible(learn, { ...filter, mutedGoogleIds: ["ics:learn"] }), false);
 assert.equal(calendarItemVisible(portal, { ...filter, mutedGoogleIds: ["ics:learn"] }), true);
 assert.equal(calendarItemVisible(learn, { ...filter, hiddenIds: ["ics:learn"] }), false);

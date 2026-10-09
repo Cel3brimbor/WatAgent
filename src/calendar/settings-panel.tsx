@@ -250,7 +250,7 @@ export function SettingsPanel({
           />
         </div>
         <p id="settings-advanced-hint" className="modal-hint">
-          Shows the Calendars section for merging calendars, rules and the calendar map.
+          Shows the Configuration section for merging calendars, rules and the calendar map.
         </p>
       </section>
 

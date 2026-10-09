@@ -49,7 +49,6 @@ export function calendarItemVisible(
   const groups = calendarGroupsOf(filter.groups);
   const id = localCalendarIdOf(item.calendar) ?? "events";
   if (id === "events") return filter.events && groups.watagent;
-  if (id === "tasks") return true;
   if (groups.hidden && filter.hiddenIds.includes(id)) return true;
   if (!groups.watagent || filter.hiddenIds.includes(id)) return false;
   //user-made calendars share the per-calendar mute list with imported ones

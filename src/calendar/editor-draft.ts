@@ -19,7 +19,7 @@ function draftDoc(draft: CalendarDraft, createdAt: number): CalendarItemDoc {
       endUTC: draft.endUTC,
       allDay: draft.allDay,
       completed: draft.kind === "task" ? Boolean(draft.completed) : undefined,
-      calendarId: draft.kind === "event" && draft.calendarId ? calendarIdField(draft.calendarId) : undefined,
+      calendarId: draft.calendarId ? calendarIdField(draft.calendarId) : undefined,
       location: draft.location?.replace(/\s+/g, " ").trim().slice(0, 300) || undefined,
       description: draft.description?.replace(/\r\n/g, "\n").trim().slice(0, 4000) || undefined,
     },

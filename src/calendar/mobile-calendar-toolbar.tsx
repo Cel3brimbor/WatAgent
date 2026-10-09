@@ -17,6 +17,7 @@ type Props = {
   onCreate: () => void;
   onAgent: () => void;
   agentOpen: boolean;
+  allowCreate?: boolean;
 };
 
 export function MobileCalendarToolbar(props: Props) {
@@ -57,7 +58,9 @@ export function MobileCalendarToolbar(props: Props) {
           </div> : null}
         </div>
         <button type="button" className="mobile-calendar-agent" aria-pressed={props.agentOpen} onClick={props.onAgent}>Agent</button>
-        <button type="button" className="icon-btn mobile-calendar-add" aria-label="New event" onClick={props.onCreate}><PlusIcon /></button>
+        {props.allowCreate === false ? null : (
+          <button type="button" className="icon-btn mobile-calendar-add" aria-label="New event" onClick={props.onCreate}><PlusIcon /></button>
+        )}
       </div>
       {view === "day" ? <div className="mobile-calendar-week-strip" aria-label="Choose a day">
         {Array.from({ length: 7 }, (_, index) => {

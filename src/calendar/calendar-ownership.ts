@@ -32,6 +32,5 @@ export function calendarIdForDraft(
       if (id) return id;
     }
   }
-  if (draft.kind === "task") return "tasks";
   return draft.calendarId ?? defaultEventCalendarId(localCalendars);
 }

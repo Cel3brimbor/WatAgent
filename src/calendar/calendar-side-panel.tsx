@@ -169,7 +169,7 @@ export function CalendarSidePanel({
     id: calendar.id,
     name: calendar.name,
     color: calendarSwatchColor(calendar.id, colors, colorOverrides),
-    checked: calendar.id === "events" ? sources.events : calendar.id === "tasks" ? sources.tasks : !sources.mutedGoogleIds.includes(calendar.id),
+    checked: calendar.id === "events" ? sources.events : !sources.mutedGoogleIds.includes(calendar.id),
   }));
   const localById = (id: string) => localCalendars.find((calendar) => calendar.id === id);
   //user-made calendars mute through the same per-calendar list as imported feeds
@@ -218,17 +218,12 @@ export function CalendarSidePanel({
   const smartTagCalendars = allRows.map((row) => ({ id: row.id, name: row.name, google: Boolean(row.google) }));
 
   function toggle(id: string, checked: boolean) {
-    if (id === "tasks" && !checked) return;
     if (externalById(id) || isCustom(id)) {
       onSources({ ...sources, mutedGoogleIds: checked ? sources.mutedGoogleIds.filter((item) => item !== id) : [...new Set([...sources.mutedGoogleIds, id])] });
       return;
     }
     if (id === "events") {
       onSources({ ...sources, events: checked });
-      return;
-    }
-    if (id === "tasks") {
-      onSources({ ...sources, tasks: checked });
       return;
     }
     const ids = googleCalendars.map((calendar) => calendar.id);
@@ -255,8 +250,6 @@ export function CalendarSidePanel({
     const hiddenIds = [...sources.hiddenIds, id];
     if (id === "events") {
       onSources({ ...sources, events: false, hiddenIds });
-    } else if (id === "tasks") {
-      onSources({ ...sources, tasks: false, hiddenIds });
     } else {
       const mutedGoogleIds = [...new Set([...sources.mutedGoogleIds, id])];
       onSources({ ...sources, mutedGoogleIds, hiddenIds });
@@ -272,10 +265,6 @@ export function CalendarSidePanel({
     }
     if (id === "events") {
       onSources({ ...sources, events: true, hiddenIds });
-      return;
-    }
-    if (id === "tasks") {
-      onSources({ ...sources, tasks: true, hiddenIds });
       return;
     }
     onSources({
@@ -295,8 +284,6 @@ export function CalendarSidePanel({
     }
     if (id === "events") {
       onSources({ ...sources, events: true, tasks: false, google: false, mutedGoogleIds: ids, hiddenIds: [] });
-    } else if (id === "tasks") {
-      onSources({ ...sources, events: false, tasks: true, google: false, mutedGoogleIds: ids, hiddenIds: [] });
     } else {
       onSources({
         ...sources,
@@ -661,7 +648,7 @@ function CalendarGroup({
                   aria-pressed={groupOn && row.checked}
                   aria-label={`${groupOn && row.checked ? "Hide" : "Show"} ${row.name}`}
                   onClick={() => {
-                    if (!groupOn || row.id === "tasks") return;
+                    if (!groupOn) return;
                     onToggleRow?.(row.id, !row.checked);
                   }}
                 >

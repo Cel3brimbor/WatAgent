@@ -45,7 +45,6 @@ import {
   calendarIdField,
   isBuiltinLocalCalendarId,
   isPrimaryEventCalendarId,
-  isPrimaryTaskCalendarId,
   type LocalCalendar,
 } from "@/calendar/local-calendars";
 import { boxesOf, commitBoxes, moveInBoxes, newBoxName, TRAY, type Boxes, type MergeBox } from "@/calendar/merge-board";
@@ -286,15 +285,28 @@ export function CalendarMapSection({
 
   const counts = useMemo(() => {
     const saved = new Map<string, number>();
+    const savedTasks = new Map<string, number>();
     const pending = new Map<string, number>();
     for (const item of items) {
       const id = calendarIdForMeta(item.calendar);
       if (!id || item.editorDraft) continue;
-      const bucket = item.pendingApproval ? pending : saved;
-      bucket.set(id, (bucket.get(id) ?? 0) + 1);
+      if (item.pendingApproval) {
+        pending.set(id, (pending.get(id) ?? 0) + 1);
+        continue;
+      }
+      saved.set(id, (saved.get(id) ?? 0) + 1);
+      if (item.calendar.kind === "task") savedTasks.set(id, (savedTasks.get(id) ?? 0) + 1);
     }
-    return { saved, pending };
+    return { saved, savedTasks, pending };
   }, [items]);
+
+  function savedAmount(id: string): string {
+    const total = counts.saved.get(id) ?? 0;
+    const tasks = counts.savedTasks.get(id) ?? 0;
+    const events = total - tasks;
+    const parts = [events ? plural(events, "event") : "", tasks ? plural(tasks, "task") : ""].filter(Boolean);
+    return parts.join(", ") || "0 events";
+  }
 
   const shared = useMemo(
     () => sharedEventCounts(items.map(timelineItemOf), mergedCalendars, importedCalendars),
@@ -307,7 +319,7 @@ export function CalendarMapSection({
     const feed = feedSourceOf(id);
     const calendar = feed
       ? { kind: "event" as const, importSource: feed }
-      : { kind: id === "tasks" ? ("task" as const) : ("event" as const), calendarId: calendarIdField(id) };
+      : { kind: "event" as const, calendarId: calendarIdField(id) };
     return calendarItemVisible(
       { id: "", title: "", createdAt: 0, updatedAt: 0, calendar: { ...calendar, startUTC: 1, endUTC: 2, allDay: false } },
       sources,
@@ -457,11 +469,9 @@ export function CalendarMapSection({
   }
 
   function setShown(id: string, shown: boolean) {
-    if (id === "tasks" && !shown) return;
     onSources((current) => {
       if (id === GOOGLE) return { ...current, google: shown };
       if (id === "events") return { ...current, events: shown };
-      if (id === "tasks") return { ...current, tasks: shown };
       const muted = current.mutedGoogleIds.filter((item) => item !== id);
       return { ...current, mutedGoogleIds: shown ? muted : [...muted, id] };
     });
@@ -557,7 +567,6 @@ export function CalendarMapSection({
 
   function showState(id: string): { shown: boolean | null; showBlocked?: string } {
     if (memberOf.has(id)) return { shown: null };
-    if (id === "tasks") return { shown: true, showBlocked: "This calendar always stays visible." };
     const shown = shownOnGrid(id);
     return {
       shown,
@@ -584,11 +593,10 @@ export function CalendarMapSection({
   const rows = useMemo<CalendarRowModel[]>(() => {
     const list: CalendarRowModel[] = [];
     for (const calendar of localCalendars) {
-      const saved = counts.saved.get(calendar.id) ?? 0;
       const locked = readOnly(calendar.id);
       const unseen = agentHidden(calendar.id);
       const visibility = showState(calendar.id);
-      const amount = calendar.kind === "task" ? plural(saved, "to-do") : plural(saved, "event");
+      const amount = savedAmount(calendar.id);
       list.push({
         id: calendar.id,
         name: calendar.name,
@@ -617,10 +625,8 @@ export function CalendarMapSection({
         askBlocked: unseen ? `The Agent can’t see ${calendar.name}. Turn on Agent can see this first.` : undefined,
         sync: "hidden",
         landing: isPrimaryEventCalendarId(calendar.id)
-          ? "New Agent events land here unless you name another calendar."
-          : isPrimaryTaskCalendarId(calendar.id)
-            ? "New Agent tasks land here by default."
-            : undefined,
+          ? "New events and tasks land here unless you name another calendar."
+          : undefined,
       });
     }
     for (const feed of feeds) {
@@ -789,16 +795,15 @@ export function CalendarMapSection({
         details: [
           "Reads every calendar linked to it. Delete a link to hide that calendar from the Agent.",
           "Adds and changes events in WatAgent calendars, except read-only ones. Imported calendars are always read only.",
-          "New events go to Agent Main unless you name another calendar.",
+          "New events and tasks go to Agent Main unless you name another calendar.",
           requireAiApproval ? "Its changes wait for your approval." : "Its changes apply right away.",
         ],
       },
     ];
     for (const calendar of localCalendars) {
-      const saved = counts.saved.get(calendar.id) ?? 0;
       const locked = readOnly(calendar.id);
       const hidden = !shownOnGrid(calendar.id);
-      const amount = calendar.kind === "task" ? plural(saved, "to-do") : plural(saved, "event");
+      const amount = savedAmount(calendar.id);
       list.push({
         id: calendar.id,
         label: calendar.name,
@@ -816,10 +821,8 @@ export function CalendarMapSection({
         dimmed: hidden,
         details: [
           isPrimaryEventCalendarId(calendar.id)
-            ? "New Agent events land here unless you name another calendar."
-            : isPrimaryTaskCalendarId(calendar.id)
-              ? "New Agent tasks land here by default."
-              : `A WatAgent calendar with ${amount}.`,
+            ? "New events and tasks land here unless you name another calendar."
+            : `A WatAgent calendar with ${amount}.`,
           locked ? "Read only: you and the Agent can't change its events." : "You and the Agent can change its events.",
           ...(hidden ? ["Hidden from the calendar."] : []),
           ...(agentHidden(calendar.id) ? ["The Agent can't see it. Draw a line from the Agent to give it access again."] : []),
@@ -949,7 +952,7 @@ export function CalendarMapSection({
     }
     //members show through their merged calendar, so only it gets the switch
     //boxes still filling aren't on the calendar yet, so they get no switch either
-    //agent main and tasks always stay visible
+    //agent main always stays visible
     return list.map((node) =>
       node.variant === "function" ||
       node.id === AGENT ||
@@ -1035,9 +1038,7 @@ export function CalendarMapSection({
         directed: true,
         tone: "accent",
         details: [
-          isPrimaryTaskCalendarId(node.id)
-            ? `The Agent can add, change, and delete to-dos in ${node.label}.`
-            : `The Agent can add, change and delete events in ${node.label}.`,
+          `The Agent can add, change, and delete events and tasks in ${node.label}.`,
           ...(pending > 0 ? [`${plural(pending, "change")} ${pending === 1 ? "waits" : "wait"} for your approval.`] : []),
           ...(revoke ? ["Delete this link to hide it from the Agent."] : []),
         ],
@@ -1116,7 +1117,7 @@ export function CalendarMapSection({
       prompt: "choose a calendar to lock or unlock",
       accepts: (id) => {
         if (id === AGENT) return "The Agent isn't a calendar.";
-        if (isBuiltinLocalCalendarId(id)) return "Agent Main and Tasks can't be locked.";
+        if (isBuiltinLocalCalendarId(id)) return "Agent Main can't be locked.";
         if (id === GOOGLE) return "Google calendars keep their own permissions.";
         if (feedSourceOf(id) || isBox(id)) return "Imported calendars are always read only.";
         return isCalendar(id) ? true : "Choose a calendar.";

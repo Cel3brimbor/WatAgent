@@ -174,7 +174,7 @@ export function CalendarItemEditor({
   const allDayId = useId();
   const eventCalendars = calendars.filter((calendar) => calendar.kind === "event");
   const chosenCalendar = draft.calendarId ?? defaultCalendarId;
-  const showCalendarPicker = !draft.google && !draft.imported && draft.kind === "event"
+  const showCalendarPicker = !draft.google && !draft.imported
     && (eventCalendars.length > 1 || !eventCalendars.some((calendar) => calendar.id === chosenCalendar));
   const locationFieldId = useId();
   const startsId = useId();
@@ -468,7 +468,7 @@ export function draftFromMeta(id: string, title: string, calendar: CalendarItemM
     completed: calendar.completed,
     location: calendar.location,
     description: calendar.description,
-    calendarId: calendar.kind === "event" && !calendar.importSource ? calendar.calendarId ?? "events" : undefined,
+    calendarId: calendar.importSource ? undefined : calendar.calendarId ?? "events",
     imported: Boolean(calendar.importSource),
   };
 }

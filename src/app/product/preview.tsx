@@ -30,7 +30,7 @@ const SECTIONS: Array<{ id: FeatureId | "calendar"; label: string }> = [
   { id: "calendar", label: "Calendar" },
   { id: "tasks", label: "Tasks" },
   { id: "events", label: "Events" },
-  { id: "calendars", label: "Calendars" },
+  { id: "calendars", label: "Configuration" },
 ];
 
 function whenLabel(item: TimelineItem): string {
@@ -143,8 +143,7 @@ function CalendarPreview({ onFeature, onAskAgent }: { onFeature: (id: FeatureId)
           </nav>
           <div className={styles.sourceList}>
             <h3>WATAGENT CALENDARS</h3>
-            <p><i /> Events</p>
-            <p><i className={styles.taskSwatch} /> Tasks</p>
+            <p><i /> Agent Main</p>
             <h3>EXTERNAL CALENDARS</h3>
             <p><i /> Course schedule</p>
             <div className={styles.tagBlock}>

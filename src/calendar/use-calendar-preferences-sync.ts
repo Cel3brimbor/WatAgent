@@ -28,6 +28,7 @@ import {
 import { writeSmartTags, type SmartTag } from "@/calendar/smart-tags";
 import { writeKeywordTasks, type KeywordTasks } from "@/calendar/keyword-tasks";
 import { writeLocalCalendars, type LocalCalendar } from "@/calendar/local-calendars";
+import { writeCalendarSpaces, type CalendarSpace } from "@/calendar/calendar-spaces";
 import type { CalendarView, ImportedCalendar, MergedCalendar } from "@/calendar/types";
 import { writeCampusSubscriptions } from "@/campus/campus-subscription-prefs";
 import type { CampusSubscriptionPref } from "@/campus/campus-subscription-prefs";
@@ -50,6 +51,8 @@ export type CalendarPreferencesState = {
   keywordTasks: KeywordTasks;
   navCollapsed: boolean;
   sidePanelSections: SidePanelSectionsOpen;
+  calendarSpaces: CalendarSpace[];
+  activeCalendarSpaceId: string;
 };
 
 function writeLocalCache(doc: UserCalendarPreferencesV1): void {
@@ -66,6 +69,7 @@ function writeLocalCache(doc: UserCalendarPreferencesV1): void {
   writeSmartTags(doc.smartTags);
   writeKeywordTasks(doc.keywordTasks);
   writeSidePanelSections(doc.sidePanelSections);
+  writeCalendarSpaces(doc.calendarSpaces, doc.activeCalendarSpaceId);
   writeCampusSubscriptions(doc.campusSubscriptions);
   try {
     window.localStorage.setItem("watagent.nav.collapsed", doc.navCollapsed ? "1" : "0");
@@ -93,6 +97,8 @@ type ApplyPatch = {
   setKeywordTasks: (config: KeywordTasks) => void;
   setNavCollapsed: (collapsed: boolean) => void;
   setSidePanelSections: (sections: SidePanelSectionsOpen) => void;
+  setCalendarSpaces: (spaces: CalendarSpace[]) => void;
+  setActiveCalendarSpaceId: (id: string) => void;
   onCampusSubscriptionsRestore?: (subs: CampusSubscriptionPref[]) => void;
 };
 
@@ -111,6 +117,8 @@ function applyDoc(doc: UserCalendarPreferencesV1, apply: ApplyPatch): void {
   apply.setKeywordTasks(doc.keywordTasks);
   apply.setNavCollapsed(doc.navCollapsed);
   apply.setSidePanelSections(doc.sidePanelSections);
+  apply.setCalendarSpaces(doc.calendarSpaces);
+  apply.setActiveCalendarSpaceId(doc.activeCalendarSpaceId);
   apply.onCampusSubscriptionsRestore?.(doc.campusSubscriptions);
   writeLocalCache(doc);
 }
@@ -183,11 +191,11 @@ export function useCalendarPreferencesSync(
     };
   }, [ready]);
 
-  const { view, importedCalendars, campusCalendars, mergedCalendars, agentHiddenCalendarIds, newCalendarsShown, localCalendars, sources, colors, colorOverrides, smartTags, keywordTasks, navCollapsed, sidePanelSections } = state;
+  const { view, importedCalendars, campusCalendars, mergedCalendars, agentHiddenCalendarIds, newCalendarsShown, localCalendars, sources, colors, colorOverrides, smartTags, keywordTasks, navCollapsed, sidePanelSections, calendarSpaces, activeCalendarSpaceId } = state;
 
   useEffect(() => {
     if (!ready || skipSaveRef.current) return;
-    const doc = toDoc({ view, importedCalendars, campusCalendars, mergedCalendars, agentHiddenCalendarIds, newCalendarsShown, localCalendars, sources, colors, colorOverrides, smartTags, keywordTasks, navCollapsed, sidePanelSections });
+    const doc = toDoc({ view, importedCalendars, campusCalendars, mergedCalendars, agentHiddenCalendarIds, newCalendarsShown, localCalendars, sources, colors, colorOverrides, smartTags, keywordTasks, navCollapsed, sidePanelSections, calendarSpaces, activeCalendarSpaceId });
     writeLocalCache(doc);
     pendingSaveRef.current = doc;
     window.clearTimeout(saveTimerRef.current);
@@ -203,7 +211,7 @@ export function useCalendarPreferencesSync(
       pendingSaveRef.current = null;
       void saveCalendarPreferences(queued).catch(() => undefined);
     };
-  }, [ready, view, importedCalendars, campusCalendars, mergedCalendars, agentHiddenCalendarIds, newCalendarsShown, localCalendars, sources, colors, colorOverrides, smartTags, keywordTasks, navCollapsed, sidePanelSections]);
+  }, [ready, view, importedCalendars, campusCalendars, mergedCalendars, agentHiddenCalendarIds, newCalendarsShown, localCalendars, sources, colors, colorOverrides, smartTags, keywordTasks, navCollapsed, sidePanelSections, calendarSpaces, activeCalendarSpaceId]);
 
   const flushSave = (overrides?: Partial<CalendarPreferencesState>) => {
     if (!ready || skipSaveRef.current) return;

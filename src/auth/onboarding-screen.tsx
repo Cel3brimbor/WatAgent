@@ -112,7 +112,7 @@ export function OnboardingScreen({ onDone, onSkip }: Props) {
               </label>
             </div>
             <p className="onboarding-hint">
-              Advanced adds the Calendars section for merging calendars, rules and the calendar map. You can change this
+              Advanced adds the Configuration section for merging calendars, rules and the calendar map. You can change this
               later in Settings.
             </p>
           </fieldset>

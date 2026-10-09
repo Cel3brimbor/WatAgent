@@ -185,7 +185,10 @@ function ruleOf(raw: unknown): KeywordTaskRule | null {
     keywords: text(rec.keywords, KEYWORD_TASK_LIMITS.keywords),
     field: rec.field === "any" ? "any" : "title",
     calendarIds: Array.isArray(rec.calendarIds)
-      ? [...new Set(rec.calendarIds.filter((id): id is string => typeof id === "string" && id.length > 0 && id.length <= 1024))].slice(0, 200)
+      ? [...new Set(rec.calendarIds.flatMap((id) => {
+          if (typeof id !== "string" || id.length === 0 || id.length > 1024) return [];
+          return [id === "tasks" ? "events" : id];
+        }))].slice(0, 200)
       : [],
     due: rec.due === "end" ? "end" : "start",
     enabled: rec.enabled !== false,
