@@ -24,7 +24,7 @@ export type CalendarItemMeta = {
   googleEventId?: string;
   icsImportId?: string;
   importSource?: ImportedCalendarSource;
-  /** A user-made WatAgent calendar; absent means the built-in WatAgent (events) or Tasks calendar. */
+  /** A user-made WatAgent calendar; absent means Agent Main. Tasks live here too. */
   calendarId?: string;
   location?: string;
   description?: string;

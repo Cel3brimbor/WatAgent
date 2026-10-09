@@ -95,13 +95,14 @@ export function setCalendarReadOnly(filter: CalendarSourceFilter, id: string, re
   return protectBuiltinCalendarSources({ ...filter, readOnlyCalendarIds: [...ids] });
 }
 
-/** Built-ins stay editable and out of the Hidden list; Tasks also stays visible. */
+/** Agent Main stays editable and out of the Hidden list. The old Tasks calendar id is dropped. */
 export function protectBuiltinCalendarSources(filter: CalendarSourceFilter): CalendarSourceFilter {
+  const retired = (id: string) => id === "tasks" || isBuiltinLocalCalendarId(id);
   return {
     ...filter,
     tasks: true,
-    hiddenIds: filter.hiddenIds.filter((id) => !isBuiltinLocalCalendarId(id)),
-    readOnlyCalendarIds: filter.readOnlyCalendarIds.filter((id) => !isBuiltinLocalCalendarId(id)),
+    hiddenIds: filter.hiddenIds.filter((id) => !retired(id)),
+    readOnlyCalendarIds: filter.readOnlyCalendarIds.filter((id) => !retired(id)),
   };
 }
 
@@ -401,7 +402,7 @@ export function writeMergedCalendars(calendars: MergedCalendar[]): void {
 
 const AGENT_HIDDEN_KEY = "watagent.calendar.agent-hidden.v1";
 
-/** Agent Main and Tasks always stay linked to the Agent. */
+/** Agent Main always stays linked to the Agent. */
 export function protectAgentHiddenIds(ids: string[]): string[] {
   return ids.filter((id) => !isBuiltinLocalCalendarId(id));
 }
@@ -411,7 +412,7 @@ export function isAgentCalendarHidden(ids: string[], id: string): boolean {
   return ids.includes(id);
 }
 
-/** Calendars whose link to the Agent was removed in Calendars. */
+/**calendars whose link to the Agent was removed in Configuration*/
 export function agentHiddenIdsOf(raw: unknown): string[] {
   if (!Array.isArray(raw)) return [];
   return protectAgentHiddenIds(

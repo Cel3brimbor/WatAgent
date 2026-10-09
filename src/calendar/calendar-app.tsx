@@ -54,6 +54,18 @@ import {
 } from "@/calendar/smart-tags";
 import { calendarIdForDraft, calendarIdForMeta, timelineItemCalendarId } from "@/calendar/calendar-ownership";
 import { CalendarSidePanel } from "@/calendar/calendar-side-panel";
+import { QuickDisplays } from "@/calendar/quick-displays";
+import {
+  MAIN_CALENDAR_SPACE_ID,
+  itemInCalendarSpace,
+  itemOnMainCalendar,
+  mapCalendarSpace,
+  overlayInCalendarSpace,
+  readCalendarSpaces,
+  spaceOnlyFeedIds,
+  type CalendarSpace,
+  type SpaceCalendarChoice,
+} from "@/calendar/calendar-spaces";
 import { deleteGoogleEvent, getGoogleCalendarStatus, updateGoogleEvent, type GoogleCalendarRef } from "@/calendar/google-calendar-client";
 import { ConfirmDialog } from "@/shared/confirm-dialog";
 import { CalendarDayView } from "@/calendar/views/day-view";
@@ -160,7 +172,7 @@ function eventCalendarLabel(
   });
   if (!id) return undefined;
   return calendars.find((calendar) => calendar.id === id)?.name
-    ?? (id === "events" ? PRIMARY_EVENT_CALENDAR_NAME : id === "tasks" ? "Tasks" : undefined);
+    ?? (id === "events" ? PRIMARY_EVENT_CALENDAR_NAME : undefined);
 }
 
 const VIEW_OPTIONS: SegmentOption<CalendarView>[] = [
@@ -172,7 +184,7 @@ const VIEW_OPTIONS: SegmentOption<CalendarView>[] = [
 ];
 
 const VIEW_DEPTH: Record<CalendarView, number> = { year: 0, month: 1, week: 2, workweek: 2, day: 3 };
-const SECTION_TITLES: Record<Exclude<AppSection, "calendar">, string> = { tasks: "Tasks", events: "Events", map: "Calendars", settings: "Settings" };
+const SECTION_TITLES: Record<Exclude<AppSection, "calendar">, string> = { tasks: "Tasks", events: "Events", displays: "Quick Displays", map: "Configuration", settings: "Settings" };
 
 //which way the stage should move: sideways through time, or zooming between granularities
 type NavDirection = "next" | "prev" | "in" | "out" | "none";
@@ -307,7 +319,9 @@ function smartTagTargetOf(item: TimelineItem): SmartTagTarget | null {
     };
   }
     return {
-      calendarId: item.importSource ? externalCalendarId(item.importSource) : item.kind === "task" ? "tasks" : "events",
+      calendarId: item.importSource
+        ? externalCalendarId(item.importSource)
+        : (item.calendarId ?? "events"),
       title: item.title,
       location: item.location,
       description: item.description,
@@ -373,6 +387,9 @@ export function CalendarApp({
   const calendar = useCalendar();
   const { syncFromGoogle, createChat, pruneEmptyChats, setAfterWrite } = calendar;
   const [view, setView] = useState<CalendarView>(() => readCalendarView());
+  const [calendarSpaces, setCalendarSpaces] = useState<CalendarSpace[]>(() => readCalendarSpaces().spaces);
+  const [activeCalendarSpaceId, setActiveCalendarSpaceId] = useState(() => readCalendarSpaces().activeId);
+  const [openDisplayId, setOpenDisplayId] = useState<string | null>(null);
   const [importedCalendars, setImportedCalendars] = useState<ImportedCalendar[]>(() => splitCampusCalendars(readImportedCalendars(), readCampusCalendars()).imported);
   const [campusCalendarFeeds, setCampusCalendarFeeds] = useState<ImportedCalendar[]>(() => splitCampusCalendars(readImportedCalendars(), readCampusCalendars()).campus);
   const [mergedCalendars, setMergedCalendars] = useState<MergedCalendar[]>(() => readMergedCalendars([...readImportedCalendars(), ...readCampusCalendars()]));
@@ -539,19 +556,43 @@ export function CalendarApp({
     return counts;
   }, [calendar.items]);
 
-  const period = periodStart(focus, view, weekStartsOn);
-  const lastPeriodRef = useRef({ period, view, section });
+  //a quick display filters the stage. the main calendar stays on its own view
+  const viewingDisplay = useMemo(() => {
+    if (section !== "displays" || !openDisplayId) return null;
+    return calendarSpaces.find((space) => space.id === openDisplayId) ?? null;
+  }, [section, openDisplayId, calendarSpaces]);
+  const shownView = viewingDisplay?.view ?? view;
+  const changeView = useCallback((next: CalendarView) => {
+    if (viewingDisplay) {
+      setCalendarSpaces((current) => mapCalendarSpace(current, viewingDisplay.id, (space) => ({ ...space, view: next })));
+      return;
+    }
+    setView(next);
+  }, [viewingDisplay]);
+
+  const period = periodStart(focus, shownView, weekStartsOn);
+  const displayKey = viewingDisplay?.id ?? "main";
+  const lastPeriodRef = useRef({ period, view: shownView, section, spaceId: displayKey });
   const navDirection = useMemo<NavDirection>(() => {
     const last = lastPeriodRef.current;
-    if (section !== "calendar" || section !== last.section) return "none";
-    if (view !== last.view) return VIEW_DEPTH[view] > VIEW_DEPTH[last.view] ? "in" : "out";
+    const onStage = section === "calendar" || viewingDisplay != null;
+    if (!onStage || section !== last.section) return "none";
+    if (displayKey !== last.spaceId) return "none";
+    if (shownView !== last.view) return VIEW_DEPTH[shownView] > VIEW_DEPTH[last.view] ? "in" : "out";
     if (period === last.period) return "none";
     return period > last.period ? "next" : "prev";
-  }, [period, view, section]);
+  }, [period, shownView, section, displayKey, viewingDisplay]);
   useEffect(() => {
-    lastPeriodRef.current = { period, view, section };
-  }, [period, view, section]);
-  const stageKey = section === "calendar" ? `${view}:${period}` : section;
+    lastPeriodRef.current = { period, view: shownView, section, spaceId: displayKey };
+  }, [period, shownView, section, displayKey]);
+  const stageKey = viewingDisplay
+    ? `${viewingDisplay.id}:${shownView}:${period}`
+    : section === "calendar"
+      ? `main:${shownView}:${period}`
+      : section;
+  useEffect(() => {
+    if (viewingDisplay) setDraft(null);
+  }, [viewingDisplay]);
 
   useAppearanceSync(calendar.hydrated);
 
@@ -562,7 +603,7 @@ export function CalendarApp({
 
   const preferencesLoaded = useCalendarPreferencesSync(
     calendar.hydrated,
-    { view, importedCalendars, campusCalendars: campusCalendarFeeds, mergedCalendars, agentHiddenCalendarIds, newCalendarsShown, localCalendars, sources, colors, colorOverrides, smartTags, keywordTasks, navCollapsed, sidePanelSections },
+    { view, importedCalendars, campusCalendars: campusCalendarFeeds, mergedCalendars, agentHiddenCalendarIds, newCalendarsShown, localCalendars, sources, colors, colorOverrides, smartTags, keywordTasks, navCollapsed, sidePanelSections, calendarSpaces, activeCalendarSpaceId },
     {
       setView,
       setImportedCalendars,
@@ -578,6 +619,8 @@ export function CalendarApp({
       setKeywordTasks,
       setNavCollapsed,
       setSidePanelSections,
+      setCalendarSpaces,
+      setActiveCalendarSpaceId,
       onCampusSubscriptionsRestore: (subs) => {
         campusRestoreRef.current = subs;
         campusRestoreDoneRef.current = false;
@@ -591,6 +634,10 @@ export function CalendarApp({
     [importedCalendars, campusCalendarFeeds, mergedCalendars],
   );
   const feedsForMerge = useMemo(() => [...importedCalendars, ...campusCalendarFeeds], [importedCalendars, campusCalendarFeeds]);
+  const spaceOnlyFeeds = useMemo(
+    () => spaceOnlyFeedIds(calendarSpaces, feedsForMerge.map((feed) => feed.id)),
+    [calendarSpaces, feedsForMerge],
+  );
 
   //merged calendars stand in for their members. uwaterloo feeds never share the external list, so a gap in that list can't rename one "Imported calendar"
   const campusSourceIds = useMemo(() => new Set(campusCalendarFeeds.map((calendar) => calendar.id)), [campusCalendarFeeds]);
@@ -612,7 +659,8 @@ export function CalendarApp({
       });
       (onlyCampus ? campus : external).push(row);
     }
-    for (const row of externalCalendarsOf(itemsForUi, importedCalendars, campusSourceIds)) {
+    const spaceFeeds = spaceOnlyFeedIds(calendarSpaces, feedsForMerge.map((feed) => feed.id));
+    for (const row of externalCalendarsOf(itemsForUi, importedCalendars, new Set([...campusSourceIds, ...spaceFeeds]))) {
       if (byMember.has(row.id)) continue;
       const feed = feedOf(row.id);
       external.push({ id: row.id, name: row.name, source: row.source, feeds: feed ? [feed] : [] });
@@ -623,7 +671,7 @@ export function CalendarApp({
       campus.push({ id, name: calendar.name, source: calendar.id, feeds: [calendar] });
     }
     return { sideExternalCalendars: external, sideCampusCalendars: campus };
-  }, [itemsForUi, importedCalendars, campusCalendarFeeds, campusSourceIds, mergedCalendars, feedsForMerge]);
+  }, [itemsForUi, importedCalendars, campusCalendarFeeds, campusSourceIds, mergedCalendars, feedsForMerge, calendarSpaces]);
 
   const mentionCalendars = useMemo(() => {
     const rows: MentionCalendar[] = shownCalendars
@@ -804,6 +852,43 @@ export function CalendarApp({
     });
     return Promise.resolve();
   }, [calendar, disconnectFeed, enqueueCampus, restoreFeed]);
+
+  const openQuickDisplay = useCallback((id: string) => {
+    setOpenDisplayId(calendarSpaces.some((space) => space.id === id) ? id : null);
+    setSection("displays");
+  }, [calendarSpaces]);
+
+  const createQuickDisplay = useCallback((space: CalendarSpace) => {
+    setCalendarSpaces((current) => current.some((entry) => entry.id === space.id) ? current : [...current, space].slice(0, 12));
+    setOpenDisplayId(null);
+    setSection("displays");
+  }, []);
+
+  const updateQuickDisplay = useCallback((id: string, edit: (space: CalendarSpace) => CalendarSpace) => {
+    //colors and smart tags land on this shortcut only
+    setCalendarSpaces((current) => mapCalendarSpace(current, id, edit));
+  }, []);
+
+  const deleteCalendarSpace = useCallback(async (spaceId: string) => {
+    const space = calendarSpaces.find((entry) => entry.id === spaceId);
+    if (!space) return;
+    for (const feed of space.importedCalendars) calendar.hideImport(feed.id);
+    try {
+      for (const feed of space.importedCalendars) {
+        await removeImportedCalendar(feed.id);
+        calendar.releaseImport(feed.id);
+      }
+      setCalendarSpaces((current) => current.filter((entry) => entry.id !== spaceId));
+      setOpenDisplayId((current) => (current === spaceId ? null : current));
+      setActiveCalendarSpaceId(MAIN_CALENDAR_SPACE_ID);
+      await calendar.refresh();
+    } catch (err) {
+      for (const feed of space.importedCalendars) calendar.releaseImport(feed.id);
+      await calendar.refresh();
+      setNotice(err instanceof Error && err.message ? err.message : "Unable to delete this Quick Display. Your calendar was not changed.");
+      throw err;
+    }
+  }, [calendar, calendarSpaces]);
 
   const subscribeCampus = useCallback(
     (next: Array<{ id: string; label: string }>, options?: { quiet?: boolean }) => {
@@ -1055,7 +1140,9 @@ export function CalendarApp({
   const smartTagSamples = useMemo<SmartTagTarget[]>(
     () => [
       ...calendar.displayItems.map((item) => ({
-        calendarId: item.calendar.importSource ? externalCalendarId(item.calendar.importSource) : item.calendar.kind === "task" ? "tasks" : "events",
+        calendarId: item.calendar.importSource
+          ? externalCalendarId(item.calendar.importSource)
+          : localCalendarIdOf(item.calendar) ?? "events",
         title: item.title,
         location: item.calendar.location,
         description: item.calendar.description,
@@ -1076,14 +1163,14 @@ export function CalendarApp({
       mergeTimeline(
         [
           ...itemsForUi
-            .filter((item) => item.calendar.kind === "event" && !item.pendingApproval && !item.editorDraft)
+            .filter((item) => item.calendar.kind === "event" && !item.pendingApproval && !item.editorDraft && itemOnMainCalendar(item.calendar.importSource, spaceOnlyFeeds))
             .map(timelineItemOf),
           ...shownOverlayEvents.map(overlayTimelineItemOf),
         ],
         mergedCalendars,
         feedsForMerge,
       ),
-    [itemsForUi, shownOverlayEvents, mergedCalendars, feedsForMerge],
+    [itemsForUi, shownOverlayEvents, mergedCalendars, feedsForMerge, spaceOnlyFeeds],
   );
   const keywordTaskSources = useMemo<KeywordTaskSource[]>(
     () =>
@@ -1172,14 +1259,23 @@ export function CalendarApp({
       const googleShown = filter.google && filterGroups.other;
       return pinBottomDeadlines(mergeTimeline(aggregateTimeline({
         focus: date,
-        events: itemsForUi.filter((item) => calendarItemVisible(item, filter, mergedCalendars, campusSources)),
-        busyBlocks: !googleShown || shownOverlayEvents.length > 0 ? [] : busyBlocks,
+        events: itemsForUi.filter((item) => {
+          //shortcut feeds stay off main. a quick display shows only the calendars it picked
+          if (viewingDisplay) return itemInCalendarSpace(item.calendar, viewingDisplay, mergedCalendars);
+          return itemOnMainCalendar(item.calendar.importSource, spaceOnlyFeeds)
+            && calendarItemVisible(item, filter, mergedCalendars, campusSources);
+        }),
+        busyBlocks: viewingDisplay || !googleShown || shownOverlayEvents.length > 0 ? [] : busyBlocks,
         overlayEvents: shownOverlayEvents.filter((event) => {
+          if (viewingDisplay) return overlayInCalendarSpace(event.calendarId, viewingDisplay);
           if (filterGroups.hidden && filter.hiddenIds.includes(event.calendarId)) return true;
           return googleShown && !isSidebarHidden(filter, event.calendarId) && !filter.mutedGoogleIds.includes(event.calendarId);
         }),
       }), mergedCalendars, feedsForMerge), date, feedsForMerge).map((item) => {
         const swatch = (calendarId: string, importSource?: string) => {
+          //a shortcut color paints this view only
+          const shortcut = viewingDisplay?.colorOverrides[calendarId];
+          if (shortcut) return shortcut;
           if (importSource) {
             const categoryId = campusCategoryByFeedId.get(importSource);
             if (categoryId) {
@@ -1195,18 +1291,23 @@ export function CalendarApp({
             ? swatch(item.mergedCalendarId ?? externalCalendarId(item.importSource), item.importSource)
             : item.calendarId
               ? swatch(item.calendarId)
-              : item.kind === "task"
-                ? colors.task
-                : colors.event,
+              : colors.event,
         };
       });
     },
-    [itemsForUi, busyBlocks, shownOverlayEvents, mergedCalendars, feedsForMerge, campusSources, campusCategoryByFeedId, colorOverrides, colors],
+    [itemsForUi, busyBlocks, shownOverlayEvents, mergedCalendars, feedsForMerge, campusSources, campusCategoryByFeedId, colorOverrides, colors, viewingDisplay, spaceOnlyFeeds],
   );
 
+  const displayTagMatcher = useMemo(() => {
+    if (!viewingDisplay) return smartTagMatcher;
+    //shortcut tags paint this view only. the calendar's own tags stay underneath
+    const local = compileSmartTags(viewingDisplay.smartTags);
+    return (target: SmartTagTarget) => local(target) ?? smartTagMatcher(target);
+  }, [viewingDisplay, smartTagMatcher]);
+
   const itemsForDay = useCallback(
-    (date: Date) => applySmartTags(timelineFor(date, sources), smartTagMatcher),
-    [timelineFor, sources, smartTagMatcher],
+    (date: Date) => applySmartTags(timelineFor(date, sources), displayTagMatcher),
+    [timelineFor, sources, displayTagMatcher],
   );
 
   const dayItems = useMemo(() => itemsForDay(focus), [itemsForDay, focus]);
@@ -1238,7 +1339,7 @@ export function CalendarApp({
           });
           const calendarName = ownedId
             ? shownCalendars.find((calendar) => calendar.id === ownedId)?.name
-              ?? (ownedId === "events" ? PRIMARY_EVENT_CALENDAR_NAME : ownedId === "tasks" ? "Tasks" : ownedId)
+              ?? (ownedId === "events" ? PRIMARY_EVENT_CALENDAR_NAME : ownedId)
             : "";
           const calendar = ownedId ? ` calendar=${ownedId} "${calendarName.replace(/"/g, "")}"` : "";
           const done = item.kind === "task" ? ` completed=${item.completed ? "true" : "false"}` : "";
@@ -1271,7 +1372,7 @@ export function CalendarApp({
       seenGoogleVersionRef.current = googleVersion;
       coveredRef.current = [];
     }
-    const desired = googleFetchRange(focus, view, weekStartsOn);
+    const desired = googleFetchRange(focus, shownView, weekStartsOn);
     const key = `${desired.rangeStartUTC}:${desired.rangeEndUTC}`;
     async function pull(): Promise<number | null> {
       const gen = (pullGenRef.current.get(key) ?? 0) + 1;
@@ -1331,7 +1432,7 @@ export function CalendarApp({
       window.clearInterval(timer);
       window.removeEventListener("focus", onFocus);
     };
-  }, [focus, view, weekStartsOn, syncFromGoogle, googleVersion, googleConnected]);
+  }, [focus, shownView, weekStartsOn, syncFromGoogle, googleVersion, googleConnected]);
 
   useEffect(() => {
     let timer = 0;
@@ -1380,17 +1481,17 @@ export function CalendarApp({
       if (document.querySelector('[aria-modal="true"]')) return;
       const key = event.key.toLowerCase();
       if (key === "t") setFocus(startOfLocalDay(new Date()));
-      if (key === "d") setView("day");
-      if (key === "w") setView("week");
-      if (key === "5") setView("workweek");
-      if (key === "m") setView("month");
-      if (key === "y") setView("year");
-      if (event.key === "ArrowLeft") setFocus((current) => shiftFocus(current, view, -1));
-      if (event.key === "ArrowRight") setFocus((current) => shiftFocus(current, view, 1));
+      if (key === "d") changeView("day");
+      if (key === "w") changeView("week");
+      if (key === "5") changeView("workweek");
+      if (key === "m") changeView("month");
+      if (key === "y") changeView("year");
+      if (event.key === "ArrowLeft") setFocus((current) => shiftFocus(current, shownView, -1));
+      if (event.key === "ArrowRight") setFocus((current) => shiftFocus(current, shownView, 1));
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [view]);
+  }, [shownView, changeView]);
 
   useEffect(() => () => abortRef.current?.abort(), []);
 
@@ -1400,6 +1501,16 @@ export function CalendarApp({
 
   function onOpenItem(item: TimelineItem, anchor?: DOMRect) {
     if (item.editorDraft) return;
+    //a quick display can check off a task. everything else is changed on calendar
+    if (viewingDisplay) {
+      if (item.kind === "task" || item.kind === "gcal_busy") return;
+      setDraft(null);
+      setGooglePeek({
+        item,
+        anchor: anchor ?? new DOMRect(window.innerWidth / 2 - 180, 96, 0, 0),
+      });
+      return;
+    }
     if (item.kind === "task" && isTimelineItemReadOnly(item)) return;
     if (item.kind === "gcal_busy") return;
     if (item.pendingApproval || item.kind === "gcal_event" || item.kind === "event") {
@@ -1424,6 +1535,7 @@ export function CalendarApp({
     if (!meta) return;
     revealRef.current = { id: change.sourceId, startUTC: meta.startUTC, triedDay: false };
     setSection("calendar");
+    setActiveCalendarSpaceId(MAIN_CALENDAR_SPACE_ID);
     setFocus(startOfLocalDay(new Date(meta.startUTC)));
     if (view === "year") setView("day");
     setRevealSerial((n) => n + 1);
@@ -1440,12 +1552,12 @@ export function CalendarApp({
       if (cancelled) return;
       const node = document.querySelector(`[data-calendar-item="${CSS.escape(target.id)}"]`);
       if (!(node instanceof HTMLElement)) {
-        if (view !== "day" && !target.triedDay) {
+        if (shownView !== "day" && !target.triedDay) {
           target.triedDay = true;
-          setView("day");
+          changeView("day");
           return;
         }
-        if (view !== "day") return;
+        if (shownView !== "day") return;
         setNotice("That change isn't on the calendar.");
         revealRef.current = null;
         return;
@@ -1488,7 +1600,7 @@ export function CalendarApp({
       window.clearTimeout(timer);
       stage?.removeEventListener("scrollend", done);
     };
-  }, [revealSerial, section, view, focus, itemsForDay]);
+  }, [revealSerial, section, shownView, changeView, focus, itemsForDay]);
 
   function patchOverlay(
     target: { calendarId: string; eventId: string },
@@ -1524,7 +1636,7 @@ export function CalendarApp({
     setColorOverrides((overrides) => ({ ...overrides, [created.id]: color }));
     setLocalCalendars((list) => [...list, created]);
     setSources((current) => withNewCalendar(current, created.id, newCalendarsShown));
-    setNotice(newCalendarsShown ? `Created ${created.name}.` : `Created ${created.name}. It starts hidden; show it from the side panel or Calendars.`);
+    setNotice(newCalendarsShown ? `Created ${created.name}.` : `Created ${created.name}. It starts hidden; show it from the side panel or Configuration.`);
   }
 
   function renameLocalCalendar(id: string, name: string) {
@@ -1552,7 +1664,7 @@ export function CalendarApp({
       mutedGoogleIds: current.mutedGoogleIds.filter((entry) => entry !== id),
       hiddenIds: current.hiddenIds.filter((entry) => entry !== id),
       readOnlyCalendarIds: current.readOnlyCalendarIds.filter((entry) => entry !== id),
-      ...(id === "events" ? { events: true } : id === "tasks" ? { tasks: true } : {}),
+      ...(id === "events" ? { events: true } : {}),
     }));
     if (id.startsWith("cal-")) {
       setColorOverrides((overrides) => {
@@ -1622,7 +1734,7 @@ export function CalendarApp({
       endUTC: draft.endUTC,
       allDay: draft.allDay,
       completed: draft.kind === "task" ? Boolean(draft.completed) : undefined,
-      calendarId: draft.kind === "event" ? calendarIdField(draft.calendarId ?? defaultEventCalendarId(localCalendars)) : undefined,
+      calendarId: calendarIdField(draft.calendarId ?? defaultEventCalendarId(localCalendars)),
       ...(location ? { location } : {}),
       ...(description ? { description } : {}),
     };
@@ -1634,6 +1746,9 @@ export function CalendarApp({
       title: pending.title.trim() || (pending.kind === "task" ? "Task" : "Event"),
       calendar: calendarMeta,
     });
+    if (viewingDisplay && !itemInCalendarSpace(calendarMeta, viewingDisplay)) {
+      setNotice(`Saved on Calendar. ${viewingDisplay.name} only shows the calendars you picked.`);
+    }
   }
 
   async function handleSend(payload: SendPayload) {
@@ -1908,6 +2023,35 @@ export function CalendarApp({
     }
   }
 
+  const spaceCalendarChoices = useMemo<SpaceCalendarChoice[]>(() => [
+    ...shownCalendars.map((entry) => ({
+      id: entry.id,
+      name: entry.name,
+      color: calendarSwatchColor(entry.id, colors, colorOverrides),
+      group: "WatAgent" as const,
+    })),
+    ...sideExternalCalendars.map((entry) => ({
+      id: entry.id,
+      name: entry.name,
+      color: calendarSwatchColor(entry.id, colors, colorOverrides),
+      group: "Imported" as const,
+    })),
+    ...sideCampusCalendars.map((entry) => ({
+      id: entry.id,
+      name: entry.name,
+      color: calendarSwatchColor(entry.id, colors, colorOverrides),
+      group: "UWaterloo Events" as const,
+    })),
+    ...sidebarCalendars
+      .filter((entry) => !isExcludedGoogleCalendarName(entry.name))
+      .map((entry) => ({
+        id: entry.id,
+        name: entry.name,
+        color: colorOverrides[entry.id] || entry.color || colors.google,
+        group: "Google" as const,
+      })),
+  ], [shownCalendars, sideExternalCalendars, sideCampusCalendars, sidebarCalendars, colors, colorOverrides]);
+
   if (!calendar.hydrated) {
     return (
       <main className="calendar-shell">
@@ -1921,14 +2065,23 @@ export function CalendarApp({
       className={`app-frame${navCollapsed ? " is-nav-collapsed" : ""}${chatResizing ? " is-resizing-chat" : ""}`}
       style={colorVars}
     >
-      <SideNav section={section} collapsed={navCollapsed} onSection={setSection} onToggle={toggleNav} advanced={advancedView}>
+      <SideNav
+        section={section}
+        collapsed={navCollapsed}
+        onSection={(next) => {
+          if (next === "displays") setOpenDisplayId(null);
+          setSection(next);
+        }}
+        onToggle={toggleNav}
+        advanced={advancedView}
+      >
         <CalendarSidePanel
           focus={focus}
-          view={view}
+          view={shownView}
           weekStartsOn={weekStartsOn}
           onFocus={(date) => {
             setFocus(date);
-            if (view === "year") setView("day");
+            if (shownView === "year") changeView("day");
           }}
           sources={sources}
           onSources={setSources}
@@ -1957,25 +2110,34 @@ export function CalendarApp({
         />
       </SideNav>
       <div className="calendar-shell">
-      {section === "calendar" ? <MobileCalendarToolbar
-        focus={focus} view={view} weekStartsOn={weekStartsOn}
-        onDate={(date) => setFocus(startOfLocalDay(date))} onView={setView}
-        onPrevious={() => setFocus((current) => shiftFocus(current, view, -1))}
-        onNext={() => setFocus((current) => shiftFocus(current, view, 1))}
+      {section === "calendar" || viewingDisplay ? <MobileCalendarToolbar
+        focus={focus} view={shownView} weekStartsOn={weekStartsOn}
+        onDate={(date) => setFocus(startOfLocalDay(date))} onView={changeView}
+        onPrevious={() => setFocus((current) => shiftFocus(current, shownView, -1))}
+        onNext={() => setFocus((current) => shiftFocus(current, shownView, 1))}
         onToday={() => setFocus(startOfLocalDay(new Date()))}
         onCreate={() => setDraft(defaultTimedDraft(focus, 9))}
+        allowCreate={!viewingDisplay}
         onAgent={() => setChatOpen((value) => !value)} agentOpen={chatOpen}
       /> : null}
       <header className="calendar-toolbar" data-section={section}>
         <div className="calendar-toolbar-left">
-          {section === "calendar" ? (
-            <h2 aria-live="polite">{formatFocusLabel(focus, view, weekStartsOn)}</h2>
+          {viewingDisplay ? (
+            <>
+              <button type="button" className="qd-back" aria-label="Back to Quick Displays" onClick={() => setOpenDisplayId(null)}>
+                <ChevronLeftIcon />
+              </button>
+              <h2 aria-live="polite">{viewingDisplay.name}</h2>
+              <span className="qd-readonly">Read only</span>
+            </>
+          ) : section === "calendar" ? (
+            <h2 aria-live="polite">{formatFocusLabel(focus, shownView, weekStartsOn)}</h2>
           ) : (
             <h2>{SECTION_TITLES[section]}</h2>
           )}
         </div>
         <div className="calendar-toolbar-right">
-          {section === "calendar" ? (
+          {section === "calendar" || viewingDisplay ? (
             <>
               <div className="calendar-step">
                 <button
@@ -1983,7 +2145,7 @@ export function CalendarApp({
                   className="icon-btn"
                   aria-label="Previous"
                   title="Previous (←)"
-                  onClick={() => setFocus((current) => shiftFocus(current, view, -1))}
+                  onClick={() => setFocus((current) => shiftFocus(current, shownView, -1))}
                 >
                   <ChevronLeftIcon />
                 </button>
@@ -2000,12 +2162,12 @@ export function CalendarApp({
                   className="icon-btn"
                   aria-label="Next"
                   title="Next (→)"
-                  onClick={() => setFocus((current) => shiftFocus(current, view, 1))}
+                  onClick={() => setFocus((current) => shiftFocus(current, shownView, 1))}
                 >
                   <ChevronRightIcon />
                 </button>
               </div>
-              <SegmentedControl label="Calendar view" value={view} options={VIEW_OPTIONS} onChange={setView} />
+              <SegmentedControl label="Calendar view" value={shownView} options={VIEW_OPTIONS} onChange={changeView} />
             </>
           ) : null}
           <button
@@ -2049,6 +2211,17 @@ export function CalendarApp({
       <div className="calendar-body">
         <div className="calendar-stage">
           <div key={stageKey} className="calendar-stage-view" data-nav={navDirection}>
+            {section === "displays" && !viewingDisplay ? (
+              <QuickDisplays
+                displays={calendarSpaces}
+                choices={spaceCalendarChoices}
+                samples={smartTagSamples}
+                onOpen={openQuickDisplay}
+                onCreate={createQuickDisplay}
+                onUpdate={updateQuickDisplay}
+                onDelete={deleteCalendarSpace}
+              />
+            ) : null}
             {section === "tasks" ? (
               <TodoList
                 items={itemsForUi}
@@ -2067,6 +2240,7 @@ export function CalendarApp({
                 calendarName={keywordTaskCalendarName}
                 onKeywordComplete={(key, done) => setKeywordTasks((current) => withKeywordTaskDone(current, key, done))}
                 onKeywordOpen={(task) => {
+                  setActiveCalendarSpaceId(MAIN_CALENDAR_SPACE_ID);
                   setFocus(new Date(task.dueUTC));
                   setView("day");
                   setSection("calendar");
@@ -2092,7 +2266,7 @@ export function CalendarApp({
             ) : null}
             {section === "map" ? (
               <CalendarMapSection
-                items={itemsForUi}
+                items={itemsForUi.filter((item) => itemOnMainCalendar(item.calendar.importSource, spaceOnlyFeeds))}
                 overlayEvents={overlayEvents}
                 mergedCalendars={mergedCalendars}
                 onMergedCalendars={setMergedCalendars}
@@ -2148,35 +2322,37 @@ export function CalendarApp({
                 onSignOut={onSignOut}
               />
             ) : null}
-            {section === "calendar" && view === "day" ? (
+            {(section === "calendar" || viewingDisplay) && shownView === "day" ? (
               <CalendarDayView
                 focus={focus}
                 items={dayItems}
-                editorDraft={draft}
+                editorDraft={viewingDisplay ? null : draft}
                 onOpen={onOpenItem}
                 onCreateTimed={(hour, _minute, endHour) => setDraft(defaultTimedDraft(focus, hour, 0, endHour))}
                 onCreateAllDay={() => setDraft(defaultAllDayDraft(focus))}
                 onCompleteTask={calendar.completeTask}
+                readOnly={viewingDisplay != null}
               />
             ) : null}
-            {section === "calendar" && (view === "week" || view === "workweek") ? (
+            {(section === "calendar" || viewingDisplay) && (shownView === "week" || shownView === "workweek") ? (
               <CalendarWeekView
                 focus={focus}
                 weekStartsOn={weekStartsOn}
-                days={view === "workweek" ? Array.from({ length: 5 }, (_, i) => addDays(startOfWorkWeek(focus), i)) : undefined}
+                days={shownView === "workweek" ? Array.from({ length: 5 }, (_, i) => addDays(startOfWorkWeek(focus), i)) : undefined}
                 itemsForDay={itemsForDay}
-                editorDraft={draft}
+                editorDraft={viewingDisplay ? null : draft}
                 onOpen={onOpenItem}
                 onCreateTimed={(date, hour, endHour) => setDraft(defaultTimedDraft(date, hour, 0, endHour))}
                 onCreateAllDay={(date) => setDraft(defaultAllDayDraft(date))}
                 onSelectDay={(date) => {
                   setFocus(startOfLocalDay(date));
-                  setView("day");
+                  changeView("day");
                 }}
                 onCompleteTask={calendar.completeTask}
+                readOnly={viewingDisplay != null}
               />
             ) : null}
-            {section === "calendar" && view === "month" ? (
+            {(section === "calendar" || viewingDisplay) && shownView === "month" ? (
               <CalendarMonthView
                 focus={focus}
                 onSelectDate={(date) => setFocus(startOfLocalDay(date))}
@@ -2185,16 +2361,17 @@ export function CalendarApp({
                 onOpen={onOpenItem}
                 onCreate={(date) => setDraft(defaultAllDayDraft(date))}
                 onCompleteTask={calendar.completeTask}
+                readOnly={viewingDisplay != null}
               />
             ) : null}
-            {section === "calendar" && view === "year" ? (
+            {(section === "calendar" || viewingDisplay) && shownView === "year" ? (
               <CalendarYearView
                 focus={focus}
                 weekStartsOn={weekStartsOn}
                 itemsForDay={itemsForDay}
                 onSelectDay={(date) => {
                   setFocus(startOfLocalDay(date));
-                  setView("day");
+                  changeView("day");
                 }}
               />
             ) : null}
@@ -2267,7 +2444,7 @@ export function CalendarApp({
           calendarLabel={eventCalendarLabel(shownPeek.item, shownCalendars, importedLabels)}
           onClose={closePeek}
           onEdit={
-            shownPeek.item.pendingApproval || isTimelineItemReadOnly(shownPeek.item)
+            viewingDisplay || shownPeek.item.pendingApproval || isTimelineItemReadOnly(shownPeek.item)
               ? undefined
               : shownPeek.item.kind === "event"
               ? () => {
@@ -2284,7 +2461,7 @@ export function CalendarApp({
                 : undefined
           }
           onDelete={
-            shownPeek.item.pendingApproval || isTimelineItemReadOnly(shownPeek.item)
+            viewingDisplay || shownPeek.item.pendingApproval || isTimelineItemReadOnly(shownPeek.item)
               ? undefined
               : shownPeek.item.kind === "event"
               ? () => {

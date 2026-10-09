@@ -24,6 +24,13 @@ import {
 import { parseSmartTagsFromUnknown, readSmartTags, type SmartTag } from "@/calendar/smart-tags";
 import { parseKeywordTasksFromUnknown, readKeywordTasks, type KeywordTasks } from "@/calendar/keyword-tasks";
 import type { CalendarView, ImportedCalendar, MergedCalendar } from "@/calendar/types";
+import {
+  MAIN_CALENDAR_SPACE_ID,
+  activeSpaceIdOf,
+  calendarSpacesOf,
+  readCalendarSpaces,
+  type CalendarSpace,
+} from "@/calendar/calendar-spaces";
 import { splitCampusCalendars } from "@/campus/campus-events";
 import { BUILTIN_CALENDARS, localCalendarsOf, readLocalCalendars, type LocalCalendar } from "@/calendar/local-calendars";
 import {
@@ -50,18 +57,24 @@ export type UserCalendarPreferencesV1 = {
   keywordTasks: KeywordTasks;
   navCollapsed: boolean;
   sidePanelSections: SidePanelSectionsOpen;
+  calendarSpaces: CalendarSpace[];
+  activeCalendarSpaceId: string;
 };
 
 export type UserCalendarPreferencesState = Omit<UserCalendarPreferencesV1, "version" | "campusSubscriptions">;
 
 export function buildUserCalendarPreferencesDoc(state: UserCalendarPreferencesState): UserCalendarPreferencesV1 {
   const feeds = splitCampusCalendars(state.importedCalendars, state.campusCalendars);
+  const reserved = new Set([...feeds.imported, ...feeds.campus].map((calendar) => calendar.id));
+  const calendarSpaces = calendarSpacesOf(state.calendarSpaces, reserved);
   const campusSubscriptions = campusSubscriptionsOf(feeds.campus, state.colorOverrides);
   return {
     version: 1,
     ...state,
     importedCalendars: feeds.imported,
     campusCalendars: feeds.campus,
+    calendarSpaces,
+    activeCalendarSpaceId: activeSpaceIdOf(state.activeCalendarSpaceId, calendarSpaces),
     campusSubscriptions,
     colorOverrides: colorOverridesWithCampusSubscriptions(state.colorOverrides, campusSubscriptions),
   };
@@ -138,6 +151,9 @@ export function readLocalCalendarPreferences(): UserCalendarPreferencesV1 {
   const colorOverrides = readColorOverrides();
   const campusSubscriptions =
     readCampusSubscriptions() ?? campusSubscriptionsOf(campusCalendars, colorOverrides);
+  const storedSpaces = readCalendarSpaces();
+  const reservedFeeds = new Set([...importedCalendars, ...campusCalendars].map((calendar) => calendar.id));
+  const calendarSpaces = calendarSpacesOf(storedSpaces.spaces, reservedFeeds);
   return {
     version: 1,
     view: readCalendarView(),
@@ -155,6 +171,8 @@ export function readLocalCalendarPreferences(): UserCalendarPreferencesV1 {
     keywordTasks: readKeywordTasks(),
     navCollapsed,
     sidePanelSections: readSidePanelSections(),
+    calendarSpaces,
+    activeCalendarSpaceId: activeSpaceIdOf(storedSpaces.activeId, calendarSpaces),
   };
 }
 
@@ -192,6 +210,10 @@ export function parseUserCalendarPreferencesDoc(
     rec.campusSubscriptions !== undefined
       ? (parseCampusSubscriptions(rec.campusSubscriptions) ?? campusSubscriptionsOf(campusCalendars, colorOverrides))
       : campusSubscriptionsOf(campusCalendars, colorOverrides);
+  const reservedFeeds = new Set([...importedCalendars, ...campusCalendars].map((calendar) => calendar.id));
+  const calendarSpaces = rec.calendarSpaces !== undefined
+    ? calendarSpacesOf(rec.calendarSpaces, reservedFeeds)
+    : calendarSpacesOf(fallbacks.calendarSpaces, reservedFeeds);
   return {
     version: 1,
     view,
@@ -213,6 +235,10 @@ export function parseUserCalendarPreferencesDoc(
       rec.sidePanelSections !== undefined
         ? sidePanelSectionsOf(rec.sidePanelSections, fallbacks.sidePanelSections)
         : fallbacks.sidePanelSections,
+    calendarSpaces,
+    activeCalendarSpaceId: rec.activeCalendarSpaceId !== undefined
+      ? activeSpaceIdOf(rec.activeCalendarSpaceId, calendarSpaces)
+      : activeSpaceIdOf(fallbacks.activeCalendarSpaceId, calendarSpaces),
   };
 }
 
@@ -229,6 +255,7 @@ export function preferencesDocHasContent(doc: UserCalendarPreferencesV1): boolea
   if (JSON.stringify(doc.colors) !== JSON.stringify(DEFAULT_COLORS)) return true;
   if (Object.keys(doc.colorOverrides).length > 0) return true;
   if (doc.campusSubscriptions.length > 0) return true;
+  if (doc.calendarSpaces.length > 0 || doc.activeCalendarSpaceId !== MAIN_CALENDAR_SPACE_ID) return true;
   return false;
 }
 

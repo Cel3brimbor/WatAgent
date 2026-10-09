@@ -37,6 +37,7 @@ type Props = {
   onCompleteTask?: (id: string, completed: boolean) => void;
   /** Show these days instead of the full week (the 5-day view passes Monday–Friday). */
   days?: Date[];
+  readOnly?: boolean;
 };
 
 export function CalendarWeekView({
@@ -50,6 +51,7 @@ export function CalendarWeekView({
   onSelectDay,
   onCompleteTask,
   days: shownDays,
+  readOnly = false,
 }: Props) {
   const now = useNowMs();
   const weekStart = startOfWeek(focus, weekStartsOn);
@@ -92,14 +94,16 @@ export function CalendarWeekView({
                     onCompleteTask={onCompleteTask}
                   />
                 ))}
-                <button
-                  type="button"
-                  className="calendar-all-day-add"
-                  aria-label="Add all-day item"
-                  onClick={() => onCreateAllDay(date)}
-                >
-                  <PlusIcon />
-                </button>
+                {readOnly ? null : (
+                  <button
+                    type="button"
+                    className="calendar-all-day-add"
+                    aria-label="Add all-day item"
+                    onClick={() => onCreateAllDay(date)}
+                  >
+                    <PlusIcon />
+                  </button>
+                )}
               </div>
             );
           })}
@@ -130,17 +134,21 @@ export function CalendarWeekView({
             <div
               key={date.toISOString()}
               className={`calendar-week-col${tone}`}
-              {...slots.bind(dayIndex)}
+              {...(readOnly ? {} : slots.bind(dayIndex))}
             >
               {HOURS.map((hour) => (
-                <button
-                  key={hour}
-                  type="button"
-                  className="calendar-hour-slot"
-                  style={{ height: HOUR_PX }}
-                  aria-label={`Create at ${formatHourLabel(hour)}`}
-                  onClick={() => onCreateTimed(date, hour)}
-                />
+                readOnly ? (
+                  <div key={hour} className="calendar-hour-slot" style={{ height: HOUR_PX }} />
+                ) : (
+                  <button
+                    key={hour}
+                    type="button"
+                    className="calendar-hour-slot"
+                    style={{ height: HOUR_PX }}
+                    aria-label={`Create at ${formatHourLabel(hour)}`}
+                    onClick={() => onCreateTimed(date, hour)}
+                  />
+                )
               ))}
               {timed.map((layout) => (
                 <div

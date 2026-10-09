@@ -16,6 +16,7 @@ type Props = {
   onOpen: (item: TimelineItem) => void;
   onCreate: (date: Date) => void;
   onCompleteTask?: (id: string, completed: boolean) => void;
+  readOnly?: boolean;
 };
 
 export function CalendarMonthView({
@@ -26,6 +27,7 @@ export function CalendarMonthView({
   onOpen,
   onCreate,
   onCompleteTask,
+  readOnly = false,
 }: Props) {
   const cells = monthCells(focus, weekStartsOn);
   const mobileCells = cells.slice(0, Math.ceil((cells.findLastIndex((cell) => cell.inMonth) + 1) / 7) * 7);
@@ -137,17 +139,19 @@ export function CalendarMonthView({
                       ))
                     )}
                   </div>
-                  <button
-                    type="button"
-                    className="ghost-btn calendar-month-pop-add"
-                    onClick={() => {
-                      setPopKey(null);
-                      onCreate(cell.date);
-                    }}
-                  >
-                    <PlusIcon />
-                    New event
-                  </button>
+                  {readOnly ? null : (
+                    <button
+                      type="button"
+                      className="ghost-btn calendar-month-pop-add"
+                      onClick={() => {
+                        setPopKey(null);
+                        onCreate(cell.date);
+                      }}
+                    >
+                      <PlusIcon />
+                      New event
+                    </button>
+                  )}
                 </div>
               ) : null}
             </div>

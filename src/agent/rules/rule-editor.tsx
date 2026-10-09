@@ -190,7 +190,8 @@ export function RuleEditor({ rule, initial, feeds, calendars, agentCanSee, onAll
                 value={targetCalendarId}
                 onChange={(event) => setTargetCalendarId(event.target.value)}
               >
-                {calendars.map((calendar) => (
+                {targetCalendarId === "tasks" ? <option value="tasks">Agent Main</option> : null}
+                {calendars.filter((calendar) => targetCalendarId !== "tasks" || calendar.id !== "events").map((calendar) => (
                   <option key={calendar.id} value={calendar.id} disabled={calendar.readOnly}>
                     {calendar.readOnly ? `${calendar.name} (read only)` : calendar.name}
                   </option>
