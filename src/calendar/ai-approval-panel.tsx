@@ -89,8 +89,8 @@ export function AiApprovalPanel({
   onInspect,
   ruleNames,
 }: Props) {
-  //keep the last batch on screen while the panel slides away
-  const presence = usePresence(items.length > 0 ? items : null);
+  //approval should feel instant; skip the exit hold so the row vanishes with the optimistic store update
+  const presence = usePresence(items.length > 0 ? items : null, 0);
   const listRef = useRef<HTMLUListElement>(null);
   const shown = presence.value ?? [];
   const [openDiffs, setOpenDiffs] = useState<Set<string>>(() => new Set());
