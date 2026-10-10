@@ -2386,7 +2386,7 @@ export function CalendarApp({
                 items={dayItems}
                 editorDraft={viewingDisplay ? null : draft}
                 onOpen={onOpenItem}
-                onCreateTimed={(hour, _minute, endHour) => setDraft(defaultTimedDraft(focus, hour, 0, endHour))}
+                onCreateTimed={(hour, minute = 0, endHour) => setDraft(defaultTimedDraft(focus, hour, minute, endHour))}
                 onCreateAllDay={() => setDraft(defaultAllDayDraft(focus))}
                 onCompleteTask={calendar.completeTask}
                 readOnly={viewingDisplay != null}

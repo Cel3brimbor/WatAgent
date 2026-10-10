@@ -3131,7 +3131,7 @@ button.qd-cal-swatch:active {
   max-width: 100%;
 }
 
-/*live range while dragging to create; snaps hour to hour with a short glide*/
+/*live range while dragging to create; snaps to quarter-hours with a short glide*/
 .calendar-slot-draft {
   position: absolute;
   left: 2px;
@@ -3170,6 +3170,20 @@ button.qd-cal-swatch:active {
 
 .calendar-slot-draft.is-task .calendar-slot-draft-title {
   color: color-mix(in srgb, var(--task-color) 35%, var(--ink));
+}
+
+.calendar-slot-draft.is-short {
+  padding-block: 0;
+  justify-content: center;
+}
+
+.calendar-slot-draft.is-short .calendar-slot-draft-title {
+  display: none;
+}
+
+.calendar-slot-draft.is-short .calendar-slot-draft-time {
+  white-space: nowrap;
+  line-height: 1;
 }
 
 .calendar-slot-draft-time {

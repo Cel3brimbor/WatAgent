@@ -416,14 +416,17 @@ export function useNowMs(intervalMs = 30_000): number {
   return now;
 }
 
+// Hours may be fractional; endHour is an exclusive boundary (24 means midnight).
 export function defaultTimedDraft(day: Date, hour: number, minute = 0, endHour?: number): CalendarDraft {
   const startUTC = hourGridMs(startOfLocalDay(day), hour, minute);
-  const hours = endHour != null && endHour >= hour ? endHour - hour + 1 : 1;
+  const endUTC = endHour != null && endHour > hour + minute / 60
+    ? hourGridMs(startOfLocalDay(day), endHour)
+    : startUTC + 60 * 60 * 1000;
   return {
     title: "",
     kind: "event",
     startUTC,
-    endUTC: startUTC + hours * 60 * 60 * 1000,
+    endUTC,
     allDay: false,
   };
 }

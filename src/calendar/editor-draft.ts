@@ -50,10 +50,9 @@ export function timedDraftSlotForDay(
   if (draft.endUTC <= startDateUTC || draft.startUTC >= endDateUTC) return null;
   const clampStart = Math.max(draft.startUTC, startDateUTC);
   const clampEnd = Math.min(draft.endUTC, endDateUTC);
-  const startHour = Math.max(0, Math.min(23, Math.floor((clampStart - startDateUTC) / 3_600_000)));
-  const endHour = Math.max(
-    startHour,
-    Math.min(23, Math.ceil((clampEnd - startDateUTC) / 3_600_000) - 1),
-  );
+  const startDate = new Date(clampStart);
+  const endDate = new Date(clampEnd);
+  const startHour = startDate.getHours() + startDate.getMinutes() / 60;
+  const endHour = clampEnd === endDateUTC ? 24 : endDate.getHours() + endDate.getMinutes() / 60;
   return { start: startHour, end: endHour };
 }
