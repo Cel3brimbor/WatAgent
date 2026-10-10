@@ -23,7 +23,6 @@ import { useSlotDrag } from "@/calendar/use-slot-drag";
 import { SlotDraft } from "@/calendar/slot-draft";
 import type { CalendarDraft } from "@/calendar/calendar-item-editor";
 import { timedDraftSlotForDay } from "@/calendar/editor-draft";
-import { PlusIcon } from "@/shared/icons";
 import { AllDayResizeHandle, allDayItems, useAllDayResize } from "@/calendar/all-day-bar";
 
 type Props = {
@@ -92,7 +91,18 @@ export function CalendarWeekView({
             const topped = allDayItems(itemsForDay(date));
             const tone = `${isToday(date) ? " is-today" : ""}${date.getDay() % 6 === 0 ? " is-weekend" : ""}`;
             return (
-              <div key={`${date.toISOString()}-all`} className={`calendar-week-all-day-col${tone}`}>
+              <div
+                key={`${date.toISOString()}-all`}
+                className={`calendar-week-all-day-col${tone}`}
+                onDoubleClick={
+                  readOnly
+                    ? undefined
+                    : (event) => {
+                        if ((event.target as HTMLElement).closest(".calendar-strip")) return;
+                        onCreateAllDay(date);
+                      }
+                }
+              >
                 {topped.map((item) => (
                   <TimelineStrip
                     key={item.id}
@@ -102,16 +112,6 @@ export function CalendarWeekView({
                     onCompleteTask={onCompleteTask}
                   />
                 ))}
-                {readOnly ? null : (
-                  <button
-                    type="button"
-                    className="calendar-all-day-add"
-                    aria-label="Add all-day item"
-                    onClick={() => onCreateAllDay(date)}
-                  >
-                    <PlusIcon />
-                  </button>
-                )}
               </div>
             );
           })}

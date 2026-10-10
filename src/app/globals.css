@@ -627,7 +627,6 @@ select {
 .chat-tab-close:active,
 .bubble-tool:active:not(:disabled),
 .gcal-card-icon-btn:active,
-.calendar-all-day-add:active,
 .composer-send:active:not(:disabled),
 .todo-check:active {
   transform: scale(0.9);
@@ -665,7 +664,6 @@ select {
 .chat-tab-close,
 .bubble-tool,
 .gcal-card-icon-btn,
-.calendar-all-day-add,
 .side-nav-bar,
 .side-nav-toggle,
 .side-cal-heading,
@@ -3131,48 +3129,6 @@ button.qd-cal-swatch:active {
   width: auto;
   min-width: 0;
   max-width: 100%;
-}
-
-.calendar-all-day-add {
-  display: grid;
-  place-items: center;
-  width: 1.5rem;
-  height: 1.5rem;
-  padding: 0;
-  border: 0;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--ink-soft);
-  opacity: 0.6;
-}
-
-/*with a pointer the add button waits for its column; touch keeps it visible*/
-@media (hover: hover) {
-  .calendar-all-day-add {
-    opacity: 0;
-  }
-
-  .calendar-all-day-items:hover .calendar-all-day-add:not(:hover),
-  .calendar-week-all-day-col:hover .calendar-all-day-add:not(:hover) {
-    opacity: 0.6;
-  }
-}
-
-.calendar-all-day-add .glyph {
-  width: 0.85rem;
-  height: 0.85rem;
-}
-
-@media (hover: hover) {
-  .calendar-all-day-add:hover {
-    background: var(--hover);
-    color: var(--accent-deep);
-    opacity: 1;
-  }
-}
-
-.calendar-all-day-add:focus-visible {
-  opacity: 1;
 }
 
 /*live range while dragging to create; snaps hour to hour with a short glide*/
@@ -7817,6 +7773,16 @@ h3 {
   gap: 0.6rem;
 }
 
+/*one create control for the whole calendar, tinted like Apple Calendar's toolbar plus*/
+.calendar-add-btn {
+  color: var(--accent);
+}
+
+.calendar-add-btn .glyph {
+  width: 1.15rem;
+  height: 1.15rem;
+}
+
 .calendar-step {
   gap: 0;
   height: 2.1rem;
@@ -9372,7 +9338,6 @@ h3 {
   .mobile-calendar-week-strip .is-today strong { color: var(--accent); }
   .mobile-calendar-week-strip .is-selected strong { background: var(--ink); color: var(--paper); }
   .mobile-calendar-week-strip .is-selected.is-today strong { background: var(--accent); color: var(--on-accent); }
-  .calendar-all-day-add { display: none; }
   .calendar-all-day-frame[data-empty="true"],
   .calendar-all-day[data-empty="true"], .calendar-week-all-day[data-empty="true"] { display: none; }
   .calendar-day > .calendar-sticky:has(.calendar-all-day-frame[data-empty="true"]) { padding-bottom: 0; }
