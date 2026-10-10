@@ -6,7 +6,7 @@ import { formatMonthPopTitle, isToday, monthCells, weekdayLabels } from "@/calen
 import { monthCellVisible } from "@/calendar/calendar-grid";
 import { TimelineStrip } from "@/calendar/timeline-strip";
 import { usePresence } from "@/shared/use-presence";
-import { CloseIcon, PlusIcon } from "@/shared/icons";
+import { CloseIcon } from "@/shared/icons";
 
 type Props = {
   focus: Date;
@@ -77,7 +77,15 @@ export function CalendarMonthView({
             <div
               key={key}
               className={`calendar-month-cell${cell.inMonth ? "" : " is-outside"}${isToday(cell.date) ? " is-today" : ""}${popShown ? " is-pop-open" : ""}`}
-              onClick={() => setPopKey(key)}
+              onClick={() => {
+                onSelectDate(cell.date);
+                setPopKey(key);
+              }}
+              onDoubleClick={readOnly ? undefined : (event) => {
+                if ((event.target as HTMLElement).closest("button, .calendar-strip, .calendar-month-pop")) return;
+                setPopKey(null);
+                onCreate(cell.date);
+              }}
             >
               <span className="calendar-month-day">{cell.date.getDate()}</span>
               <div className="calendar-month-pills">
@@ -139,19 +147,6 @@ export function CalendarMonthView({
                       ))
                     )}
                   </div>
-                  {readOnly ? null : (
-                    <button
-                      type="button"
-                      className="ghost-btn calendar-month-pop-add"
-                      onClick={() => {
-                        setPopKey(null);
-                        onCreate(cell.date);
-                      }}
-                    >
-                      <PlusIcon />
-                      New event
-                    </button>
-                  )}
                 </div>
               ) : null}
             </div>
