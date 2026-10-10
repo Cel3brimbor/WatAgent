@@ -9,7 +9,8 @@
     "start": "npx --yes serve out",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "tauri": "node scripts/tauri.mjs"
+    "tauri": "node scripts/tauri.mjs",
+    "test:regressions": "tsx src/calendar/agent-permissions.check.ts && tsx src/calendar/slot-drag.check.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -34,6 +35,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "^15.5.26",
+    "tsx": "^4.23.15",
     "typescript": "^5"
   }
 }
