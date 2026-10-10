@@ -3016,15 +3016,58 @@ button.qd-cal-swatch:active {
   min-height: 100%;
 }
 
+.calendar-all-day-frame {
+  position: relative;
+  margin-bottom: 0.5rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.calendar-all-day-frame.is-resizing {
+  user-select: none;
+}
+
+.calendar-all-day-scroll.is-sized {
+  overflow: auto;
+}
+
+.calendar-all-day-resize {
+  position: relative;
+  height: 8px;
+  cursor: ns-resize;
+  touch-action: none;
+}
+
+.calendar-all-day-resize::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 2px;
+  width: 2.25rem;
+  height: 3px;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: var(--line);
+}
+
+.calendar-all-day-resize:hover::after,
+.calendar-all-day-resize:focus-visible::after,
+.calendar-all-day-frame.is-resizing .calendar-all-day-resize::after {
+  background: var(--ink-soft);
+}
+
+.calendar-all-day-resize:focus-visible {
+  outline: none;
+}
+
 .calendar-all-day,
 .calendar-week-all-day {
   display: grid;
   grid-template-columns: 4.2rem 1fr;
   gap: 0.4rem;
   align-items: start;
-  padding-bottom: 0.5rem;
-  margin-bottom: 0.5rem;
-  border-bottom: 1px solid var(--line);
+  padding-bottom: 0.15rem;
+  margin-bottom: 0;
+  border-bottom: 0;
 }
 
 .calendar-week-all-day {
@@ -3060,7 +3103,34 @@ button.qd-cal-swatch:active {
 .calendar-week-all-day-col {
   display: flex;
   flex-wrap: wrap;
+  align-items: flex-start;
+  align-content: flex-start;
   gap: 0.3rem;
+}
+
+/*chips hug their text. the column can be taller after a resize without painting empty color*/
+.calendar-all-day-items > .calendar-strip,
+.calendar-week-all-day-col > .calendar-strip {
+  width: fit-content;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.calendar-all-day-items > .calendar-strip .calendar-strip-main,
+.calendar-week-all-day-col > .calendar-strip .calendar-strip-main {
+  flex: 0 1 auto;
+  width: auto;
+  min-width: 0;
+}
+
+.calendar-all-day-items > .calendar-strip.is-card .calendar-strip-title,
+.calendar-week-all-day-col > .calendar-strip.is-card .calendar-strip-title,
+.calendar-all-day-items > .calendar-strip .calendar-strip-title,
+.calendar-week-all-day-col > .calendar-strip .calendar-strip-title {
+  flex: 0 1 auto;
+  width: auto;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .calendar-all-day-add {
@@ -4901,6 +4971,53 @@ button.qd-cal-swatch:active {
   opacity: 0.92;
 }
 
+/*task tag color: full tints the row, half and quarter stay left of the diagonal*/
+.todo-list li.is-tagged {
+  box-shadow: inset 3px 0 0 var(--tag-color), var(--shadow-raised);
+}
+
+.todo-list li.is-tag-full {
+  background: color-mix(in srgb, var(--tag-color) 16%, var(--panel-solid));
+}
+
+.todo-list li.is-tag-half,
+.todo-list li.is-tag-quarter {
+  isolation: isolate;
+}
+
+.todo-list li.is-tag-half::before,
+.todo-list li.is-tag-quarter::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--tag-color) 18%, transparent);
+}
+
+.todo-list li.is-tag-half::before {
+  clip-path: polygon(0 0, 100% 0, 0 100%);
+}
+
+.todo-list li.is-tag-quarter::before {
+  clip-path: polygon(0 0, 70.71% 0, 0 70.71%);
+}
+
+.todo-list li.is-tag-half > *,
+.todo-list li.is-tag-quarter > * {
+  position: relative;
+  z-index: 1;
+}
+
+.todo-list li.is-done.is-tagged {
+  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--tag-color) 45%, transparent), var(--shadow-raised);
+}
+
+.todo-list li.is-done.is-tag-full {
+  background: var(--panel-solid);
+}
+
 .todo-check {
   display: grid;
   place-items: center;
@@ -5123,6 +5240,38 @@ button.qd-cal-swatch:active {
   color: var(--ink-soft);
   font-size: 0.85rem;
   line-height: 1.45;
+}
+
+.ktask-deadlines {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  margin: 0 0 0.7rem;
+  padding-bottom: 0.7rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.ktask-deadlines > label {
+  display: grid;
+  gap: 0.12rem;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.ktask-deadlines strong {
+  font-size: 0.88rem;
+  font-weight: 640;
+}
+
+.ktask-deadlines small,
+.ktask-always {
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.ktask-always {
+  margin: 0 0 0.7rem;
 }
 
 .ktask-rule-list {
@@ -9224,8 +9373,9 @@ h3 {
   .mobile-calendar-week-strip .is-selected strong { background: var(--ink); color: var(--paper); }
   .mobile-calendar-week-strip .is-selected.is-today strong { background: var(--accent); color: var(--on-accent); }
   .calendar-all-day-add { display: none; }
+  .calendar-all-day-frame[data-empty="true"],
   .calendar-all-day[data-empty="true"], .calendar-week-all-day[data-empty="true"] { display: none; }
-  .calendar-day > .calendar-sticky:has(.calendar-all-day[data-empty="true"]) { padding-bottom: 0; }
+  .calendar-day > .calendar-sticky:has(.calendar-all-day-frame[data-empty="true"]) { padding-bottom: 0; }
   .calendar-week { min-width: 0; }
   .calendar-week-head, .calendar-week-all-day, .calendar-week-body { grid-template-columns: 2.3rem repeat(var(--week-days, 7), minmax(0, 1fr)); }
   .calendar-week-day-head { gap: 3px; padding: 6px 0; border-radius: 0; min-height: 52px; }

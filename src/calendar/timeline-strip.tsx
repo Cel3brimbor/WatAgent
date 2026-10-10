@@ -15,7 +15,7 @@ type Props = {
 };
 
 function timeRange(item: TimelineItem): string {
-  if (item.pinned) return `Due ${formatTime(item.startUTC)}`;
+  if (item.pinned) return `Due ${formatTime(item.pinnedDueUTC ?? item.startUTC)}`;
   return `${formatTime(item.startUTC)}${item.endUTC > item.startUTC ? `–${formatTime(item.endUTC)}` : ""}`;
 }
 

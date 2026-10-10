@@ -37,9 +37,26 @@ type Props = {
   onOpenChange: (open: boolean) => void;
   groupOn?: boolean;
   onToggleGroup?: (on: boolean) => void;
+  heading?: string;
+  emptyCopy?: string;
+  footnote?: string;
+  namePlaceholder?: string;
 };
 
-export function SmartTagsPanel({ tags, onChange, calendars, samples, open, onOpenChange, groupOn = true, onToggleGroup }: Props) {
+export function SmartTagsPanel({
+  tags,
+  onChange,
+  calendars,
+  samples,
+  open,
+  onOpenChange,
+  groupOn = true,
+  onToggleGroup,
+  heading = "Smart tags",
+  emptyCopy = "Color events automatically by words in their title, location, or description.",
+  footnote = "Colors only show in WatAgent.",
+  namePlaceholder = "Tag name (e.g. Workouts)",
+}: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const listRef = useRef<HTMLUListElement>(null);
   useFlip(listRef, tags.map((tag) => tag.id).join("|"));
@@ -91,7 +108,7 @@ export function SmartTagsPanel({ tags, onChange, calendars, samples, open, onOpe
           aria-expanded={open}
           onClick={() => onOpenChange(!open)}
         >
-          <span>Smart tags</span>
+          <span>{heading}</span>
           <ChevronIcon open={open} />
         </button>
         <button
@@ -108,7 +125,7 @@ export function SmartTagsPanel({ tags, onChange, calendars, samples, open, onOpe
       <Disclosure open={open}>
         {tags.length === 0 ? (
           <div className="smart-tags-empty">
-            <p>Color events automatically by words in their title, location, or description.</p>
+            <p>{emptyCopy}</p>
             <button type="button" className="smart-tag-link" onClick={add}>
               New smart tag
             </button>
@@ -163,6 +180,8 @@ export function SmartTagsPanel({ tags, onChange, calendars, samples, open, onOpe
                       onMove={(delta) => move(tag.id, delta)}
                       onDelete={() => remove(tag.id)}
                       onDone={() => setEditingId(null)}
+                      footnote={footnote}
+                      namePlaceholder={namePlaceholder}
                     />
                   ) : null}
                 </li>
@@ -242,6 +261,8 @@ function SmartTagEditor({
   onMove,
   onDelete,
   onDone,
+  footnote,
+  namePlaceholder,
 }: {
   tag: SmartTag;
   first: boolean;
@@ -252,6 +273,8 @@ function SmartTagEditor({
   onMove: (delta: -1 | 1) => void;
   onDelete: () => void;
   onDone: () => void;
+  footnote: string;
+  namePlaceholder: string;
 }) {
   const [skipOpen, setSkipOpen] = useState(tag.exemptCalendarIds.length > 0);
   const matched = useMemo(() => {
@@ -277,7 +300,7 @@ function SmartTagEditor({
         type="text"
         className="smart-tag-input"
         value={tag.name}
-        placeholder="Tag name (e.g. Workouts)"
+        placeholder={namePlaceholder}
         aria-label="Tag name"
         maxLength={SMART_TAG_LIMITS.name}
         autoFocus={!tag.name}
@@ -421,7 +444,7 @@ function SmartTagEditor({
         {hasRuleValue
           ? `Matches ${matched} loaded event${matched === 1 ? "" : "s"}${tag.enabled ? "" : " (paused)"}.`
           : "Separate words with commas to match any of them."}{" "}
-        Colors only show in WatAgent.
+        {footnote}
       </p>
 
       <div className="smart-tag-actions">

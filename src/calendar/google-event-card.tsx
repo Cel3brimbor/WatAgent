@@ -69,7 +69,7 @@ export function GoogleEventCard({ item, anchor, open = true, onClose, onEdit, on
     return { left, top, origin: originFor(anchor, left, top, width) };
   });
   const details = item.google;
-  const when = item.pinned ? formatDueWhen(item.startUTC) : formatGoogleWhen(item.startUTC, item.endUTC, item.allDay);
+  const when = item.pinned ? formatDueWhen(item.pinnedDueUTC ?? item.startUTC) : formatGoogleWhen(item.startUTC, item.endUTC, item.allDay);
   const location = (details?.location ?? item.location)?.trim() || "";
   const description = (details?.description ?? item.description)?.trim() || "";
   const calendarName = details?.calendarName?.trim() || calendarLabel?.trim() || "Agent Main";

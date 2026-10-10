@@ -25,7 +25,7 @@ import {
   type CalendarSourceFilter,
   type SidePanelSectionsOpen,
 } from "@/calendar/preferences";
-import { writeSmartTags, type SmartTag } from "@/calendar/smart-tags";
+import { writeSmartTags, writeTaskSmartTags, type SmartTag } from "@/calendar/smart-tags";
 import { writeKeywordTasks, type KeywordTasks } from "@/calendar/keyword-tasks";
 import { writeLocalCalendars, type LocalCalendar } from "@/calendar/local-calendars";
 import { writeCalendarSpaces, type CalendarSpace } from "@/calendar/calendar-spaces";
@@ -48,6 +48,7 @@ export type CalendarPreferencesState = {
   colors: CalendarColors;
   colorOverrides: Record<string, string>;
   smartTags: SmartTag[];
+  taskSmartTags: SmartTag[];
   keywordTasks: KeywordTasks;
   navCollapsed: boolean;
   sidePanelSections: SidePanelSectionsOpen;
@@ -67,6 +68,7 @@ function writeLocalCache(doc: UserCalendarPreferencesV1): void {
   writeCalendarColors(doc.colors);
   writeColorOverrides(doc.colorOverrides);
   writeSmartTags(doc.smartTags);
+  writeTaskSmartTags(doc.taskSmartTags);
   writeKeywordTasks(doc.keywordTasks);
   writeSidePanelSections(doc.sidePanelSections);
   writeCalendarSpaces(doc.calendarSpaces, doc.activeCalendarSpaceId);
@@ -94,6 +96,7 @@ type ApplyPatch = {
   setColors: (colors: CalendarColors) => void;
   setColorOverrides: (overrides: Record<string, string>) => void;
   setSmartTags: (tags: SmartTag[]) => void;
+  setTaskSmartTags: (tags: SmartTag[]) => void;
   setKeywordTasks: (config: KeywordTasks) => void;
   setNavCollapsed: (collapsed: boolean) => void;
   setSidePanelSections: (sections: SidePanelSectionsOpen) => void;
@@ -114,6 +117,7 @@ function applyDoc(doc: UserCalendarPreferencesV1, apply: ApplyPatch): void {
   apply.setColors(doc.colors);
   apply.setColorOverrides(doc.colorOverrides);
   apply.setSmartTags(doc.smartTags);
+  apply.setTaskSmartTags(doc.taskSmartTags);
   apply.setKeywordTasks(doc.keywordTasks);
   apply.setNavCollapsed(doc.navCollapsed);
   apply.setSidePanelSections(doc.sidePanelSections);
@@ -191,11 +195,11 @@ export function useCalendarPreferencesSync(
     };
   }, [ready]);
 
-  const { view, importedCalendars, campusCalendars, mergedCalendars, agentHiddenCalendarIds, newCalendarsShown, localCalendars, sources, colors, colorOverrides, smartTags, keywordTasks, navCollapsed, sidePanelSections, calendarSpaces, activeCalendarSpaceId } = state;
+  const { view, importedCalendars, campusCalendars, mergedCalendars, agentHiddenCalendarIds, newCalendarsShown, localCalendars, sources, colors, colorOverrides, smartTags, taskSmartTags, keywordTasks, navCollapsed, sidePanelSections, calendarSpaces, activeCalendarSpaceId } = state;
 
   useEffect(() => {
     if (!ready || skipSaveRef.current) return;
-    const doc = toDoc({ view, importedCalendars, campusCalendars, mergedCalendars, agentHiddenCalendarIds, newCalendarsShown, localCalendars, sources, colors, colorOverrides, smartTags, keywordTasks, navCollapsed, sidePanelSections, calendarSpaces, activeCalendarSpaceId });
+    const doc = toDoc({ view, importedCalendars, campusCalendars, mergedCalendars, agentHiddenCalendarIds, newCalendarsShown, localCalendars, sources, colors, colorOverrides, smartTags, taskSmartTags, keywordTasks, navCollapsed, sidePanelSections, calendarSpaces, activeCalendarSpaceId });
     writeLocalCache(doc);
     pendingSaveRef.current = doc;
     window.clearTimeout(saveTimerRef.current);
@@ -211,7 +215,7 @@ export function useCalendarPreferencesSync(
       pendingSaveRef.current = null;
       void saveCalendarPreferences(queued).catch(() => undefined);
     };
-  }, [ready, view, importedCalendars, campusCalendars, mergedCalendars, agentHiddenCalendarIds, newCalendarsShown, localCalendars, sources, colors, colorOverrides, smartTags, keywordTasks, navCollapsed, sidePanelSections, calendarSpaces, activeCalendarSpaceId]);
+  }, [ready, view, importedCalendars, campusCalendars, mergedCalendars, agentHiddenCalendarIds, newCalendarsShown, localCalendars, sources, colors, colorOverrides, smartTags, taskSmartTags, keywordTasks, navCollapsed, sidePanelSections, calendarSpaces, activeCalendarSpaceId]);
 
   const flushSave = (overrides?: Partial<CalendarPreferencesState>) => {
     if (!ready || skipSaveRef.current) return;

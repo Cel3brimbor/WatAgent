@@ -20,6 +20,7 @@ import { SlotDraft } from "@/calendar/slot-draft";
 import type { CalendarDraft } from "@/calendar/calendar-item-editor";
 import { timedDraftSlotForDay } from "@/calendar/editor-draft";
 import { PlusIcon } from "@/shared/icons";
+import { AllDayResizeHandle, allDayItems, useAllDayResize } from "@/calendar/all-day-bar";
 
 type Props = {
   focus: Date;
@@ -44,12 +45,13 @@ export function CalendarDayView({
 }: Props) {
   const now = useNowMs();
   const dayStart = startOfLocalDay(focus);
-  const topped = items.filter((item) => item.allDay || item.pinned);
   const timed = layoutOverlappingBlocks(
     items.filter((item) => !item.allDay && !item.pinned),
     dayStart.getTime(),
   );
   const nowTop = nowLineTop(now, dayStart.getTime());
+  const allDay = useAllDayResize();
+  const topped = allDayItems(items);
   const slots = useSlotDrag<"day">((_key, startHour, endHour) => onCreateTimed(startHour, 0, endHour));
   const dragSlot = slots.selection;
   const draftSlot = dragSlot ?? timedDraftSlotForDay(editorDraft ?? null, focus);
@@ -59,6 +61,11 @@ export function CalendarDayView({
   return (
     <div className="calendar-day">
       <div className="calendar-sticky">
+        <div className={`calendar-all-day-frame${allDay.resizing ? " is-resizing" : ""}`} data-empty={topped.length === 0}>
+        <div
+          className={`calendar-all-day-scroll${allDay.height != null ? " is-sized" : ""}`}
+          style={allDay.height != null ? { height: allDay.height } : undefined}
+        >
         <div className="calendar-all-day" data-empty={topped.length === 0}>
           <span className="calendar-all-day-label">All-day</span>
           <div className="calendar-all-day-items">
@@ -82,6 +89,9 @@ export function CalendarDayView({
               </button>
             )}
           </div>
+        </div>
+        </div>
+        <AllDayResizeHandle height={allDay.height} handleProps={allDay.handleProps} />
         </div>
       </div>
       <div className="calendar-day-grid">

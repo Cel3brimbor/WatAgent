@@ -24,6 +24,7 @@ import { SlotDraft } from "@/calendar/slot-draft";
 import type { CalendarDraft } from "@/calendar/calendar-item-editor";
 import { timedDraftSlotForDay } from "@/calendar/editor-draft";
 import { PlusIcon } from "@/shared/icons";
+import { AllDayResizeHandle, allDayItems, useAllDayResize } from "@/calendar/all-day-bar";
 
 type Props = {
   focus: Date;
@@ -60,6 +61,8 @@ export function CalendarWeekView({
   const slots = useSlotDrag<number>((dayIndex, startHour, endHour) =>
     onCreateTimed(days[dayIndex], startHour, endHour),
   );
+  const allDay = useAllDayResize();
+  const hasAllDay = days.some((date) => allDayItems(itemsForDay(date)).length > 0);
 
   return (
     <div className="calendar-week" style={{ "--week-days": days.length } as CSSProperties}>
@@ -78,10 +81,15 @@ export function CalendarWeekView({
             </button>
           ))}
         </div>
-        <div className="calendar-week-all-day" data-empty={!days.some((date) => itemsForDay(date).some((item) => item.allDay))}>
+        <div className={`calendar-all-day-frame${allDay.resizing ? " is-resizing" : ""}`} data-empty={!hasAllDay}>
+        <div
+          className={`calendar-all-day-scroll${allDay.height != null ? " is-sized" : ""}`}
+          style={allDay.height != null ? { height: allDay.height } : undefined}
+        >
+        <div className="calendar-week-all-day" data-empty={!hasAllDay}>
           <span className="calendar-all-day-label">All-day</span>
           {days.map((date) => {
-            const topped = itemsForDay(date).filter((item) => item.allDay || item.pinned);
+            const topped = allDayItems(itemsForDay(date));
             const tone = `${isToday(date) ? " is-today" : ""}${date.getDay() % 6 === 0 ? " is-weekend" : ""}`;
             return (
               <div key={`${date.toISOString()}-all`} className={`calendar-week-all-day-col${tone}`}>
@@ -107,6 +115,9 @@ export function CalendarWeekView({
               </div>
             );
           })}
+        </div>
+        </div>
+        <AllDayResizeHandle height={allDay.height} handleProps={allDay.handleProps} />
         </div>
       </div>
       <div className="calendar-week-body">

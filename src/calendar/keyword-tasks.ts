@@ -1,4 +1,4 @@
-import { smartTagTerms } from "@/calendar/smart-tags";
+import { compileSmartTags, smartTagTerms, type SmartTag, type SmartTagHit, type SmartTagTarget } from "@/calendar/smart-tags";
 import { uid } from "@/shared/ids";
 
 /** Events on the chosen calendars whose text holds a keyword show as tasks, due when the event starts (or ends). */
@@ -14,7 +14,12 @@ export type KeywordTaskRule = {
   enabled: boolean;
 };
 
-export type KeywordTasks = { rules: KeywordTaskRule[]; doneKeys: string[] };
+export type KeywordTasks = {
+  rules: KeywordTaskRule[];
+  doneKeys: string[];
+  /**end-of-day learn and portal dues stay tasks. missing means on, which is how the list worked before*/
+  includeDeadlines?: boolean;
+};
 
 /** An event a rule can turn into a task. key stays the same across syncs so a checked-off task stays checked. */
 export type KeywordTaskSource = {
@@ -41,11 +46,13 @@ export type KeywordTask = {
   ruleName: string;
   done: boolean;
   source: KeywordTaskSource;
+  /**the task smart tag that colored this row, when one matches*/
+  tag?: SmartTagHit;
 };
 
 export const KEYWORD_TASK_LIMITS = { rules: 30, doneKeys: 1000, keywords: 300, name: 60 };
 
-export const EMPTY_KEYWORD_TASKS: KeywordTasks = { rules: [], doneKeys: [] };
+export const EMPTY_KEYWORD_TASKS: KeywordTasks = { rules: [], doneKeys: [], includeDeadlines: true };
 
 export const SUGGESTED_KEYWORDS = "assignment, quiz, exam, midterm, due, deadline, project, lab";
 
@@ -165,6 +172,52 @@ export function keywordTasksOf(config: KeywordTasks, sources: KeywordTaskSource[
   return dedupeSchoolAssignmentTasks(tasks.sort((a, b) => a.dueUTC - b.dueUTC || a.title.localeCompare(b.title)));
 }
 
+export function taskTargetOf(source: KeywordTaskSource): SmartTagTarget {
+  return {
+    calendarId: source.calendarId,
+    title: source.title,
+    location: source.location,
+    description: source.description,
+  };
+}
+
+/**paint each task with the first enabled task tag that matches it*/
+export function withTaskTags(tasks: KeywordTask[], tags: SmartTag[]): KeywordTask[] {
+  const match = compileSmartTags(tags);
+  return tasks.map((task) => {
+    const hit = match(taskTargetOf(task.source));
+    return hit ? { ...task, tag: hit } : task.tag ? { ...task, tag: undefined } : task;
+  });
+}
+
+/**events a task tag matches, skipping ones a keyword rule or a deadline already claimed*/
+export function smartTagTasksOf(tags: SmartTag[], sources: KeywordTaskSource[], doneKeys: string[], taken: Set<string>): KeywordTask[] {
+  const match = compileSmartTags(tags);
+  if (tags.length === 0) return [];
+  const done = new Set(doneKeys);
+  const tasks: KeywordTask[] = [];
+  for (const source of sources) {
+    if (taken.has(source.key)) continue;
+    const hit = match(taskTargetOf(source));
+    if (!hit) continue;
+    taken.add(source.key);
+    tasks.push({
+      key: source.key,
+      title: source.title,
+      dueUTC: source.startUTC,
+      allDay: source.allDay,
+      calendarId: source.calendarId,
+      keyword: hit.name,
+      ruleId: hit.id,
+      ruleName: hit.name,
+      done: done.has(source.key),
+      source,
+      tag: hit,
+    });
+  }
+  return tasks;
+}
+
 /** Checking a task off keeps its key; the oldest keys fall off past the limit. */
 export function withKeywordTaskDone(config: KeywordTasks, key: string, done: boolean): KeywordTasks {
   const rest = config.doneKeys.filter((entry) => entry !== key);
@@ -207,7 +260,11 @@ export function parseKeywordTasksFromUnknown(raw: unknown): KeywordTasks {
   const doneKeys = Array.isArray(rec.doneKeys)
     ? [...new Set(rec.doneKeys.filter((key): key is string => typeof key === "string" && key.length > 0 && key.length <= 1100))]
     : [];
-  return { rules: rules.slice(0, KEYWORD_TASK_LIMITS.rules), doneKeys: doneKeys.slice(-KEYWORD_TASK_LIMITS.doneKeys) };
+  return {
+    rules: rules.slice(0, KEYWORD_TASK_LIMITS.rules),
+    doneKeys: doneKeys.slice(-KEYWORD_TASK_LIMITS.doneKeys),
+    includeDeadlines: rec.includeDeadlines !== false,
+  };
 }
 
 export function readKeywordTasks(): KeywordTasks {

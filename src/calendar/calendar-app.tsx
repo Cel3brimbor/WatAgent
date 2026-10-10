@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import type { CalendarItemMeta, CalendarView, ImportedCalendar, ImportedCalendarSource, MergedCalendar, TimelineItem } from "@/calendar/types";
+import type { CalendarItemDoc, CalendarItemMeta, CalendarView, ImportedCalendar, ImportedCalendarSource, MergedCalendar, TimelineItem } from "@/calendar/types";
 import { useCalendar } from "@/calendar/store";
 import {
   addDays,
@@ -16,7 +16,7 @@ import {
 } from "@/calendar/date-utils";
 import { removeImportedCalendar } from "@/calendar/client";
 import { calendarItemVisible, externalCalendarId, externalCalendarsOf } from "@/calendar/external-calendars";
-import { bottomDeadlines, mergeTimeline, pinBottomDeadlines } from "@/calendar/calendar-merge";
+import { bottomDeadlines, mergeTimeline, pinBottomDeadlines, pinListedDues } from "@/calendar/calendar-merge";
 import { feedOfCalendarId, mergedByMember, newFeedId } from "@/calendar/imported-calendars";
 import { formatFeedSyncSummary, syncImportedFeed } from "@/calendar/calendar-sync";
 import { type SideExternalCalendar } from "@/calendar/calendar-side-panel";
@@ -48,6 +48,7 @@ import { isExcludedGoogleCalendarName } from "@/calendar/calendar-lists";
 import {
   compileSmartTags,
   readSmartTags,
+  readTaskSmartTags,
   type SmartTag,
   type SmartTagMatcher,
   type SmartTagTarget,
@@ -126,7 +127,7 @@ import {
   type CampusSubscriptionPref,
 } from "@/campus/campus-subscription-prefs";
 import { cachedCampusEvents, fetchCampusScrapeAt, syncCampusCalendars, type CampusSyncCalendar } from "@/campus/campus-client";
-import { deadlineTasksOf, dedupeSchoolAssignmentTasks, keywordTasksOf, readKeywordTasks, withKeywordTaskDone, type KeywordTasks, type KeywordTaskSource } from "@/calendar/keyword-tasks";
+import { deadlineTasksOf, dedupeSchoolAssignmentTasks, keywordTasksOf, readKeywordTasks, smartTagTasksOf, withKeywordTaskDone, withTaskTags, type KeywordTasks, type KeywordTaskSource } from "@/calendar/keyword-tasks";
 import { KeywordTaskRules, type KeywordTaskCalendarOption } from "@/calendar/keyword-task-rules";
 import { AccessError, plainReason } from "@/auth/access";
 import { CalendarChatPanel } from "@/agent/calendar-chat-panel";
@@ -490,6 +491,7 @@ export function CalendarApp({
   const [colorOverrides, setColorOverrides] = useState<Record<string, string>>(() => readColorOverrides());
   const [localCalendars, setLocalCalendars] = useState<LocalCalendar[]>(() => readLocalCalendars());
   const [smartTags, setSmartTags] = useState<SmartTag[]>(() => readSmartTags());
+  const [taskSmartTags, setTaskSmartTags] = useState<SmartTag[]>(() => readTaskSmartTags());
   const [keywordTasks, setKeywordTasks] = useState<KeywordTasks>(() => readKeywordTasks());
   const [sidePanelSections, setSidePanelSections] = useState<SidePanelSectionsOpen>(() => readSidePanelSections());
   const groups = calendarGroupsOf(sources.groups);
@@ -603,7 +605,7 @@ export function CalendarApp({
 
   const preferencesLoaded = useCalendarPreferencesSync(
     calendar.hydrated,
-    { view, importedCalendars, campusCalendars: campusCalendarFeeds, mergedCalendars, agentHiddenCalendarIds, newCalendarsShown, localCalendars, sources, colors, colorOverrides, smartTags, keywordTasks, navCollapsed, sidePanelSections, calendarSpaces, activeCalendarSpaceId },
+    { view, importedCalendars, campusCalendars: campusCalendarFeeds, mergedCalendars, agentHiddenCalendarIds, newCalendarsShown, localCalendars, sources, colors, colorOverrides, smartTags, taskSmartTags, keywordTasks, navCollapsed, sidePanelSections, calendarSpaces, activeCalendarSpaceId },
     {
       setView,
       setImportedCalendars,
@@ -616,6 +618,7 @@ export function CalendarApp({
       setColors,
       setColorOverrides,
       setSmartTags,
+      setTaskSmartTags,
       setKeywordTasks,
       setNavCollapsed,
       setSidePanelSections,
@@ -1193,6 +1196,7 @@ export function CalendarApp({
   );
   const derivedKeywordTasks = useMemo(() => keywordTasksOf(keywordTasks, keywordTaskSources), [keywordTasks, keywordTaskSources]);
   const deadlineTasks = useMemo(() => {
+    if (keywordTasks.includeDeadlines === false) return [];
     const sources = bottomDeadlines(mergedTaskItems, feedsForMerge).flatMap((item): KeywordTaskSource[] => {
       const calendarId = item.kind === "gcal_event" ? item.google?.calendarId : timelineItemCalendarId(item);
       if (!calendarId) return [];
@@ -1210,10 +1214,44 @@ export function CalendarApp({
     });
     const seen = new Set(derivedKeywordTasks.map((task) => task.key));
     return deadlineTasksOf(sources, keywordTasks.doneKeys).filter((task) => !seen.has(task.key));
-  }, [mergedTaskItems, feedsForMerge, derivedKeywordTasks, keywordTasks.doneKeys]);
-  const listedTasks = useMemo(
-    () => dedupeSchoolAssignmentTasks([...derivedKeywordTasks, ...deadlineTasks].sort((a, b) => a.dueUTC - b.dueUTC || a.title.localeCompare(b.title))),
-    [derivedKeywordTasks, deadlineTasks],
+  }, [mergedTaskItems, feedsForMerge, derivedKeywordTasks, keywordTasks.doneKeys, keywordTasks.includeDeadlines]);
+  const listedTasks = useMemo(() => {
+    const claimed = new Set([...derivedKeywordTasks, ...deadlineTasks].map((task) => task.key));
+    const fromTags = smartTagTasksOf(taskSmartTags, keywordTaskSources, keywordTasks.doneKeys, claimed);
+    return withTaskTags(
+      dedupeSchoolAssignmentTasks([...derivedKeywordTasks, ...deadlineTasks, ...fromTags].sort((a, b) => a.dueUTC - b.dueUTC || a.title.localeCompare(b.title))),
+      taskSmartTags,
+    );
+  }, [derivedKeywordTasks, deadlineTasks, taskSmartTags, keywordTaskSources, keywordTasks.doneKeys]);
+  const taskTagMatcher = useMemo(() => compileSmartTags(taskSmartTags), [taskSmartTags]);
+  const tagForTaskItem = useCallback((item: CalendarItemDoc) => taskTagMatcher({
+    calendarId: item.calendar.importSource
+      ? externalCalendarId(item.calendar.importSource)
+      : localCalendarIdOf(item.calendar) ?? "events",
+    title: item.title,
+    location: item.calendar.location,
+    description: item.calendar.description,
+  }), [taskTagMatcher]);
+  const taskTagSamples = useMemo<SmartTagTarget[]>(
+    () => [
+      ...keywordTaskSources.map((source) => ({
+        calendarId: source.calendarId,
+        title: source.title,
+        location: source.location,
+        description: source.description,
+      })),
+      ...itemsForUi
+        .filter((item) => item.calendar.kind === "task" && !item.editorDraft)
+        .map((item) => ({
+          calendarId: item.calendar.importSource
+            ? externalCalendarId(item.calendar.importSource)
+            : localCalendarIdOf(item.calendar) ?? "events",
+          title: item.title,
+          location: item.calendar.location,
+          description: item.calendar.description,
+        })),
+    ],
+    [keywordTaskSources, itemsForUi],
   );
   const keywordTaskCalendars = useMemo<KeywordTaskCalendarOption[]>(
     () => [
@@ -1236,6 +1274,11 @@ export function CalendarApp({
     ],
     [sideExternalCalendars, sideCampusCalendars, sidebarCalendars, shownCalendars],
   );
+  const taskDueById = useMemo(() => {
+    const due = new Map<string, number>();
+    for (const task of listedTasks) due.set(task.key, task.dueUTC);
+    return due;
+  }, [listedTasks]);
   const keywordTaskCalendarName = useCallback(
     (id: string) => keywordTaskCalendars.find((calendar) => calendar.id === id)?.name ?? "Calendar",
     [keywordTaskCalendars],
@@ -1257,7 +1300,7 @@ export function CalendarApp({
     (date: Date, filter: CalendarSourceFilter) => {
       const filterGroups = calendarGroupsOf(filter.groups);
       const googleShown = filter.google && filterGroups.other;
-      return pinBottomDeadlines(mergeTimeline(aggregateTimeline({
+      return pinListedDues(pinBottomDeadlines(mergeTimeline(aggregateTimeline({
         focus: date,
         events: itemsForUi.filter((item) => {
           //shortcut feeds stay off main. a quick display shows only the calendars it picked
@@ -1271,7 +1314,7 @@ export function CalendarApp({
           if (filterGroups.hidden && filter.hiddenIds.includes(event.calendarId)) return true;
           return googleShown && !isSidebarHidden(filter, event.calendarId) && !filter.mutedGoogleIds.includes(event.calendarId);
         }),
-      }), mergedCalendars, feedsForMerge), date, feedsForMerge).map((item) => {
+      }), mergedCalendars, feedsForMerge), date, feedsForMerge), taskDueById, date).map((item) => {
         const swatch = (calendarId: string, importSource?: string) => {
           //a shortcut color paints this view only
           const shortcut = viewingDisplay?.colorOverrides[calendarId];
@@ -1295,7 +1338,7 @@ export function CalendarApp({
         };
       });
     },
-    [itemsForUi, busyBlocks, shownOverlayEvents, mergedCalendars, feedsForMerge, campusSources, campusCategoryByFeedId, colorOverrides, colors, viewingDisplay, spaceOnlyFeeds],
+    [itemsForUi, busyBlocks, shownOverlayEvents, mergedCalendars, feedsForMerge, campusSources, campusCategoryByFeedId, colorOverrides, colors, viewingDisplay, spaceOnlyFeeds, taskDueById],
   );
 
   const displayTagMatcher = useMemo(() => {
@@ -1323,7 +1366,9 @@ export function CalendarApp({
         })
         .slice(0, 80)
         .map((item) => {
-          const when = item.allDay ? "all-day" : `${formatTime(item.startUTC)}–${formatTime(item.endUTC)}`;
+          const when = item.pinned
+            ? `due ${formatTime(item.pinnedDueUTC ?? item.startUTC)}`
+            : item.allDay ? "all-day" : `${formatTime(item.startUTC)}–${formatTime(item.endUTC)}`;
           if (item.kind === "gcal_event" || item.kind === "gcal_busy") {
             const where = item.google?.location ? ` @ ${item.google.location}` : "";
             const calendarName = item.google?.calendarName ? ` [${item.google.calendarName}]` : "";
@@ -2076,6 +2121,7 @@ export function CalendarApp({
         advanced={advancedView}
       >
         <CalendarSidePanel
+          variant={section === "tasks" ? "tasks" : "calendar"}
           focus={focus}
           view={shownView}
           weekStartsOn={weekStartsOn}
@@ -2097,9 +2143,9 @@ export function CalendarApp({
           googleCalendars={sidebarCalendars}
           colorOverrides={colorOverrides}
           onColorOverrides={setColorOverrides}
-          smartTags={smartTags}
-          onSmartTags={setSmartTags}
-          smartTagSamples={smartTagSamples}
+          smartTags={section === "tasks" ? taskSmartTags : smartTags}
+          onSmartTags={section === "tasks" ? setTaskSmartTags : setSmartTags}
+          smartTagSamples={section === "tasks" ? taskTagSamples : smartTagSamples}
           sidePanelSections={sidePanelSections}
           onSidePanelSections={setSidePanelSections}
           localCalendars={shownCalendars}
@@ -2238,6 +2284,7 @@ export function CalendarApp({
                 onCreate={() => setDraft({ ...defaultAllDayDraft(startOfLocalDay(new Date())), kind: "task" })}
                 keywordTasks={listedTasks}
                 calendarName={keywordTaskCalendarName}
+                tagForItem={tagForTaskItem}
                 onKeywordComplete={(key, done) => setKeywordTasks((current) => withKeywordTaskDone(current, key, done))}
                 onKeywordOpen={(task) => {
                   setActiveCalendarSpaceId(MAIN_CALENDAR_SPACE_ID);
