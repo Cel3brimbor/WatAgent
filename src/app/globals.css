@@ -44,7 +44,7 @@
   --ease-spring: cubic-bezier(0.25, 1, 0.5, 1);
   --dur-press: 90ms;
   --dur-fast: 160ms;
-  --dur-exit: 180ms;
+  --dur-exit: 100ms;
   --dur-spring: 420ms;
   /*travel distances; zeroed under reduced motion so every transition degrades to a cross-fade*/
   --rise: 6px;
@@ -4092,11 +4092,11 @@ button.qd-cal-swatch:active {
 }
 
 .calendar-editor-overlay[data-state="open"] {
-  animation: calendar-editor-scrim-in 140ms ease-out both;
+  animation: calendar-editor-scrim-in 80ms ease-out both;
 }
 
 .calendar-editor-overlay[data-state="open"] .calendar-editor {
-  animation: calendar-editor-in 180ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation: calendar-editor-in 90ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 
 @keyframes calendar-editor-scrim-in {
@@ -4105,8 +4105,8 @@ button.qd-cal-swatch:active {
 }
 
 @keyframes calendar-editor-in {
-  from { opacity: 0; transform: translate3d(0, 8px, 0) scale(0.985); }
-  to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+  from { opacity: 1; transform: translate3d(0, 6px, 0) scale(0.985); }
+  to { opacity: 1; transform: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -7596,8 +7596,8 @@ button.qd-cal-swatch:active {
   background: var(--panel-solid);
   box-shadow: var(--shadow-dialog);
   transition:
-    opacity 220ms var(--ease-out),
-    transform var(--dur-spring) var(--ease-spring);
+    opacity 100ms var(--ease-out),
+    transform 120ms var(--ease-out);
 }
 
 .modal h2 {

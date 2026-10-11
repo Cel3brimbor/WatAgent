@@ -2,6 +2,7 @@
 
 import {
   createContext,
+  startTransition,
   useCallback,
   useContext,
   useEffect,
@@ -14,7 +15,7 @@ import { newId } from "@/shared/ids";
 import { parseCalendarMeta, type CalendarItemDoc, type CalendarItemMeta } from "@/calendar/types";
 import { deleteCalendarItem, listCalendarItems, upsertCalendarItem } from "@/calendar/client";
 import { syncGoogleCalendar } from "@/calendar/google-calendar-client";
-import type { BusyBlock, OverlayEvent } from "@/calendar/timeline";
+import { sameVisibleItem, type BusyBlock, type OverlayEvent } from "@/calendar/timeline";
 import type { CalendarChange } from "@/agent/stream";
 import type { ChatMessage, ChatSession } from "@/agent/types";
 import { createSaveQueue } from "@/agent/chat-save-queue";
@@ -154,11 +155,15 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const putItem = useCallback((item: CalendarItemDoc) => {
-    setItems((prev) => sortItems([item, ...prev.filter((row) => row.id !== item.id)]));
+    startTransition(() => {
+      setItems((prev) => sortItems([item, ...prev.filter((row) => row.id !== item.id)]));
+    });
   }, []);
 
   const dropItem = useCallback((id: string) => {
-    setItems((prev) => prev.filter((row) => row.id !== id));
+    startTransition(() => {
+      setItems((prev) => prev.filter((row) => row.id !== id));
+    });
   }, []);
 
   const refresh = useCallback(async () => {
@@ -275,7 +280,10 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
         createdAt: existing?.createdAt ?? now,
       })
         .then((saved) => {
-          putItem(saved);
+          const current = itemsRef.current.find((row) => row.id === saved.id);
+          //the reply often only stamps a Google id. the event is already on screen
+          if (!current || !sameVisibleItem(current, saved)) putItem(saved);
+          else if ((current.calendar.googleEventId ?? "") !== (saved.calendar.googleEventId ?? "")) putItem(saved);
           wrote();
         })
         .catch(logFailure("save"));

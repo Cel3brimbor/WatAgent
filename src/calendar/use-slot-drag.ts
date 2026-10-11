@@ -52,8 +52,14 @@ export function useSlotDrag<K>(onCommit: (key: K, startHour: number, endHour: nu
         const range = drag.preview
           ? quarterHourRange(drag.anchor, hour)
           : { start: Math.min(drag.anchor, hour), end: Math.max(drag.anchor, hour) + 1 };
-        clear();
+        dragRef.current = null;
+        lastRef.current = -1;
+        //open the dialog before the grid drops the drag preview, so the popup is not waiting on that render
         onCommit(drag.key, range.start, range.end);
+        window.setTimeout(() => {
+          if (dragRef.current) return;
+          setSelection(null);
+        }, 0);
       },
       onPointerCancel() {
         clear();

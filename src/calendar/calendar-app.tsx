@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { memo, startTransition, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type Dispatch, type RefObject, type SetStateAction } from "react";
 import { leadHourForDays } from "@/calendar/time-scale";
 import { useTimedGridScroll } from "@/calendar/use-time-scale";
 import type { CalendarItemDoc, CalendarItemMeta, CalendarView, ImportedCalendar, ImportedCalendarSource, MergedCalendar, TimelineItem } from "@/calendar/types";
@@ -24,7 +24,7 @@ import { bottomDeadlines, mergeTimeline, pinBottomDeadlines, pinListedDues } fro
 import { feedOfCalendarId, mergedByMember, newFeedId } from "@/calendar/imported-calendars";
 import { formatFeedSyncSummary, syncImportedFeed } from "@/calendar/calendar-sync";
 import { type SideExternalCalendar } from "@/calendar/calendar-side-panel";
-import { aggregateTimeline, overlayTimelineItemOf, rangesOverlap, timelineItemOf, type BusyBlock, type OverlayEvent } from "@/calendar/timeline";
+import { aggregateTimeline, daysForItemChange, localDaysTouched, overlayTimelineItemOf, rangesOverlap, timelineItemOf, type BusyBlock, type OverlayEvent } from "@/calendar/timeline";
 import {
   ALL_SOURCES,
   readCalendarColors,
@@ -87,7 +87,7 @@ import {
   type CalendarDraft,
   type GoogleDraftTarget,
 } from "@/calendar/calendar-item-editor";
-import { mergeEditorDraft } from "@/calendar/editor-draft";
+import { EditorDraftProvider } from "@/calendar/slot-draft";
 import { EventPeek, type EventPeekHandle } from "@/calendar/google-event-card";
 import { rememberPlace } from "@/calendar/place-memory";
 import { SettingsPanel } from "@/calendar/settings-panel";
@@ -371,6 +371,61 @@ function importAlreadyRunning(err: unknown): boolean {
 }
 
 //start of the period the stage is showing, so moving within the same week/month isn't a "navigation"
+type ItemDeleteTarget = { id: string; title: string; kind: "event" | "task"; calendarName?: string };
+type GoogleDeleteTarget = GoogleDraftTarget & { title: string };
+
+//what the dialogs need from the calendar, without subscribing them to every grid render
+type OverlayBridge = {
+  calendars: LocalCalendar[];
+  readOnlyCalendarIds: string[];
+  defaultCalendarId: string;
+  isDraftReadOnly: (draft: CalendarDraft) => boolean;
+  saveDraft: (draft: CalendarDraft) => void;
+  removeItem: (id: string) => void;
+  removeGoogleEvent: (target: GoogleDraftTarget) => void;
+  closePeek: () => void;
+};
+
+const OVERLAY_EXIT_MS = 120;
+
+function dropCachedDays(days: Map<number, TimelineItem[]>, dirty: Set<number> | null) {
+  if (dirty == null) days.clear();
+  else for (const day of dirty) days.delete(day);
+}
+
+function daysForOverlayChange(before: OverlayEvent[], after: OverlayEvent[]): Set<number> | null {
+  if (Math.abs(before.length - after.length) > 12) return null;
+  const previous = new Map(before.map((event) => [event.id, event]));
+  const seen = new Set<string>();
+  const dirty = new Set<number>();
+  let edits = 0;
+  const mark = (event: OverlayEvent) => {
+    for (const day of localDaysTouched(event.startUTC, event.endUTC)) dirty.add(day);
+  };
+  const same = (left: OverlayEvent, right: OverlayEvent) =>
+    left.startUTC === right.startUTC && left.endUTC === right.endUTC && left.allDay === right.allDay && left.title === right.title;
+  for (const event of after) {
+    seen.add(event.id);
+    const prior = previous.get(event.id);
+    if (!prior) {
+      edits += 1;
+      mark(event);
+      continue;
+    }
+    if (!same(prior, event)) {
+      edits += 1;
+      mark(prior);
+      mark(event);
+    }
+  }
+  for (const event of before) {
+    if (seen.has(event.id)) continue;
+    edits += 1;
+    mark(event);
+  }
+  return edits > 12 ? null : dirty;
+}
+
 function periodStart(focus: Date, view: CalendarView, weekStartsOn: 0 | 1): number {
   if (view === "day") return startOfLocalDay(focus).getTime();
   if (view === "week") return startOfWeek(focus, weekStartsOn).getTime();
@@ -379,16 +434,24 @@ function periodStart(focus: Date, view: CalendarView, weekStartsOn: 0 | 1): numb
   return new Date(focus.getFullYear(), 0, 1).getTime();
 }
 
-export function CalendarApp({
+const CalendarAppBody = memo(function CalendarAppBody({
   user,
   onSignOut,
   advancedView,
   onAdvancedViewChange,
+  setDraft,
+  setItemDelete,
+  setGoogleDelete,
+  bridgeRef,
 }: {
   user: AuthUser;
   onSignOut: () => void;
   advancedView: boolean;
   onAdvancedViewChange: (value: boolean) => void;
+  setDraft: Dispatch<SetStateAction<CalendarDraft | null>>;
+  setItemDelete: Dispatch<SetStateAction<ItemDeleteTarget | null>>;
+  setGoogleDelete: Dispatch<SetStateAction<GoogleDeleteTarget | null>>;
+  bridgeRef: RefObject<OverlayBridge | null>;
 }) {
   const calendar = useCalendar();
   const { syncFromGoogle, createChat, pruneEmptyChats, setAfterWrite } = calendar;
@@ -426,7 +489,6 @@ export function CalendarApp({
     [agentRules.rules],
   );
   const [chatResizing, setChatResizing] = useState(false);
-  const [draft, setDraft] = useState<CalendarDraft | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [restriction, setRestriction] = useState<{ message: string; reason: string | null } | null>(null);
@@ -488,8 +550,6 @@ export function CalendarApp({
   const [settlingAssistantId, setSettlingAssistantId] = useState<string | null>(null);
   const [holdLabel, setHoldLabel] = useState<string | null>(null);
   const settleTimerRef = useRef(0);
-  const [googleDelete, setGoogleDelete] = useState<(GoogleDraftTarget & { title: string }) | null>(null);
-  const [itemDelete, setItemDelete] = useState<{ id: string; title: string; kind: "event" | "task"; calendarName?: string } | null>(null);
   const [sources, setSources] = useState<CalendarSourceFilter>(() => readSourceFilter());
   const [colors, setColors] = useState<CalendarColors>(() => readCalendarColors());
   const [colorOverrides, setColorOverrides] = useState<Record<string, string>>(() => readColorOverrides());
@@ -522,12 +582,7 @@ export function CalendarApp({
   }, [googleCalendars, overlayEvents]);
   const abortRef = useRef<AbortController | null>(null);
   const peekRef = useRef<EventPeekHandle>(null);
-  const deletePrompt = usePresence(googleDelete);
-  const itemDeletePrompt = usePresence(itemDelete);
-  const editor = usePresence(draft);
-  const shownDraft = editor.value;
   const banner = usePresence(notice ?? calendar.loadError);
-  const closeEditor = useCallback(() => setDraft(null), []);
 
   const isTimelineItemReadOnly = useCallback(
     (item: TimelineItem) => {
@@ -537,18 +592,20 @@ export function CalendarApp({
     [sources],
   );
 
-  const draftReadOnly = shownDraft
-    ? isCalendarReadOnly(sources, calendarIdForDraft(shownDraft, calendar.items, localCalendars))
-    : false;
-
+  const itemsForUi = calendar.displayItems;
+  //rules, chat, and the side list wait until the grid has painted
+  const [backgroundItems, setBackgroundItems] = useState(itemsForUi);
+  if (backgroundItems.length === 0 && itemsForUi.length > 0) setBackgroundItems(itemsForUi);
   useEffect(() => {
-    if (draft) peekRef.current?.close();
-  }, [draft]);
-
-  const itemsForUi = useMemo(
-    () => mergeEditorDraft(calendar.displayItems, draft),
-    [calendar.displayItems, draft],
-  );
+    const latest = itemsForUi;
+    const apply = () => setBackgroundItems(latest);
+    if (typeof window.requestIdleCallback === "function") {
+      const id = window.requestIdleCallback(apply, { timeout: 700 });
+      return () => window.cancelIdleCallback(id);
+    }
+    const id = window.setTimeout(apply, 250);
+    return () => window.clearTimeout(id);
+  }, [itemsForUi]);
   const shownCalendars = useMemo(() => shownLocalCalendars(localCalendars, calendar.items), [localCalendars, calendar.items]);
   const localCalendarCounts = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -664,7 +721,7 @@ export function CalendarApp({
       (onlyCampus ? campus : external).push(row);
     }
     const spaceFeeds = spaceOnlyFeedIds(calendarSpaces, feedsForMerge.map((feed) => feed.id));
-    for (const row of externalCalendarsOf(itemsForUi, importedCalendars, new Set([...campusSourceIds, ...spaceFeeds]))) {
+    for (const row of externalCalendarsOf(backgroundItems, importedCalendars, new Set([...campusSourceIds, ...spaceFeeds]))) {
       if (byMember.has(row.id)) continue;
       const feed = feedOf(row.id);
       external.push({ id: row.id, name: row.name, source: row.source, feeds: feed ? [feed] : [] });
@@ -675,7 +732,7 @@ export function CalendarApp({
       campus.push({ id, name: calendar.name, source: calendar.id, feeds: [calendar] });
     }
     return { sideExternalCalendars: external, sideCampusCalendars: campus };
-  }, [itemsForUi, importedCalendars, campusCalendarFeeds, campusSourceIds, mergedCalendars, feedsForMerge, calendarSpaces]);
+  }, [backgroundItems, importedCalendars, campusCalendarFeeds, campusSourceIds, mergedCalendars, feedsForMerge, calendarSpaces]);
 
   const mentionCalendars = useMemo(() => {
     const rows: MentionCalendar[] = shownCalendars
@@ -736,8 +793,8 @@ export function CalendarApp({
         calendarId: "google",
       },
     }));
-    return [...calendar.displayItems, ...google];
-  }, [calendar.displayItems, overlayEvents]);
+    return [...backgroundItems, ...google];
+  }, [backgroundItems, overlayEvents]);
 
   const renameExternal = useCallback((id: string, name: string) => {
     setMergedCalendars((current) => current.map((calendar) => (calendar.id === id ? { ...calendar, name } : calendar)));
@@ -1143,7 +1200,7 @@ export function CalendarApp({
 
   const smartTagSamples = useMemo<SmartTagTarget[]>(
     () => [
-      ...calendar.displayItems.map((item) => ({
+      ...backgroundItems.map((item) => ({
         calendarId: item.calendar.importSource
           ? externalCalendarId(item.calendar.importSource)
           : localCalendarIdOf(item.calendar) ?? "events",
@@ -1158,7 +1215,7 @@ export function CalendarApp({
         description: event.description,
       })),
     ],
-    [calendar.displayItems, overlayEvents],
+    [backgroundItems, overlayEvents],
   );
 
   //every event, each merged duplicate once, that a keyword rule or a late deadline could turn into a task
@@ -1166,15 +1223,15 @@ export function CalendarApp({
     () =>
       mergeTimeline(
         [
-          ...itemsForUi
-            .filter((item) => item.calendar.kind === "event" && !item.pendingApproval && !item.editorDraft && itemOnMainCalendar(item.calendar.importSource, spaceOnlyFeeds))
+          ...backgroundItems
+            .filter((item) => item.calendar.kind === "event" && !item.pendingApproval && itemOnMainCalendar(item.calendar.importSource, spaceOnlyFeeds))
             .map(timelineItemOf),
           ...shownOverlayEvents.map(overlayTimelineItemOf),
         ],
         mergedCalendars,
         feedsForMerge,
       ),
-    [itemsForUi, shownOverlayEvents, mergedCalendars, feedsForMerge, spaceOnlyFeeds],
+    [backgroundItems, shownOverlayEvents, mergedCalendars, feedsForMerge, spaceOnlyFeeds],
   );
   const keywordTaskSources = useMemo<KeywordTaskSource[]>(
     () =>
@@ -1241,8 +1298,8 @@ export function CalendarApp({
         location: source.location,
         description: source.description,
       })),
-      ...itemsForUi
-        .filter((item) => item.calendar.kind === "task" && !item.editorDraft)
+      ...backgroundItems
+        .filter((item) => item.calendar.kind === "task")
         .map((item) => ({
           calendarId: item.calendar.importSource
             ? externalCalendarId(item.calendar.importSource)
@@ -1252,7 +1309,7 @@ export function CalendarApp({
           description: item.calendar.description,
         })),
     ],
-    [keywordTaskSources, itemsForUi],
+    [keywordTaskSources, backgroundItems],
   );
   const keywordTaskCalendars = useMemo<KeywordTaskCalendarOption[]>(
     () => [
@@ -1349,8 +1406,39 @@ export function CalendarApp({
     return (target: SmartTagTarget) => local(target) ?? smartTagMatcher(target);
   }, [viewingDisplay, smartTagMatcher]);
 
+  //a save or delete rebuilds only the days that moved, not every cell on screen
+  const gridCacheRef = useRef<{
+    deps: readonly unknown[];
+    items: CalendarItemDoc[];
+    overlays: OverlayEvent[];
+    days: Map<number, TimelineItem[]>;
+  } | null>(null);
+  const gridDeps = [mergedCalendars, feedsForMerge, campusSources, campusCategoryByFeedId, colorOverrides, colors, viewingDisplay, spaceOnlyFeeds, taskDueById, sources, displayTagMatcher, busyBlocks];
+  let gridCache = gridCacheRef.current;
+  const gridDepsMatch = gridCache != null && gridDeps.every((dep, index) => dep === gridCache?.deps[index]);
+  if (!gridCache || !gridDepsMatch) {
+    gridCache = { deps: gridDeps, items: itemsForUi, overlays: shownOverlayEvents, days: new Map() };
+    gridCacheRef.current = gridCache;
+  } else {
+    if (gridCache.items !== itemsForUi) {
+      dropCachedDays(gridCache.days, daysForItemChange(gridCache.items, itemsForUi));
+      gridCache.items = itemsForUi;
+    }
+    if (gridCache.overlays !== shownOverlayEvents) {
+      dropCachedDays(gridCache.days, daysForOverlayChange(gridCache.overlays, shownOverlayEvents));
+      gridCache.overlays = shownOverlayEvents;
+    }
+  }
   const itemsForDay = useCallback(
-    (date: Date) => applySmartTags(timelineFor(date, sources), displayTagMatcher),
+    (date: Date) => {
+      const cache = gridCacheRef.current;
+      const key = startOfLocalDay(date).getTime();
+      const hit = cache?.days.get(key);
+      if (hit) return hit;
+      const built = applySmartTags(timelineFor(date, sources), displayTagMatcher);
+      cache?.days.set(key, built);
+      return built;
+    },
     [timelineFor, sources, displayTagMatcher],
   );
 
@@ -1465,15 +1553,14 @@ export function CalendarApp({
           throw err;
         }
         if (!mountedRef.current || pullGenRef.current.get(key) !== gen) return null;
-        setBusyBlocks((prev) =>
-          mergeTimed(prev, pulled.busyBlocks, chunk, (block) => `${block.startUTC}:${block.endUTC}`),
-        );
-        setOverlayEvents((prev) => mergeTimed(prev, pulled.overlayEvents, chunk, (event) => event.id));
-        if (pulled.calendars.length > 0) {
-          setGoogleCalendars(
-            pulled.calendars.filter((calendar) => !isExcludedGoogleCalendarName(calendar.name)),
+        const calendars = pulled.calendars.filter((calendar) => !isExcludedGoogleCalendarName(calendar.name));
+        startTransition(() => {
+          setBusyBlocks((prev) =>
+            mergeTimed(prev, pulled.busyBlocks, chunk, (block) => `${block.startUTC}:${block.endUTC}`),
           );
-        }
+          setOverlayEvents((prev) => mergeTimed(prev, pulled.overlayEvents, chunk, (event) => event.id));
+          if (calendars.length > 0) setGoogleCalendars(calendars);
+        });
         const now = Date.now();
         coveredRef.current = [
           ...coveredRef.current.filter((entry) => now - entry.at < GOOGLE_POLL_MS),
@@ -1667,13 +1754,15 @@ export function CalendarApp({
     target: { calendarId: string; eventId: string },
     patch: (event: OverlayEvent) => OverlayEvent | null,
   ) {
-    setOverlayEvents((prev) =>
-      prev.flatMap((event) => {
-        if (event.calendarId !== target.calendarId || event.eventId !== target.eventId) return [event];
-        const next = patch(event);
-        return next ? [next] : [];
-      }),
-    );
+    startTransition(() => {
+      setOverlayEvents((prev) =>
+        prev.flatMap((event) => {
+          if (event.calendarId !== target.calendarId || event.eventId !== target.eventId) return [event];
+          const next = patch(event);
+          return next ? [next] : [];
+        }),
+      );
+    });
   }
 
   async function saveGoogleDraft(pending: CalendarDraft, target: GoogleDraftTarget) {
@@ -1737,28 +1826,28 @@ export function CalendarApp({
     setNotice(ids.length ? `Deleted ${name} and its ${ids.length} item${ids.length === 1 ? "" : "s"}.` : `Deleted ${name}.`);
   }
 
-  function confirmItemDelete() {
-    const target = itemDelete;
-    if (!target) return;
-    setItemDelete(null);
-    setDraft(null);
+  function removeItem(id: string) {
     peekRef.current?.close();
-    calendar.remove(target.id);
+    //after the dialog has closed; removing now would rebuild the grid before the popup can leave
+    window.setTimeout(() => {
+      if (mountedRef.current) calendar.remove(id);
+    }, 0);
   }
 
-  async function confirmGoogleDelete() {
-    const target = googleDelete;
-    if (!target) return;
-    setGoogleDelete(null);
-    setDraft(null);
-    patchOverlay(target, () => null);
-    try {
-      await deleteGoogleEvent({ calendarId: target.calendarId, eventId: target.eventId });
-    } catch (err) {
-      setNotice(err instanceof Error ? err.message : "The Google event could not be deleted.");
-    } finally {
-      setGoogleVersion((value) => value + 1);
-    }
+  function removeGoogleEvent(target: GoogleDraftTarget) {
+    window.setTimeout(() => {
+      if (!mountedRef.current) return;
+      patchOverlay(target, () => null);
+      void (async () => {
+        try {
+          await deleteGoogleEvent({ calendarId: target.calendarId, eventId: target.eventId });
+        } catch (err) {
+          if (mountedRef.current) setNotice(err instanceof Error ? err.message : "The Google event could not be deleted.");
+        } finally {
+          if (mountedRef.current) setGoogleVersion((value) => value + 1);
+        }
+      })();
+    }, 0);
   }
 
   function googleTargetOf(item: TimelineItem): GoogleDraftTarget | null {
@@ -1783,8 +1872,11 @@ export function CalendarApp({
     }
     if (draft.google) {
       const pending = draft;
+      const target = draft.google;
       setDraft(null);
-      void saveGoogleDraft(pending, draft.google);
+      window.setTimeout(() => {
+        if (mountedRef.current) void saveGoogleDraft(pending, target);
+      }, 0);
       return;
     }
     const location = draft.location?.replace(/\s+/g, " ").trim().slice(0, 300) || undefined;
@@ -1801,15 +1893,19 @@ export function CalendarApp({
     };
     if (location) rememberPlace(location);
     const pending = draft;
+    const notice = viewingDisplay && !itemInCalendarSpace(calendarMeta, viewingDisplay)
+      ? `Saved on Calendar. ${viewingDisplay.name} only shows the calendars you picked.`
+      : null;
     setDraft(null);
-    calendar.upsert({
-      id: pending.id,
-      title: pending.title.trim() || (pending.kind === "task" ? "Task" : "Event"),
-      calendar: calendarMeta,
-    });
-    if (viewingDisplay && !itemInCalendarSpace(calendarMeta, viewingDisplay)) {
-      setNotice(`Saved on Calendar. ${viewingDisplay.name} only shows the calendars you picked.`);
-    }
+    window.setTimeout(() => {
+      if (!mountedRef.current) return;
+      calendar.upsert({
+        id: pending.id,
+        title: pending.title.trim() || (pending.kind === "task" ? "Task" : "Event"),
+        calendar: calendarMeta,
+      });
+      if (notice) setNotice(notice);
+    }, 0);
   }
 
   async function handleSend(payload: SendPayload) {
@@ -2121,6 +2217,19 @@ export function CalendarApp({
       })),
   ], [shownCalendars, sideExternalCalendars, sideCampusCalendars, sidebarCalendars, colors, colorOverrides]);
 
+  //dialogs read the latest save/delete handlers without waiting on the grid
+  bridgeRef.current = {
+    calendars: shownCalendars,
+    readOnlyCalendarIds: sources.readOnlyCalendarIds,
+    defaultCalendarId: defaultEventCalendarId(localCalendars),
+    isDraftReadOnly: (current) =>
+      isCalendarReadOnly(sources, calendarIdForDraft(current, calendar.items, localCalendars)),
+    saveDraft,
+    removeItem,
+    removeGoogleEvent,
+    closePeek: () => peekRef.current?.close(),
+  };
+
   if (!calendar.hydrated) {
     return (
       <main className="calendar-shell">
@@ -2398,7 +2507,6 @@ export function CalendarApp({
               <CalendarDayView
                 focus={focus}
                 items={dayItems}
-                editorDraft={viewingDisplay ? null : draft}
                 onOpen={onOpenItem}
                 onCreateTimed={(hour, minute = 0, endHour) => setDraft(defaultTimedDraft(focus, hour, minute, endHour))}
                 onCreateAllDay={() => setDraft(defaultAllDayDraft(focus))}
@@ -2413,7 +2521,6 @@ export function CalendarApp({
                 weekStartsOn={weekStartsOn}
                 days={shownView === "workweek" ? workweekDays : undefined}
                 itemsForDay={itemsForDay}
-                editorDraft={viewingDisplay ? null : draft}
                 onOpen={onOpenItem}
                 onCreateTimed={(date, hour, endHour) => setDraft(defaultTimedDraft(date, hour, 0, endHour))}
                 onCreateAllDay={(date) => setDraft(defaultAllDayDraft(date))}
@@ -2550,6 +2657,41 @@ export function CalendarApp({
         }}
       />
 
+    </div>
+    </div>
+  );
+});
+
+function CalendarOverlays({
+  draft,
+  setDraft,
+  itemDelete,
+  setItemDelete,
+  googleDelete,
+  setGoogleDelete,
+  bridgeRef,
+}: {
+  draft: CalendarDraft | null;
+  setDraft: Dispatch<SetStateAction<CalendarDraft | null>>;
+  itemDelete: ItemDeleteTarget | null;
+  setItemDelete: Dispatch<SetStateAction<ItemDeleteTarget | null>>;
+  googleDelete: GoogleDeleteTarget | null;
+  setGoogleDelete: Dispatch<SetStateAction<GoogleDeleteTarget | null>>;
+  bridgeRef: RefObject<OverlayBridge | null>;
+}) {
+  const editor = usePresence(draft, OVERLAY_EXIT_MS);
+  const itemDeletePrompt = usePresence(itemDelete, OVERLAY_EXIT_MS);
+  const deletePrompt = usePresence(googleDelete, OVERLAY_EXIT_MS);
+  const shownDraft = editor.value;
+  const bridge = bridgeRef.current;
+  const draftReadOnly = shownDraft && bridge ? bridge.isDraftReadOnly(shownDraft) : false;
+
+  useEffect(() => {
+    if (draft) bridgeRef.current?.closePeek();
+  }, [draft, bridgeRef]);
+
+  return (
+    <>
       {itemDeletePrompt.value ? (
         <ConfirmDialog
           title={`Delete “${itemDeletePrompt.value.title}”?`}
@@ -2562,7 +2704,13 @@ export function CalendarApp({
           }
           open={itemDeletePrompt.open}
           onCancel={() => setItemDelete(null)}
-          onConfirm={confirmItemDelete}
+          onConfirm={() => {
+            const target = itemDeletePrompt.value;
+            if (!target) return;
+            setItemDelete(null);
+            setDraft(null);
+            bridgeRef.current?.removeItem(target.id);
+          }}
         />
       ) : null}
 
@@ -2572,22 +2720,28 @@ export function CalendarApp({
           message={`This deletes it from ${deletePrompt.value.calendarName || "your calendar"} in Google Calendar. If it repeats, only this occurrence is removed.`}
           open={deletePrompt.open}
           onCancel={() => setGoogleDelete(null)}
-          onConfirm={() => void confirmGoogleDelete()}
+          onConfirm={() => {
+            const target = deletePrompt.value;
+            if (!target) return;
+            setGoogleDelete(null);
+            setDraft(null);
+            void bridgeRef.current?.removeGoogleEvent(target);
+          }}
         />
       ) : null}
 
-      {shownDraft ? (
+      {shownDraft && bridge ? (
         <CalendarItemEditor
           key={shownDraft.google?.eventId ?? shownDraft.id ?? "new-item"}
           draft={shownDraft}
           open={editor.open}
           readOnly={draftReadOnly}
           onChange={setDraft}
-          onSave={saveDraft}
-          onCancel={closeEditor}
-          calendars={shownCalendars}
-          readOnlyCalendarIds={sources.readOnlyCalendarIds}
-          defaultCalendarId={defaultEventCalendarId(localCalendars)}
+          onSave={(next) => bridgeRef.current?.saveDraft(next)}
+          onCancel={() => setDraft(null)}
+          calendars={bridge.calendars}
+          readOnlyCalendarIds={bridge.readOnlyCalendarIds}
+          defaultCalendarId={bridge.defaultCalendarId}
           onDelete={
             draftReadOnly
               ? undefined
@@ -2610,7 +2764,47 @@ export function CalendarApp({
           }
         />
       ) : null}
-    </div>
-    </div>
+    </>
+  );
+}
+
+export function CalendarApp({
+  user,
+  onSignOut,
+  advancedView,
+  onAdvancedViewChange,
+}: {
+  user: AuthUser;
+  onSignOut: () => void;
+  advancedView: boolean;
+  onAdvancedViewChange: (value: boolean) => void;
+}) {
+  const [draft, setDraft] = useState<CalendarDraft | null>(null);
+  const [itemDelete, setItemDelete] = useState<ItemDeleteTarget | null>(null);
+  const [googleDelete, setGoogleDelete] = useState<GoogleDeleteTarget | null>(null);
+  const bridgeRef = useRef<OverlayBridge | null>(null);
+
+  return (
+    <EditorDraftProvider value={draft}>
+      <CalendarAppBody
+        user={user}
+        onSignOut={onSignOut}
+        advancedView={advancedView}
+        onAdvancedViewChange={onAdvancedViewChange}
+        setDraft={setDraft}
+        setItemDelete={setItemDelete}
+        setGoogleDelete={setGoogleDelete}
+        bridgeRef={bridgeRef}
+      />
+      <CalendarOverlays
+        draft={draft}
+        setDraft={setDraft}
+        itemDelete={itemDelete}
+        setItemDelete={setItemDelete}
+        googleDelete={googleDelete}
+        setGoogleDelete={setGoogleDelete}
+        bridgeRef={bridgeRef}
+      />
+    </EditorDraftProvider>
   );
 }

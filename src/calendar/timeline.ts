@@ -15,6 +15,68 @@ function localMidnightUTC(instant: number): number {
   return date.getTime();
 }
 
+//local midnights an event can appear on. extra days are fine; a missing one would leave a stale cell
+export function localDaysTouched(startUTC: number, endUTC: number): number[] {
+  const end = endUTC > startUTC ? endUTC : startUTC + HOUR_MS;
+  const days: number[] = [];
+  let cursor = localMidnightUTC(startUTC);
+  const last = localMidnightUTC(end - 1);
+  while (cursor <= last && days.length < 62) {
+    days.push(cursor);
+    const next = new Date(cursor);
+    next.setDate(next.getDate() + 1);
+    cursor = next.getTime();
+  }
+  return days;
+}
+
+export function sameVisibleItem(a: CalendarItemDoc, b: CalendarItemDoc): boolean {
+  if (a.id !== b.id || a.title !== b.title) return false;
+  const left = a.calendar;
+  const right = b.calendar;
+  return left.kind === right.kind
+    && left.startUTC === right.startUTC
+    && left.endUTC === right.endUTC
+    && Boolean(left.allDay) === Boolean(right.allDay)
+    && Boolean(left.completed) === Boolean(right.completed)
+    && (left.calendarId ?? "") === (right.calendarId ?? "")
+    && (left.location ?? "") === (right.location ?? "")
+    && (left.description ?? "") === (right.description ?? "")
+    && (left.importSource ?? "") === (right.importSource ?? "");
+}
+
+//null means too many rows changed to bother tracking days
+export function daysForItemChange(before: CalendarItemDoc[], after: CalendarItemDoc[]): Set<number> | null {
+  if (Math.abs(before.length - after.length) > 12) return null;
+  const previous = new Map(before.map((item) => [item.id, item]));
+  const seen = new Set<string>();
+  const dirty = new Set<number>();
+  let edits = 0;
+  const mark = (item: CalendarItemDoc) => {
+    for (const day of localDaysTouched(item.calendar.startUTC, item.calendar.endUTC)) dirty.add(day);
+  };
+  for (const item of after) {
+    seen.add(item.id);
+    const prior = previous.get(item.id);
+    if (!prior) {
+      edits += 1;
+      mark(item);
+      continue;
+    }
+    if (!sameVisibleItem(prior, item)) {
+      edits += 1;
+      mark(prior);
+      mark(item);
+    }
+  }
+  for (const item of before) {
+    if (seen.has(item.id)) continue;
+    edits += 1;
+    mark(item);
+  }
+  return edits > 12 ? null : dirty;
+}
+
 //a saved instant still has to occupy the hour google calendar draws, including the part after midnight
 function drawnEnd(kind: TimelineItem["kind"], allDay: boolean, startUTC: number, endUTC: number): number {
   if (allDay || kind === "task" || endUTC !== startUTC) return endUTC;
