@@ -5,8 +5,9 @@ import { CalendarDayView } from "@/calendar/views/day-view";
 import { CalendarMonthView } from "@/calendar/views/month-view";
 import { CalendarWeekView } from "@/calendar/views/week-view";
 import { CalendarYearView } from "@/calendar/views/year-view";
-import { HOUR_PX } from "@/calendar/calendar-grid";
-import { addDays, formatFocusLabel, shiftFocus, startOfLocalDay, startOfWorkWeek } from "@/calendar/date-utils";
+import { daysInView, formatFocusLabel, shiftFocus, startOfLocalDay, viewForToday } from "@/calendar/date-utils";
+import { leadHourForDays } from "@/calendar/time-scale";
+import { useTimedGridScroll } from "@/calendar/use-time-scale";
 import type { CalendarView, TimelineItem } from "@/calendar/types";
 import { SegmentedControl, type SegmentOption } from "@/shared/segmented-control";
 import { ChevronLeftIcon, ChevronRightIcon } from "@/shared/icons";
@@ -79,21 +80,19 @@ function CalendarPreview({ onFeature, onAskAgent }: { onFeature: (id: FeatureId)
   const [openTag, setOpenTag] = useState<string | null>(null);
   const [tagsOpen, setTagsOpen] = useState(true);
   const [mounted, setMounted] = useState(false);
+  const [todayScroll, setTodayScroll] = useState(0);
 
   const itemsForDay = (date: Date) => sampleItems(date).map((item) => ({ ...item, completed: completed[item.id] ?? false }));
+  const timedView = view === "day" || view === "week" || view === "workweek";
+  const leadHour = leadHourForDays(daysInView(focus, view, WEEK_STARTS), itemsForDay);
+  const hourPx = useTimedGridScroll({
+    scrollerRef: scroller,
+    active: mounted && timedView,
+    resetKey: `${view}:${focus.toDateString()}:${todayScroll}`,
+    leadHour,
+  });
 
   useEffect(() => setMounted(true), []);
-
-  useEffect(() => {
-    const node = scroller.current;
-    if (!node || !mounted) return;
-    if (view === "month" || view === "year") {
-      node.scrollTop = 0;
-      return;
-    }
-    //keep the sample morning in frame, whatever the clock says
-    if (node.scrollTop < 40) node.scrollTop = 7 * HOUR_PX;
-  }, [view, mounted]);
 
   function refuseEdit() {
     setSelected(null);
@@ -118,7 +117,7 @@ function CalendarPreview({ onFeature, onAskAgent }: { onFeature: (id: FeatureId)
     setView("day");
   }
 
-  const workDays = view === "workweek" ? Array.from({ length: 5 }, (_, index) => addDays(startOfWorkWeek(focus), index)) : undefined;
+  const workDays = view === "workweek" ? daysInView(focus, "workweek", WEEK_STARTS) : undefined;
 
   return (
     <div className={styles.productDemo}>
@@ -174,7 +173,14 @@ function CalendarPreview({ onFeature, onAskAgent }: { onFeature: (id: FeatureId)
             <div className="calendar-toolbar-right">
               <div className="calendar-step">
                 <button type="button" className="icon-btn" aria-label="Previous" onClick={() => move(-1)}><ChevronLeftIcon /></button>
-                <button type="button" className="calendar-today-btn" onClick={() => { setFocus(startOfLocalDay(new Date())); setSelected(null); setNotice(null); }}>Today</button>
+                <button type="button" className="calendar-today-btn" onClick={() => {
+                  const today = startOfLocalDay(new Date());
+                  setView((current) => viewForToday(current, today));
+                  setFocus(today);
+                  setTodayScroll((n) => n + 1);
+                  setSelected(null);
+                  setNotice(null);
+                }}>Today</button>
                 <button type="button" className="icon-btn" aria-label="Next" onClick={() => move(1)}><ChevronRightIcon /></button>
               </div>
               <SegmentedControl
@@ -204,6 +210,7 @@ function CalendarPreview({ onFeature, onAskAgent }: { onFeature: (id: FeatureId)
                 onCreateTimed={refuseEdit}
                 onCreateAllDay={refuseEdit}
                 onCompleteTask={(id, done) => setCompleted((previous) => ({ ...previous, [id]: done }))}
+                hourPx={hourPx}
               />
             ) : null}
             {mounted && (view === "week" || view === "workweek") ? (
@@ -217,6 +224,7 @@ function CalendarPreview({ onFeature, onAskAgent }: { onFeature: (id: FeatureId)
                 onCreateAllDay={refuseEdit}
                 onSelectDay={openDay}
                 onCompleteTask={(id, done) => setCompleted((previous) => ({ ...previous, [id]: done }))}
+                hourPx={hourPx}
               />
             ) : null}
             {mounted && view === "month" ? (

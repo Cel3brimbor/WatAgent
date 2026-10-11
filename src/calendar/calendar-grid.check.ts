@@ -21,7 +21,17 @@ const equal = layout(event("z", 9, 11), event("a", 9, 11), event("b", 9, 10));
 assert.deepEqual(equal.map(({ item, col, cols }) => [item.id, col, cols]), [["a", 0, 3], ["z", 1, 3], ["b", 2, 3]]);
 assert.deepEqual(layout(...equal.map(({ item }) => item).reverse()), equal, "feed order cannot shuffle columns");
 assert.deepEqual(layout(event("one", 9, 10), event("two", 10, 11)).map(({ cols, depth }) => [cols, depth]), [[1, 0], [1, 0]], "touching boundaries do not overlap");
-assert.equal(layout(event("tiny", 9, 9.05), event("next", 9.1, 9.15))[1].cols, 2, "minimum-height cards cannot cover another title");
+const shorts = layout(event("tiny", 9, 9.05), event("next", 9.1, 9.15));
+assert.equal(shorts[1].cols, 1, "a gap in time stays one column while the day is zoomed");
+assert.ok(shorts[0].height <= shorts[1].top - shorts[0].top + 1e-6, "a short card stops before the next title");
+assert.equal(shorts[0].height < 18, true, "the minimum card height yields when the next event starts sooner");
+const packed = Array.from({ length: 8 }, (_, i) => event(`e${i}`, 9 + i * (10 / 60), 9 + i * (10 / 60) + 20 / 60));
+const packedAt = (hourPx: number) => layoutOverlappingBlocks(packed, day, hourPx).map(({ col, cols, span }) => [col, cols, span]);
+const packedColumns = packedAt(72);
+assert.deepEqual(packedColumns, [[0, 2, 1], [1, 2, 1], [0, 2, 1], [1, 2, 1], [0, 2, 1], [1, 2, 1], [0, 2, 1], [1, 2, 1]], "tight events share two columns");
+for (const hourPx of [28, 54.25, 72.25, 108.25, 144]) {
+  assert.deepEqual(packedAt(hourPx), packedColumns, `packed columns stay put at ${hourPx}px`);
+}
 const clipped = layout(event("overnight", -5, 2), event("midnight", 0, 1), event("past", -4, -1), event("tomorrow", 25, 26));
 assert.equal(clipped.length, 2);
 assert.equal(clipped[0].top, 0);
@@ -31,6 +41,12 @@ assert.equal(layout(event("late", 23.99, 25))[0].top + layout(event("late", 23.9
 const deep = layout(...Array.from({ length: 20 }, (_, i) => event(String(i), i, 24)));
 assert.equal(deep[19].depth, 19);
 assert.match(String(timedItemStyle(deep[19]).width), /min\(228px, 30%\)/, "deep stacks retain readable width on narrow screens");
+const snapped = timedItemStyle({ ...deep[0], col: 0, cols: 2, span: 1, depth: 1 }, 201);
+const neighbor = timedItemStyle({ ...deep[0], col: 1, cols: 2, span: 1, depth: 0 }, 201);
+assert.equal(snapped.left, 14, "a packed inset stays a whole pixel off the column edge");
+assert.equal(neighbor.left, 103);
+assert.equal(snapped.width, Math.round(100.5 - 2) - 14);
+assert.equal((snapped.left as number) + (snapped.width as number) <= 201, true);
 assert.equal(layout({ ...event("all", 0, 24), allDay: true }, event("bad", 3, 2)).length, 0);
 assert.equal(layout({ ...event("due", 0, 0), kind: "task" })[0].height, 18, "instant tasks at midnight remain visible");
 console.log("Apple-style timed layout checks passed: columns, insets, expansion, stable order, short events, midnight and deep stacks.");

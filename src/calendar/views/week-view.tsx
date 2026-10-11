@@ -18,6 +18,8 @@ import {
   timedItemClass,
   timedItemStyle,
 } from "@/calendar/calendar-grid";
+import { intervalMinutes, labelEvery } from "@/calendar/time-scale";
+import { useColumnWidths } from "@/calendar/use-column-width";
 import { useNowMs } from "@/calendar/calendar-item-editor";
 import { useSlotDrag } from "@/calendar/use-slot-drag";
 import { SlotDraft } from "@/calendar/slot-draft";
@@ -39,6 +41,7 @@ type Props = {
   /** Show these days instead of the full week (the 5-day view passes Monday–Friday). */
   days?: Date[];
   readOnly?: boolean;
+  hourPx?: number;
 };
 
 export function CalendarWeekView({
@@ -53,13 +56,18 @@ export function CalendarWeekView({
   onCompleteTask,
   days: shownDays,
   readOnly = false,
+  hourPx = HOUR_PX,
 }: Props) {
   const now = useNowMs();
+  const interval = intervalMinutes(hourPx);
+  const labelStep = labelEvery(hourPx);
   const weekStart = startOfWeek(focus, weekStartsOn);
   const days = shownDays ?? Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+  const [columnRef, columnWidths] = useColumnWidths(days.length);
   const labels = days.map((date) => date.toLocaleDateString(undefined, { weekday: "short" }));
-  const slots = useSlotDrag<number>((dayIndex, startHour, endHour) =>
-    onCreateTimed(days[dayIndex], startHour, endHour),
+  const slots = useSlotDrag<number>(
+    (dayIndex, startHour, endHour) => onCreateTimed(days[dayIndex], startHour, endHour),
+    hourPx,
   );
   const allDay = useAllDayResize();
   const hasAllDay = days.some((date) => allDayItems(itemsForDay(date)).length > 0);
@@ -121,10 +129,10 @@ export function CalendarWeekView({
         </div>
       </div>
       <div className="calendar-week-body">
-        <div className="calendar-hours">
+        <div className="calendar-hours" title="Scroll to zoom">
           {HOURS.map((hour) => (
-            <div key={hour} className="calendar-hour-label" style={{ height: HOUR_PX }}>
-              {hour === 0 ? "" : formatHourLabel(hour)}
+            <div key={hour} className="calendar-hour-label" style={{ height: hourPx }}>
+              {hour === 0 || hour % labelStep !== 0 ? "" : formatHourLabel(hour)}
             </div>
           ))}
         </div>
@@ -134,8 +142,9 @@ export function CalendarWeekView({
           const timed = layoutOverlappingBlocks(
             dayItems.filter((item) => !item.allDay && !item.pinned),
             dayStart.getTime(),
+            hourPx,
           );
-          const nowTop = isToday(date) ? nowLineTop(now, dayStart.getTime()) : null;
+          const nowTop = isToday(date) ? nowLineTop(now, dayStart.getTime(), hourPx) : null;
           const tone = `${isToday(date) ? " is-today" : ""}${date.getDay() % 6 === 0 ? " is-weekend" : ""}`;
           const selection =
             slots.selection?.key === dayIndex
@@ -144,18 +153,20 @@ export function CalendarWeekView({
           return (
             <div
               key={date.toISOString()}
+              ref={columnRef(dayIndex)}
               className={`calendar-week-col${tone}`}
+              data-interval={interval}
               {...(readOnly ? {} : slots.bind(dayIndex))}
             >
               {HOURS.map((hour) => (
                 readOnly ? (
-                  <div key={hour} className="calendar-hour-slot" style={{ height: HOUR_PX }} />
+                  <div key={hour} className="calendar-hour-slot" style={{ height: hourPx }} />
                 ) : (
                   <button
                     key={hour}
                     type="button"
                     className="calendar-hour-slot"
-                    style={{ height: HOUR_PX }}
+                    style={{ height: hourPx }}
                     aria-label={`Create at ${formatHourLabel(hour)}`}
                     onClick={() => onCreateTimed(date, hour)}
                   />
@@ -165,7 +176,7 @@ export function CalendarWeekView({
                 <div
                   key={layout.item.id}
                   className={`calendar-timed-item ${timedItemClass(layout.height)}`}
-                  style={timedItemStyle(layout)}
+                  style={timedItemStyle(layout, columnWidths[dayIndex] ?? 0)}
                   onPointerDown={(event) => event.stopPropagation()}
                 >
                   <TimelineStrip
@@ -182,6 +193,7 @@ export function CalendarWeekView({
                   end={selection.end}
                   kind={editorDraft?.kind}
                   title={editorDraft?.title}
+                  hourPx={hourPx}
                 />
               ) : null}
               {nowTop != null ? (

@@ -1,8 +1,60 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import type { TimelineItem } from "@/calendar/types";
 import { formatDueWhen, formatGoogleWhen } from "@/calendar/date-utils";
+import { usePresence } from "@/shared/use-presence";
+
+//matches the card's exit transition so the node unmounts as the fade ends
+const PEEK_EXIT_MS = 140;
+
+export type EventPeekHandle = {
+  open: (item: TimelineItem, anchor?: DOMRect) => void;
+  close: () => void;
+};
+
+type EventPeekProps = {
+  labelFor: (item: TimelineItem) => string | undefined;
+  editFor: (item: TimelineItem) => (() => void) | undefined;
+  deleteFor: (item: TimelineItem) => (() => void) | undefined;
+};
+
+//owns its own state so opening and closing don't re-render the calendar
+export const EventPeek = forwardRef<EventPeekHandle, EventPeekProps>(function EventPeek(
+  { labelFor, editFor, deleteFor },
+  ref,
+) {
+  const [peek, setPeek] = useState<{ item: TimelineItem; anchor: DOMRect } | null>(null);
+  const presence = usePresence(peek, PEEK_EXIT_MS);
+  const close = useCallback(() => setPeek(null), []);
+
+  useImperativeHandle(ref, () => ({
+    open(item, anchor) {
+      const nextAnchor = anchor ?? new DOMRect(window.innerWidth / 2 - 180, 96, 0, 0);
+      setPeek((current) => (current?.item === item ? current : { item, anchor: nextAnchor }));
+    },
+    close,
+  }), [close]);
+
+  const shown = presence.value;
+  if (!shown || typeof document === "undefined") return null;
+  const edit = editFor(shown.item);
+  const remove = deleteFor(shown.item);
+  return createPortal(
+    <GoogleEventCard
+      key={shown.item.id}
+      item={shown.item}
+      anchor={shown.anchor}
+      open={presence.open}
+      calendarLabel={labelFor(shown.item)}
+      onClose={close}
+      onEdit={edit ? () => { close(); edit(); } : undefined}
+      onDelete={remove ? () => { close(); remove(); } : undefined}
+    />,
+    document.body,
+  );
+});
 
 type Props = {
   item: TimelineItem;
@@ -109,7 +161,10 @@ export function GoogleEventCard({ item, anchor, open = true, onClose, onEdit, on
   useEffect(() => {
     if (!open) return;
     function onPointer(event: PointerEvent) {
-      if (cardRef.current?.contains(event.target as Node)) return;
+      const target = event.target;
+      if (cardRef.current?.contains(target as Node)) return;
+      //the event click retargets the card; closing here would play the exit first
+      if (target instanceof Element && target.closest(".calendar-strip")) return;
       onClose();
     }
     function onKey(event: KeyboardEvent) {

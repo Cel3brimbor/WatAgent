@@ -12,7 +12,16 @@ export function cloneActivity(parts: ActivityPart[]): ActivityPart[] {
   );
 }
 
-export function AgentActivity({ parts, streaming }: { parts?: ActivityPart[]; streaming: boolean }) {
+export function AgentActivity({
+  parts,
+  streaming,
+  toolsLive = false,
+}: {
+  parts?: ActivityPart[];
+  streaming: boolean;
+  /**the turn is still streaming, even after answer text has started*/
+  toolsLive?: boolean;
+}) {
   const items = parts ?? [];
   if (items.length === 0) {
     if (!streaming) return null;
@@ -36,7 +45,15 @@ export function AgentActivity({ parts, streaming }: { parts?: ActivityPart[]; st
         }
         const calling = part.events.some((event) => event.state === "calling");
         const latest = part === items[items.length - 1];
-        return <AgentThinkingBlock key={part.events[0]?.id ?? "tools"} events={part.events} active={calling || latest} />;
+        const live = toolsLive && calling;
+        return (
+          <AgentThinkingBlock
+            key={part.events[0]?.id ?? "tools"}
+            events={part.events}
+            active={live || latest}
+            live={live}
+          />
+        );
       })}
     </>
   );

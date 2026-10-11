@@ -1,10 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { leadHourForDays } from "@/calendar/time-scale";
+import { useTimedGridScroll } from "@/calendar/use-time-scale";
 import type { CalendarItemDoc, CalendarItemMeta, CalendarView, ImportedCalendar, ImportedCalendarSource, MergedCalendar, TimelineItem } from "@/calendar/types";
 import { useCalendar } from "@/calendar/store";
 import {
   addDays,
+  daysInView,
   formatFocusLabel,
   formatTime,
   localDayBounds,
@@ -13,6 +16,7 @@ import {
   startOfLocalDay,
   startOfWeek,
   startOfWorkWeek,
+  viewForToday,
 } from "@/calendar/date-utils";
 import { removeImportedCalendar } from "@/calendar/client";
 import { calendarItemVisible, externalCalendarId, externalCalendarsOf } from "@/calendar/external-calendars";
@@ -84,7 +88,7 @@ import {
   type GoogleDraftTarget,
 } from "@/calendar/calendar-item-editor";
 import { mergeEditorDraft } from "@/calendar/editor-draft";
-import { GoogleEventCard } from "@/calendar/google-event-card";
+import { EventPeek, type EventPeekHandle } from "@/calendar/google-event-card";
 import { rememberPlace } from "@/calendar/place-memory";
 import { SettingsPanel } from "@/calendar/settings-panel";
 import { useCalendarPreferencesSync, type CalendarPreferencesState } from "@/calendar/use-calendar-preferences-sync";
@@ -137,6 +141,7 @@ import type { AgentEffort } from "@/agent/agent-effort";
 import { requestChatTitle } from "@/agent/chat-title";
 import { readAgentStream } from "@/agent/stream";
 import { cloneActivity } from "@/agent/agent-activity";
+import { settleCallingTools } from "@/agent/settle-tools";
 import type { ActivityPart, ChatMessage, ThoughtSegment, ToolEventRecord } from "@/agent/types";
 import { ApiError, apiFetch, apiJson, errorFromResponse } from "@/shared/api-base";
 import { uid } from "@/shared/ids";
@@ -483,7 +488,6 @@ export function CalendarApp({
   const [settlingAssistantId, setSettlingAssistantId] = useState<string | null>(null);
   const [holdLabel, setHoldLabel] = useState<string | null>(null);
   const settleTimerRef = useRef(0);
-  const [googlePeek, setGooglePeek] = useState<{ item: TimelineItem; anchor: DOMRect } | null>(null);
   const [googleDelete, setGoogleDelete] = useState<(GoogleDraftTarget & { title: string }) | null>(null);
   const [itemDelete, setItemDelete] = useState<{ id: string; title: string; kind: "event" | "task"; calendarName?: string } | null>(null);
   const [sources, setSources] = useState<CalendarSourceFilter>(() => readSourceFilter());
@@ -517,15 +521,12 @@ export function CalendarApp({
     return [...byId.values()].filter((calendar) => !isExcludedGoogleCalendarName(calendar.name));
   }, [googleCalendars, overlayEvents]);
   const abortRef = useRef<AbortController | null>(null);
-  const peek = usePresence(googlePeek);
-  const shownPeek = peek.value;
+  const peekRef = useRef<EventPeekHandle>(null);
   const deletePrompt = usePresence(googleDelete);
   const itemDeletePrompt = usePresence(itemDelete);
   const editor = usePresence(draft);
   const shownDraft = editor.value;
   const banner = usePresence(notice ?? calendar.loadError);
-  //stable so overlay effects don't re-subscribe every render
-  const closePeek = useCallback(() => setGooglePeek(null), []);
   const closeEditor = useCallback(() => setDraft(null), []);
 
   const isTimelineItemReadOnly = useCallback(
@@ -541,7 +542,7 @@ export function CalendarApp({
     : false;
 
   useEffect(() => {
-    if (draft) setGooglePeek(null);
+    if (draft) peekRef.current?.close();
   }, [draft]);
 
   const itemsForUi = useMemo(
@@ -1354,6 +1355,26 @@ export function CalendarApp({
   );
 
   const dayItems = useMemo(() => itemsForDay(focus), [itemsForDay, focus]);
+  const stageRef = useRef<HTMLDivElement>(null);
+  const [todayScroll, setTodayScroll] = useState(0);
+  const timedView = shownView === "day" || shownView === "week" || shownView === "workweek";
+  const timedLeadHour = useMemo(() => {
+    if (!timedView || (section !== "calendar" && !viewingDisplay)) return 0;
+    return leadHourForDays(daysInView(focus, shownView, weekStartsOn), itemsForDay);
+  }, [timedView, section, viewingDisplay, focus, shownView, weekStartsOn, itemsForDay]);
+  const hourPx = useTimedGridScroll({
+    scrollerRef: stageRef,
+    active: calendar.hydrated && timedView && (section === "calendar" || viewingDisplay != null),
+    resetKey: `${stageKey}:${todayScroll}`,
+    leadHour: timedLeadHour,
+  });
+  const goToToday = useCallback(() => {
+    const today = startOfLocalDay(new Date());
+    const next = viewForToday(shownView, today);
+    if (next !== shownView) changeView(next);
+    setFocus(today);
+    setTodayScroll((n) => n + 1);
+  }, [shownView, changeView]);
 
   const timelineDigest = useMemo(
     () =>
@@ -1525,7 +1546,7 @@ export function CalendarApp({
       //shortcuts shouldn't reshuffle the calendar behind an open dialog
       if (document.querySelector('[aria-modal="true"]')) return;
       const key = event.key.toLowerCase();
-      if (key === "t") setFocus(startOfLocalDay(new Date()));
+      if (key === "t") goToToday();
       if (key === "d") changeView("day");
       if (key === "w") changeView("week");
       if (key === "5") changeView("workweek");
@@ -1536,7 +1557,7 @@ export function CalendarApp({
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [shownView, changeView]);
+  }, [shownView, changeView, goToToday]);
 
   useEffect(() => () => abortRef.current?.abort(), []);
 
@@ -1550,20 +1571,14 @@ export function CalendarApp({
     if (viewingDisplay) {
       if (item.kind === "task" || item.kind === "gcal_busy") return;
       setDraft(null);
-      setGooglePeek({
-        item,
-        anchor: anchor ?? new DOMRect(window.innerWidth / 2 - 180, 96, 0, 0),
-      });
+      peekRef.current?.open(item, anchor);
       return;
     }
     if (item.kind === "task" && isTimelineItemReadOnly(item)) return;
     if (item.kind === "gcal_busy") return;
     if (item.pendingApproval || item.kind === "gcal_event" || item.kind === "event") {
       setDraft(null);
-      setGooglePeek({
-        item,
-        anchor: anchor ?? new DOMRect(window.innerWidth / 2 - 180, 96, 0, 0),
-      });
+      peekRef.current?.open(item, anchor);
       return;
     }
     const existing = calendar.items.find((row) => row.id === item.id);
@@ -1726,7 +1741,7 @@ export function CalendarApp({
     if (!target) return;
     setItemDelete(null);
     setDraft(null);
-    setGooglePeek(null);
+    peekRef.current?.close();
     calendar.remove(target.id);
   }
 
@@ -1858,6 +1873,7 @@ export function CalendarApp({
     let announcedTool = "";
     let nameThisChat = false;
     let replaceNext = false;
+    let completed = false;
     const THOUGHT_CAP = 16_000;
 
     function thoughtTextLength(): number {
@@ -2040,6 +2056,7 @@ export function CalendarApp({
       if (!controller.signal.aborted) {
         writeAssistant();
         if (assistantText.trim()) nameThisChat = true;
+        completed = true;
       }
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") return;
@@ -2051,6 +2068,12 @@ export function CalendarApp({
       setError(err instanceof Error ? err.message : "An unexpected error occurred");
     } finally {
       closeThought();
+      //the stream is over, so a call still marked calling would flash forever after reopen
+      settleCallingTools(
+        toolEvents(),
+        completed ? "succeeded" : "failed",
+        controller.signal.aborted ? "Stopped." : "Didn't finish.",
+      );
       writeAssistant();
       //the stream stays open through the output check, so this is the first finished state
       setHoldLabel(null);
@@ -2161,7 +2184,7 @@ export function CalendarApp({
         onDate={(date) => setFocus(startOfLocalDay(date))} onView={changeView}
         onPrevious={() => setFocus((current) => shiftFocus(current, shownView, -1))}
         onNext={() => setFocus((current) => shiftFocus(current, shownView, 1))}
-        onToday={() => setFocus(startOfLocalDay(new Date()))}
+        onToday={goToToday}
         onCreate={() => setDraft(defaultTimedDraft(focus, 9))}
         allowCreate={!viewingDisplay}
         onAgent={() => setChatOpen((value) => !value)} agentOpen={chatOpen}
@@ -2199,7 +2222,7 @@ export function CalendarApp({
                   type="button"
                   className="calendar-today-btn"
                   title="Today (T)"
-                  onClick={() => setFocus(startOfLocalDay(new Date()))}
+                  onClick={goToToday}
                 >
                   Today
                 </button>
@@ -2255,7 +2278,7 @@ export function CalendarApp({
       ) : null}
 
       <div className="calendar-body">
-        <div className="calendar-stage">
+        <div className="calendar-stage" ref={stageRef}>
           <div key={stageKey} className="calendar-stage-view" data-nav={navDirection}>
             {section === "displays" && !viewingDisplay ? (
               <QuickDisplays
@@ -2379,6 +2402,7 @@ export function CalendarApp({
                 onCreateAllDay={() => setDraft(defaultAllDayDraft(focus))}
                 onCompleteTask={calendar.completeTask}
                 readOnly={viewingDisplay != null}
+                hourPx={hourPx}
               />
             ) : null}
             {(section === "calendar" || viewingDisplay) && (shownView === "week" || shownView === "workweek") ? (
@@ -2397,6 +2421,7 @@ export function CalendarApp({
                 }}
                 onCompleteTask={calendar.completeTask}
                 readOnly={viewingDisplay != null}
+                hourPx={hourPx}
               />
             ) : null}
             {(section === "calendar" || viewingDisplay) && shownView === "month" ? (
@@ -2482,54 +2507,46 @@ export function CalendarApp({
         />
       </div>
 
-      {shownPeek ? (
-        <GoogleEventCard
-          key={shownPeek.item.id}
-          item={shownPeek.item}
-          anchor={shownPeek.anchor}
-          open={peek.open}
-          calendarLabel={eventCalendarLabel(shownPeek.item, shownCalendars, importedLabels)}
-          onClose={closePeek}
-          onEdit={
-            viewingDisplay || shownPeek.item.pendingApproval || isTimelineItemReadOnly(shownPeek.item)
-              ? undefined
-              : shownPeek.item.kind === "event"
-              ? () => {
-                  const existing = calendar.items.find((row) => row.id === shownPeek.item.id);
-                  setGooglePeek(null);
-                  if (existing) setDraft(draftFromMeta(existing.id, existing.title, existing.calendar));
-                }
-              : shownPeek.item.google?.editable
-                ? () => {
-                    const next = draftFromGoogle(shownPeek.item);
-                    setGooglePeek(null);
-                    if (next) setDraft(next);
-                  }
-                : undefined
+      <EventPeek
+        ref={peekRef}
+        labelFor={(item) => eventCalendarLabel(item, shownCalendars, importedLabels)}
+        editFor={(item) => {
+          if (viewingDisplay || item.pendingApproval || isTimelineItemReadOnly(item)) return undefined;
+          if (item.kind === "event") {
+            return () => {
+              const existing = calendar.items.find((row) => row.id === item.id);
+              if (existing) setDraft(draftFromMeta(existing.id, existing.title, existing.calendar));
+            };
           }
-          onDelete={
-            viewingDisplay || shownPeek.item.pendingApproval || isTimelineItemReadOnly(shownPeek.item)
-              ? undefined
-              : shownPeek.item.kind === "event"
-              ? () => {
-                  setGooglePeek(null);
-                  setItemDelete({
-                    id: shownPeek.item.id,
-                    title: shownPeek.item.title,
-                    kind: "event",
-                    calendarName: eventCalendarLabel(shownPeek.item, shownCalendars, importedLabels),
-                  });
-                }
-              : shownPeek.item.google?.deletable
-                ? () => {
-                    const target = googleTargetOf(shownPeek.item);
-                    setGooglePeek(null);
-                    if (target) setGoogleDelete({ ...target, title: shownPeek.item.title });
-                  }
-                : undefined
+          if (item.google?.editable) {
+            return () => {
+              const next = draftFromGoogle(item);
+              if (next) setDraft(next);
+            };
           }
-        />
-      ) : null}
+          return undefined;
+        }}
+        deleteFor={(item) => {
+          if (viewingDisplay || item.pendingApproval || isTimelineItemReadOnly(item)) return undefined;
+          if (item.kind === "event") {
+            return () => {
+              setItemDelete({
+                id: item.id,
+                title: item.title,
+                kind: "event",
+                calendarName: eventCalendarLabel(item, shownCalendars, importedLabels),
+              });
+            };
+          }
+          if (item.google?.deletable) {
+            return () => {
+              const target = googleTargetOf(item);
+              if (target) setGoogleDelete({ ...target, title: item.title });
+            };
+          }
+          return undefined;
+        }}
+      />
 
       {itemDeletePrompt.value ? (
         <ConfirmDialog
