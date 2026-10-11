@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { ApiError } from "@/shared/api-base";
 import { autocompletePlaces, type PlaceSuggestion } from "@/calendar/places-client";
 import {
@@ -38,14 +38,14 @@ export function LocationField({ value, labelId, label = "Location", onChange }: 
   const [blocked, setBlocked] = useState(false);
   const [active, setActive] = useState(-1);
 
-  useLayoutEffect(() => {
+  useEffect(() => {
     setConsent(readLocationConsent());
     setRecents(readPlaceRecents());
     setCoords(cachedDeviceCoords());
   }, []);
 
   useEffect(() => {
-    if (consent !== "yes") return;
+    if (!open || consent !== "yes") return;
     let cancelled = false;
     void requestDeviceLocation().then((next) => {
       if (!cancelled && next) setCoords(next);
@@ -53,7 +53,7 @@ export function LocationField({ value, labelId, label = "Location", onChange }: 
     return () => {
       cancelled = true;
     };
-  }, [consent]);
+  }, [open, consent]);
 
   useEffect(() => {
     const query = value.trim();

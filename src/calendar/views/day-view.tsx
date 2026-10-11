@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import type { TimelineItem } from "@/calendar/types";
 import {
   formatHourLabel,
@@ -48,11 +49,12 @@ export function CalendarDayView({
 }: Props) {
   const now = useNowMs();
   const dayStart = startOfLocalDay(focus);
-  const timed = layoutOverlappingBlocks(
+  const dayStartMs = dayStart.getTime();
+  const timed = useMemo(() => layoutOverlappingBlocks(
     items.filter((item) => !item.allDay && !item.pinned),
-    dayStart.getTime(),
+    dayStartMs,
     hourPx,
-  );
+  ), [items, dayStartMs, hourPx]);
   const nowTop = nowLineTop(now, dayStart.getTime(), hourPx);
   const interval = intervalMinutes(hourPx);
   const labelStep = labelEvery(hourPx);

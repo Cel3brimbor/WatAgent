@@ -4088,15 +4088,43 @@ button.qd-cal-swatch:active {
 
 .calendar-editor-overlay {
   z-index: 20;
+  transition: opacity 120ms ease-out;
+}
+
+.calendar-editor-overlay[data-state="open"] {
+  animation: calendar-editor-scrim-in 140ms ease-out both;
+}
+
+.calendar-editor-overlay[data-state="open"] .calendar-editor {
+  animation: calendar-editor-in 180ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes calendar-editor-scrim-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes calendar-editor-in {
+  from { opacity: 0; transform: translate3d(0, 8px, 0) scale(0.985); }
+  to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .calendar-editor-overlay[data-state="open"],
+  .calendar-editor-overlay[data-state="open"] .calendar-editor {
+    animation: none;
+  }
+  .calendar-editor-overlay,
+  .calendar-editor-overlay .calendar-editor {
+    transition: none;
+  }
 }
 
 @starting-style {
-  .calendar-editor-overlay,
   .modal-backdrop {
     opacity: 0;
   }
 
-  .calendar-editor,
   .modal {
     opacity: 0;
     transform: translate3d(0, var(--rise), 0) scale(var(--pop));
@@ -4131,9 +4159,7 @@ button.qd-cal-swatch:active {
   border-radius: 20px;
   background: var(--panel-solid);
   box-shadow: var(--shadow-dialog);
-  transition:
-    opacity 220ms var(--ease-out),
-    transform var(--dur-spring) var(--ease-spring);
+  transition: opacity 120ms ease-out, transform 120ms ease-out;
 }
 
 .calendar-editor-body {

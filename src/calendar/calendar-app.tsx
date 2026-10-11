@@ -1355,6 +1355,7 @@ export function CalendarApp({
   );
 
   const dayItems = useMemo(() => itemsForDay(focus), [itemsForDay, focus]);
+  const workweekDays = useMemo(() => Array.from({ length: 5 }, (_, i) => addDays(startOfWorkWeek(focus), i)), [focus]);
   const stageRef = useRef<HTMLDivElement>(null);
   const [todayScroll, setTodayScroll] = useState(0);
   const timedView = shownView === "day" || shownView === "week" || shownView === "workweek";
@@ -2410,7 +2411,7 @@ export function CalendarApp({
               <CalendarWeekView
                 focus={focus}
                 weekStartsOn={weekStartsOn}
-                days={shownView === "workweek" ? Array.from({ length: 5 }, (_, i) => addDays(startOfWorkWeek(focus), i)) : undefined}
+                days={shownView === "workweek" ? workweekDays : undefined}
                 itemsForDay={itemsForDay}
                 editorDraft={viewingDisplay ? null : draft}
                 onOpen={onOpenItem}
