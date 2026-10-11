@@ -12,12 +12,14 @@ type Props = {
   open?: boolean;
   onCancel: () => void;
   onConfirm: () => void;
+  //runs on the click, before the exit animation
+  onCommit?: () => void;
 };
 
-export function ConfirmDialog({ title, message, confirmLabel = "Delete", open = true, onCancel, onConfirm }: Props) {
+export function ConfirmDialog({ title, message, confirmLabel = "Delete", open = true, onCancel, onConfirm, onCommit }: Props) {
   const action = useDialogAction(open);
   const cancel = () => action.run(onCancel);
-  const confirm = () => action.run(onConfirm);
+  const confirm = () => action.run(onConfirm, onCommit);
   const ref = useRef<HTMLDivElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
   const titleId = useId();
