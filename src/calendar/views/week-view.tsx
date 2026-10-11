@@ -1,6 +1,6 @@
 "use client";
 
-import type { CSSProperties } from "react";
+import { useMemo, type CSSProperties } from "react";
 import type { TimelineItem } from "@/calendar/types";
 import {
   addDays,
@@ -60,8 +60,16 @@ export function CalendarWeekView({
   const now = useNowMs();
   const interval = intervalMinutes(hourPx);
   const labelStep = labelEvery(hourPx);
-  const weekStart = startOfWeek(focus, weekStartsOn);
-  const days = shownDays ?? Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+  const weekStartMs = startOfWeek(focus, weekStartsOn).getTime();
+  const days = useMemo(() => shownDays ?? Array.from({ length: 7 }, (_, i) => addDays(new Date(weekStartMs), i)), [shownDays, weekStartMs]);
+  // Draft and pointer updates do not change the underlying event geometry.
+  const dayLayouts = useMemo(() => days.map((date) => {
+    const items = itemsForDay(date);
+    return {
+      topped: allDayItems(items),
+      timed: layoutOverlappingBlocks(items.filter((item) => !item.allDay && !item.pinned), startOfLocalDay(date).getTime(), hourPx),
+    };
+  }), [days, itemsForDay, hourPx]);
   const [columnRef, columnWidths] = useColumnWidths(days.length);
   const labels = days.map((date) => date.toLocaleDateString(undefined, { weekday: "short" }));
   const slots = useSlotDrag<number>(
@@ -69,7 +77,7 @@ export function CalendarWeekView({
     hourPx,
   );
   const allDay = useAllDayResize();
-  const hasAllDay = days.some((date) => allDayItems(itemsForDay(date)).length > 0);
+  const hasAllDay = dayLayouts.some(({ topped }) => topped.length > 0);
 
   return (
     <div className="calendar-week" style={{ "--week-days": days.length } as CSSProperties}>
@@ -95,8 +103,8 @@ export function CalendarWeekView({
         >
         <div className="calendar-week-all-day" data-empty={!hasAllDay}>
           <span className="calendar-all-day-label">All-day</span>
-          {days.map((date) => {
-            const topped = allDayItems(itemsForDay(date));
+          {days.map((date, dayIndex) => {
+            const { topped } = dayLayouts[dayIndex];
             const tone = `${isToday(date) ? " is-today" : ""}${date.getDay() % 6 === 0 ? " is-weekend" : ""}`;
             return (
               <div
@@ -138,12 +146,7 @@ export function CalendarWeekView({
         </div>
         {days.map((date, dayIndex) => {
           const dayStart = startOfLocalDay(date);
-          const dayItems = itemsForDay(date);
-          const timed = layoutOverlappingBlocks(
-            dayItems.filter((item) => !item.allDay && !item.pinned),
-            dayStart.getTime(),
-            hourPx,
-          );
+          const { timed } = dayLayouts[dayIndex];
           const nowTop = isToday(date) ? nowLineTop(now, dayStart.getTime(), hourPx) : null;
           const tone = `${isToday(date) ? " is-today" : ""}${date.getDay() % 6 === 0 ? " is-weekend" : ""}`;
           const selection =
