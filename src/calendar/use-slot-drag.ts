@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { HOUR_PX, hourFromClientY } from "@/calendar/calendar-grid";
+import { HOUR_PX, hourFromClientY, quarterHourFromClientY, quarterHourRange } from "@/calendar/calendar-grid";
 
 export type SlotSelection<K> = { key: K; start: number; end: number };
 
@@ -16,7 +16,7 @@ export function useSlotDrag<K>(onCommit: (key: K, startHour: number, endHour: nu
   function show(key: K, anchor: number, current: number) {
     if (current === lastRef.current) return;
     lastRef.current = current;
-    setSelection({ key, start: Math.min(anchor, current), end: Math.max(anchor, current) });
+    setSelection({ key, ...quarterHourRange(anchor, current) });
   }
 
   function clear() {
@@ -29,9 +29,11 @@ export function useSlotDrag<K>(onCommit: (key: K, startHour: number, endHour: nu
     return {
       onPointerDown(event: ReactPointerEvent<HTMLElement>) {
         if (event.button !== 0) return;
-        const hour = hourFromClientY(event.currentTarget, event.clientY, hourPx);
         //touch pans the grid; only preview for precise pointers so scrolling doesn't flash a block
         const preview = event.pointerType !== "touch";
+        const hour = preview
+          ? Math.min(23.75, quarterHourFromClientY(event.currentTarget, event.clientY, hourPx))
+          : hourFromClientY(event.currentTarget, event.clientY, hourPx);
         dragRef.current = { key, pointerId: event.pointerId, anchor: hour, preview };
         event.currentTarget.setPointerCapture(event.pointerId);
         if (preview) show(key, hour, hour);
@@ -39,14 +41,19 @@ export function useSlotDrag<K>(onCommit: (key: K, startHour: number, endHour: nu
       onPointerMove(event: ReactPointerEvent<HTMLElement>) {
         const drag = dragRef.current;
         if (!drag || drag.pointerId !== event.pointerId || !drag.preview) return;
-        show(drag.key, drag.anchor, hourFromClientY(event.currentTarget, event.clientY, hourPx));
+        show(drag.key, drag.anchor, quarterHourFromClientY(event.currentTarget, event.clientY, hourPx));
       },
       onPointerUp(event: ReactPointerEvent<HTMLElement>) {
         const drag = dragRef.current;
         if (!drag || drag.pointerId !== event.pointerId) return;
-        const hour = hourFromClientY(event.currentTarget, event.clientY, hourPx);
+        const hour = drag.preview
+          ? quarterHourFromClientY(event.currentTarget, event.clientY, hourPx)
+          : hourFromClientY(event.currentTarget, event.clientY, hourPx);
+        const range = drag.preview
+          ? quarterHourRange(drag.anchor, hour)
+          : { start: Math.min(drag.anchor, hour), end: Math.max(drag.anchor, hour) + 1 };
         clear();
-        onCommit(drag.key, Math.min(drag.anchor, hour), Math.max(drag.anchor, hour));
+        onCommit(drag.key, range.start, range.end);
       },
       onPointerCancel() {
         clear();

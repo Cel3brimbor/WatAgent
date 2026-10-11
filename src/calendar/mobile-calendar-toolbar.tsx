@@ -59,7 +59,7 @@ export function MobileCalendarToolbar(props: Props) {
         </div>
         <button type="button" className="mobile-calendar-agent" aria-pressed={props.agentOpen} onClick={props.onAgent}>Agent</button>
         {props.allowCreate === false ? null : (
-          <button type="button" className="icon-btn mobile-calendar-add" aria-label="New event" onClick={props.onCreate}><PlusIcon /></button>
+          <button type="button" className="icon-btn mobile-calendar-add" aria-label="Add event" onClick={props.onCreate}><PlusIcon /></button>
         )}
       </div>
       {view === "day" ? <div className="mobile-calendar-week-strip" aria-label="Choose a day">

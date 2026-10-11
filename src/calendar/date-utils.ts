@@ -122,8 +122,12 @@ export function formatFocusLabel(focus: Date, view: CalendarView, weekStartsOn: 
 
 export function formatHourLabel(hour: number): string {
   const date = new Date();
-  date.setHours(hour, 0, 0, 0);
-  return date.toLocaleTimeString(undefined, { hour: "numeric" });
+  const minutes = Math.round(hour * 60);
+  date.setHours(0, minutes, 0, 0);
+  return date.toLocaleTimeString(undefined, {
+    hour: "numeric",
+    ...(minutes % 60 ? { minute: "2-digit" as const } : {}),
+  });
 }
 
 function googleClock(date: Date): string {
@@ -181,7 +185,7 @@ export function formatShortDate(date: Date): string {
 
 export function hourGridMs(dayStart: Date, hour: number, minute = 0): number {
   const next = new Date(dayStart);
-  next.setHours(hour, minute, 0, 0);
+  next.setHours(0, Math.round(hour * 60) + minute, 0, 0);
   return next.getTime();
 }
 

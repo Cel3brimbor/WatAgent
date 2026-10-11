@@ -26,6 +26,18 @@ export function hourFromClientY(el: HTMLElement, clientY: number, hourPx = HOUR_
   return Math.max(0, Math.min(23, Math.floor((clientY - rect.top) / hourPx)));
 }
 
+// Fractional hours at quarter-hour boundaries, including midnight at the bottom.
+export function quarterHourFromClientY(el: HTMLElement, clientY: number, hourPx = HOUR_PX): number {
+  const rect = el.getBoundingClientRect();
+  return Math.max(0, Math.min(24, Math.round((clientY - rect.top) / hourPx * 4) / 4));
+}
+
+// End is exclusive; even a stationary pointer selects at least fifteen minutes.
+export function quarterHourRange(anchor: number, current: number): { start: number; end: number } {
+  const start = Math.min(anchor, current);
+  return { start, end: Math.max(start + 0.25, anchor, current) };
+}
+
 export type TimedLayout = {
   item: TimelineItem;
   top: number;

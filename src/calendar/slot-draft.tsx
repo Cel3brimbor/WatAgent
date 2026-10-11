@@ -25,13 +25,13 @@ export function SlotDraft({
     title?.trim() || (kind === "task" ? "New task" : "New event");
   return (
     <div
-      className={`calendar-slot-draft is-${kind}`}
-      style={{ top: start * hourPx, height: (end - start + 1) * hourPx }}
+      className={`calendar-slot-draft is-${kind}${end - start < 0.75 ? " is-short" : ""}`}
+      style={{ top: start * hourPx, height: (end - start) * hourPx }}
       aria-hidden="true"
     >
       <span className="calendar-slot-draft-title">{label}</span>
       <span className="calendar-slot-draft-time">
-        {formatHourLabel(start)} – {endLabel(end + 1)}
+        {formatHourLabel(start)} – {endLabel(end)}
       </span>
     </div>
   );

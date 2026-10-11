@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
+import { PlusIcon } from "@/shared/icons";
 
 export type AppSection = "calendar" | "tasks" | "events" | "displays" | "map" | "settings";
 
@@ -9,6 +10,7 @@ type Props = {
   collapsed: boolean;
   onSection: (section: AppSection) => void;
   onToggle: () => void;
+  onCreateEvent?: () => void;
   /** False hides the Configuration section. */
   advanced?: boolean;
   children?: ReactNode;
@@ -22,7 +24,7 @@ const BARS: Array<{ id: AppSection; label: string }> = [
   { id: "map", label: "Configuration" },
 ];
 
-export function SideNav({ section, collapsed, onSection, onToggle, advanced = true, children }: Props) {
+export function SideNav({ section, collapsed, onSection, onToggle, onCreateEvent, advanced = true, children }: Props) {
   const [mobile, setMobile] = useState(false);
   const [calendarsOpen, setCalendarsOpen] = useState(false);
   useEffect(() => {
@@ -77,6 +79,12 @@ export function SideNav({ section, collapsed, onSection, onToggle, advanced = tr
           <BarIcon id="settings" />
         </button>
       </div>
+      {onCreateEvent && !mobile ? (
+        <button type="button" className="side-nav-create" aria-label="Add event" title="Add event" onClick={onCreateEvent}>
+          <PlusIcon />
+          <span>Add event</span>
+        </button>
+      ) : null}
       <div className="side-nav-group">
         {BARS.filter((bar) => advanced || bar.id !== "map").map((bar) => (
           <button
