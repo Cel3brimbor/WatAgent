@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
-// Paint the local exit first; calendar writes run after the animation completes.
+//paint the local exit first. an immediate callback runs on the click, before that exit
 export function useDialogAction(open: boolean) {
   const [closing, setClosing] = useState(false);
   const pending = useRef<(() => void) | null>(null);
@@ -34,8 +34,10 @@ export function useDialogAction(open: boolean) {
     finally { setClosing(false); }
   }
 
-  function run(action: () => void) {
+  //immediate runs on the click, before the exit, so a row can leave with the dialog
+  function run(action: () => void, immediate?: () => void) {
     if (!open || pending.current) return;
+    immediate?.();
     pending.current = action;
     setClosing(true);
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;

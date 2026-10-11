@@ -1970,13 +1970,18 @@ export function CalendarApp({
     setNotice(ids.length ? `Deleted ${name} and its ${ids.length} item${ids.length === 1 ? "" : "s"}.` : `Deleted ${name}.`);
   }
 
-  function confirmItemDelete() {
+  function commitItemDelete() {
     const target = itemDelete;
     if (!target) return;
+    //the card and the editor preview leave on the click, while the dialog is still fading
+    setDraft(null);
+    calendar.remove(target.id);
+  }
+
+  function confirmItemDelete() {
     setItemDelete(null);
     setDraft(null);
     peekRef.current?.close();
-    afterPaint(() => calendar.remove(target.id));
   }
 
   async function removeGoogleEvent(target: GoogleDraftTarget) {
@@ -1991,14 +1996,16 @@ export function CalendarApp({
     }
   }
 
-  function confirmGoogleDelete() {
+  function commitGoogleDelete() {
     const target = googleDelete;
     if (!target) return;
+    setDraft(null);
+    void removeGoogleEvent(target);
+  }
+
+  function confirmGoogleDelete() {
     setGoogleDelete(null);
     setDraft(null);
-    afterPaint(() => {
-      void removeGoogleEvent(target);
-    });
   }
 
   function googleTargetOf(item: TimelineItem): GoogleDraftTarget | null {
@@ -2765,6 +2772,7 @@ export function CalendarApp({
           }
           open={itemDeletePrompt.open}
           onCancel={() => setItemDelete(null)}
+          onCommit={commitItemDelete}
           onConfirm={confirmItemDelete}
         />
       ) : null}
@@ -2775,7 +2783,8 @@ export function CalendarApp({
           message={`This deletes it from ${deletePrompt.value.calendarName || "your calendar"} in Google Calendar. If it repeats, only this occurrence is removed.`}
           open={deletePrompt.open}
           onCancel={() => setGoogleDelete(null)}
-          onConfirm={() => void confirmGoogleDelete()}
+          onCommit={commitGoogleDelete}
+          onConfirm={confirmGoogleDelete}
         />
       ) : null}
 
