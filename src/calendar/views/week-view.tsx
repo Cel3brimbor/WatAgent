@@ -1,7 +1,7 @@
 "use client";
 
-import { memo, useContext, useMemo, useRef, type CSSProperties } from "react";
-import type { CalendarItemKind, TimelineItem } from "@/calendar/types";
+import { memo, useContext, useMemo, type CSSProperties } from "react";
+import type { TimelineItem } from "@/calendar/types";
 import {
   addDays,
   formatHourLabel,
@@ -19,10 +19,8 @@ import {
 } from "@/calendar/calendar-grid";
 import { intervalMinutes, labelEvery } from "@/calendar/time-scale";
 import { useColumnWidths } from "@/calendar/use-column-width";
-import { useSlotDrag, type SlotSelection } from "@/calendar/use-slot-drag";
-import { SlotDraft } from "@/calendar/slot-draft";
-import type { CalendarDraft } from "@/calendar/calendar-item-editor";
-import { timedDraftSlotForDay } from "@/calendar/editor-draft";
+import { useSlotDrag } from "@/calendar/use-slot-drag";
+import { EditorSlot, SlotDraft } from "@/calendar/slot-draft";
 import { AllDayResizeHandle, allDayItems, useAllDayResize } from "@/calendar/all-day-bar";
 import { ColumnItemsContext, DayItemsOverride, useAllDayTimeline, useHasAllDay, useTimedTimeline } from "@/calendar/day-builder";
 import { NowLine } from "@/calendar/now-line";
@@ -32,7 +30,6 @@ type Props = {
   focus: Date;
   weekStartsOn: 0 | 1;
   itemsForDay?: (date: Date) => TimelineItem[];
-  editorDraft?: CalendarDraft | null;
   onOpen: (item: TimelineItem, anchor?: DOMRect) => void;
   onCreateTimed: (date: Date, hour: number, endHour?: number) => void;
   onCreateAllDay: (date: Date) => void;
@@ -68,8 +65,6 @@ type ColumnProps = {
   onCreateTimed: (date: Date, hour: number, endHour?: number) => void;
   onCompleteTask: CompleteTask;
   selection: HourSlot;
-  draftKind?: CalendarItemKind;
-  draftTitle?: string;
 };
 
 function columnEqual(prev: ColumnProps, next: ColumnProps): boolean {
@@ -83,8 +78,6 @@ function columnEqual(prev: ColumnProps, next: ColumnProps): boolean {
     && prev.onOpen === next.onOpen
     && prev.onCreateTimed === next.onCreateTimed
     && prev.onCompleteTask === next.onCompleteTask
-    && prev.draftKind === next.draftKind
-    && prev.draftTitle === next.draftTitle
     && sameSlot(prev.selection, next.selection);
 }
 
@@ -100,8 +93,6 @@ export const WeekDayColumn = memo(function WeekDayColumn({
   onCreateTimed,
   onCompleteTask,
   selection,
-  draftKind,
-  draftTitle,
 }: ColumnProps) {
   const items = useTimedTimeline(date);
   const dayStart = startOfLocalDay(date);
@@ -152,14 +143,10 @@ export const WeekDayColumn = memo(function WeekDayColumn({
         </div>
       ))}
       {selection ? (
-        <SlotDraft
-          start={selection.start}
-          end={selection.end}
-          kind={draftKind}
-          title={draftTitle}
-          hourPx={hourPx}
-        />
-      ) : null}
+        <SlotDraft start={selection.start} end={selection.end} hourPx={hourPx} />
+      ) : (
+        <EditorSlot day={date} hourPx={hourPx} />
+      )}
       {isToday(date) ? <NowLine dayStartMs={dayStartMs} hourPx={hourPx} /> : null}
     </div>
   );
@@ -251,33 +238,9 @@ function WeekAllDaySection({
   );
 }
 
-type ShownSlot = {
-  selection: HourSlot;
-  draftKind: CalendarItemKind | undefined;
-  draftTitle: string | undefined;
-};
-
-function slotForDay(
-  dayIndex: number,
-  date: Date,
-  drag: SlotSelection<number> | null,
-  editorDraft: CalendarDraft | null | undefined,
-  prev: ShownSlot | undefined,
-): ShownSlot {
-  const dragged = drag?.key === dayIndex;
-  const slot = dragged
-    ? { start: drag.start, end: drag.end }
-    : timedDraftSlotForDay(editorDraft ?? null, date);
-  const draftKind = slot ? editorDraft?.kind : undefined;
-  const draftTitle = slot ? editorDraft?.title : undefined;
-  if (prev && prev.draftKind === draftKind && prev.draftTitle === draftTitle && sameSlot(prev.selection, slot)) return prev;
-  return { selection: slot, draftKind, draftTitle };
-}
-
 function WeekGrid({
   focus,
   weekStartsOn,
-  editorDraft,
   onOpen,
   onCreateTimed,
   onCreateAllDay,
@@ -303,13 +266,6 @@ function WeekGrid({
     (dayIndex, startHour, endHour) => createTimed(days[dayIndex], startHour, endHour),
     hourPx,
   );
-  const slotCache = useRef<ShownSlot[]>([]);
-  const shownSlots = days.map((date, dayIndex) => {
-    const next = slotForDay(dayIndex, date, slots.selection, editorDraft, slotCache.current[dayIndex]);
-    slotCache.current[dayIndex] = next;
-    return next;
-  });
-
   return (
     <div className="calendar-week" style={{ "--week-days": days.length } as CSSProperties}>
       <div className="calendar-sticky">
@@ -344,7 +300,7 @@ function WeekGrid({
           ))}
         </div>
         {days.map((date, dayIndex) => {
-          const shown = shownSlots[dayIndex];
+          const dragged = slots.selection?.key === dayIndex ? slots.selection : null;
           return (
             <WeekDayColumn
               key={date.toISOString()}
@@ -358,9 +314,7 @@ function WeekGrid({
               onOpen={openItem}
               onCreateTimed={createTimed}
               onCompleteTask={completeTask}
-              selection={shown.selection}
-              draftKind={shown.draftKind}
-              draftTitle={shown.draftTitle}
+              selection={dragged}
             />
           );
         })}

@@ -8,8 +8,6 @@ import { HOUR_PX, HOURS } from "@/calendar/calendar-grid";
 import { labelEvery } from "@/calendar/time-scale";
 import { useColumnWidths } from "@/calendar/use-column-width";
 import { useSlotDrag } from "@/calendar/use-slot-drag";
-import type { CalendarDraft } from "@/calendar/calendar-item-editor";
-import { timedDraftSlotForDay } from "@/calendar/editor-draft";
 import { AllDayResizeHandle, useAllDayResize } from "@/calendar/all-day-bar";
 import { DayItemsOverride, useAllDayTimeline } from "@/calendar/day-builder";
 import { useStableCallback } from "@/shared/use-stable-callback";
@@ -18,7 +16,6 @@ import { WeekDayColumn } from "@/calendar/views/week-view";
 type Props = {
   focus: Date;
   items?: TimelineItem[];
-  editorDraft?: CalendarDraft | null;
   onOpen: (item: TimelineItem, anchor?: DOMRect) => void;
   onCreateTimed: (hour: number, minute?: number, endHour?: number) => void;
   onCreateAllDay: () => void;
@@ -81,7 +78,6 @@ function DayAllDay({
 
 function DayGrid({
   focus,
-  editorDraft,
   onOpen,
   onCreateTimed,
   onCreateAllDay,
@@ -99,8 +95,6 @@ function DayGrid({
   const [columnRef, columnWidths] = useColumnWidths(1);
   const slots = useSlotDrag<"day">((_key, startHour, endHour) => onCreateTimed(startHour, 0, endHour), hourPx);
   const drag = slots.selection?.key === "day" ? slots.selection : null;
-  const draftSlot = drag ?? timedDraftSlotForDay(editorDraft ?? null, focus);
-  const selection = draftSlot ? { start: draftSlot.start, end: draftSlot.end } : null;
 
   return (
     <div className="calendar-day">
@@ -132,9 +126,7 @@ function DayGrid({
           onOpen={openItem}
           onCreateTimed={createTimed}
           onCompleteTask={completeTask}
-          selection={selection}
-          draftKind={selection ? editorDraft?.kind : undefined}
-          draftTitle={selection ? editorDraft?.title : undefined}
+          selection={drag}
         />
       </div>
     </div>

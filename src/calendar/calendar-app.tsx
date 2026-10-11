@@ -37,6 +37,7 @@ import { externalCalendarId } from "@/calendar/external-calendars";
 import { newFeedId } from "@/calendar/imported-calendars";
 import { formatFeedSyncSummary, syncImportedFeed } from "@/calendar/calendar-sync";
 import { localDayKey, type OverlayEvent } from "@/calendar/timeline";
+import { EditorDraftProvider } from "@/calendar/slot-draft";
 import {
   ALL_SOURCES,
   readCalendarColors,
@@ -2491,6 +2492,7 @@ export function CalendarApp({
   }
 
   return (
+    <EditorDraftProvider value={viewingDisplay ? null : draft}>
     <DerivedProvider config={derivedConfig} mentionsRef={mentionRef} campusFeedsRef={campusRef}>
     <LeadHourSync days={leadDays} itemsForDay={itemsForDay} configRef={derivedConfigRef} filterRef={sourcesRef} onHour={setLeadHour} />
     <div
@@ -2673,7 +2675,6 @@ export function CalendarApp({
                 {shownView === "day" ? (
               <CalendarDayView
                 focus={focus}
-                editorDraft={viewingDisplay ? null : draft}
                 onOpen={openItem}
                 onCreateTimed={createTimedOnFocus}
                 onCreateAllDay={createAllDayOnFocus}
@@ -2687,7 +2688,6 @@ export function CalendarApp({
                 focus={focus}
                 weekStartsOn={weekStartsOn}
                 days={shownView === "workweek" ? workweekDays : undefined}
-                editorDraft={viewingDisplay ? null : draft}
                 onOpen={openItem}
                 onCreateTimed={createTimedOnDate}
                 onCreateAllDay={createAllDayOnDate}
@@ -2816,5 +2816,6 @@ export function CalendarApp({
     </div>
     </div>
     </DerivedProvider>
+    </EditorDraftProvider>
   );
 }
