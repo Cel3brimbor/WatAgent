@@ -1,8 +1,9 @@
 "use client";
 
-import type { CSSProperties } from "react";
+import { memo, type CSSProperties } from "react";
 import type { TimelineItem } from "@/calendar/types";
 import { formatTime } from "@/calendar/date-utils";
+import { sameTimelineItem } from "@/calendar/timeline";
 import { CheckIcon } from "@/shared/icons";
 
 type Props = {
@@ -66,7 +67,7 @@ function StripCardBody({
   );
 }
 
-export function TimelineStrip({ item, compact, layout = "inline", onOpen, onCompleteTask }: Props) {
+function TimelineStripView({ item, compact, layout = "inline", onOpen, onCompleteTask }: Props) {
   const isCard = layout === "card";
   const layoutClass = isCard ? " is-card" : "";
   if (item.kind === "gcal_busy") {
@@ -149,3 +150,13 @@ export function TimelineStrip({ item, compact, layout = "inline", onOpen, onComp
     </button>
   );
 }
+
+function sameStripProps(prev: Props, next: Props): boolean {
+  return prev.compact === next.compact
+    && prev.layout === next.layout
+    && prev.onOpen === next.onOpen
+    && prev.onCompleteTask === next.onCompleteTask
+    && sameTimelineItem(prev.item, next.item);
+}
+
+export const TimelineStrip = memo(TimelineStripView, sameStripProps);

@@ -2874,6 +2874,34 @@ button.qd-cal-swatch:active {
   background: var(--gcal-color);
 }
 
+.session-expired-banner {
+  position: fixed;
+  z-index: 80;
+  top: var(--safe-top);
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  padding: 0.55rem 1rem;
+  background: var(--glow);
+  color: var(--accent-deep);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.session-expired-banner button {
+  font: inherit;
+  font-weight: 700;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
 /*unfolds from under the toolbar and folds back the same way*/
 .calendar-notice {
   display: grid;

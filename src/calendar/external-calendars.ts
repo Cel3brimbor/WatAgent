@@ -1,3 +1,4 @@
+import { isCampusFeedSource } from "@/campus/campus-feed-sources";
 import type { CalendarItemDoc, ImportedCalendar, ImportedCalendarSource, MergedCalendar } from "./types";
 import { calendarGroupsOf, type CalendarSourceFilter } from "./preferences";
 import { importedCalendarId } from "./imported-calendars";
@@ -13,13 +14,13 @@ export function externalCalendarsOf(
   skipSources: ReadonlySet<string> = new Set(),
 ): ExternalCalendarRef[] {
   const list: ExternalCalendarRef[] = imported.flatMap((calendar) => {
-    if (skipSources.has(calendar.id)) return [];
+    if (skipSources.has(calendar.id) || isCampusFeedSource(calendar.id)) return [];
     return [{ id: externalCalendarId(calendar.id), name: calendar.name, source: calendar.id, url: calendar.url }];
   });
   const orphans = new Set<ImportedCalendarSource>();
   for (const item of items) {
     const source = item.calendar.importSource;
-    if (source && !skipSources.has(source) && !imported.some((calendar) => calendar.id === source)) orphans.add(source);
+    if (source && !skipSources.has(source) && !isCampusFeedSource(source) && !imported.some((calendar) => calendar.id === source)) orphans.add(source);
   }
   for (const source of orphans) list.push({ id: externalCalendarId(source), name: "Imported calendar", source });
   return list;
@@ -43,7 +44,7 @@ export function calendarItemVisible(
   if (item.calendar.importSource) {
     const id = externalCalendarId(item.calendar.importSource);
     const owner = merged.find((calendar) => calendar.members.includes(id));
-    const campus = !owner && (campusSources?.has(item.calendar.importSource) ?? false);
+    const campus = !owner && (isCampusFeedSource(item.calendar.importSource) || (campusSources?.has(item.calendar.importSource) ?? false));
     return externalCalendarShown(owner?.id ?? id, filter, campus ? "campus" : "external");
   }
   const groups = calendarGroupsOf(filter.groups);

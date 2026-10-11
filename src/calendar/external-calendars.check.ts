@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { markCampusFeed, unmarkCampusFeed } from "@/campus/campus-feed-sources";
 import { calendarItemVisible, externalCalendarsOf } from "./external-calendars";
 import { ALL_SOURCES, isCalendarReadOnly, protectBuiltinCalendarSources, setCalendarReadOnly, withNewCalendar } from "./preferences";
 import type { CalendarItemDoc } from "./types";
@@ -27,6 +28,25 @@ assert.deepEqual(
   externalCalendarsOf([campusItem], [], new Set([talks])).map((row) => row.name),
   [],
   "uwaterloo events never become an imported calendar row",
+);
+markCampusFeed(talks);
+assert.deepEqual(
+  externalCalendarsOf([campusItem], [{ id: talks, name: "Talks", url: "https://example.test/campus" }], new Set()).map((row) => row.name),
+  [],
+  "a campus feed stays out of imported calendars before the sidebar state updates",
+);
+const campusOff = { watagent: true, external: true, campus: false, other: true, smartTags: true, hidden: false };
+assert.equal(calendarItemVisible(campusItem, { ...filter, groups: campusOff }), false, "a marked campus feed hides with the campus group");
+assert.equal(
+  calendarItemVisible(campusItem, { ...filter, groups: { ...campusOff, external: false, campus: true } }),
+  true,
+  "a marked campus feed does not follow the imported group",
+);
+unmarkCampusFeed(talks);
+assert.deepEqual(
+  externalCalendarsOf([campusItem], [], new Set()).map((row) => row.name),
+  ["Imported calendar"],
+  "without the campus mark, the same events are an imported row",
 );
 const school = { id: "merge-0b5c2f8e-3a4d-4e1f-9c2b-7d6e5f4a3b2c", name: "School", members: ["ics:learn", "ics:portal"] };
 assert.equal(calendarItemVisible(learn, { ...filter, mutedGoogleIds: ["ics:learn"] }, [school]), true, "a member follows its merged calendar");

@@ -1,34 +1,25 @@
 "use client";
 
-import { useMemo } from "react";
+import { memo, useMemo } from "react";
 import type { TimelineItem } from "@/calendar/types";
-import {
-  formatHourLabel,
-  startOfLocalDay,
-} from "@/calendar/date-utils";
+import { formatHourLabel } from "@/calendar/date-utils";
 import { TimelineStrip } from "@/calendar/timeline-strip";
-import {
-  HOUR_PX,
-  HOURS,
-  layoutOverlappingBlocks,
-  nowLineTop,
-  timedItemClass,
-  timedItemStyle,
-} from "@/calendar/calendar-grid";
-import { intervalMinutes, labelEvery } from "@/calendar/time-scale";
+import { HOUR_PX, HOURS } from "@/calendar/calendar-grid";
+import { labelEvery } from "@/calendar/time-scale";
 import { useColumnWidths } from "@/calendar/use-column-width";
-import { useNowMs } from "@/calendar/calendar-item-editor";
 import { useSlotDrag } from "@/calendar/use-slot-drag";
-import { SlotDraft } from "@/calendar/slot-draft";
 import type { CalendarDraft } from "@/calendar/calendar-item-editor";
 import { timedDraftSlotForDay } from "@/calendar/editor-draft";
-import { AllDayResizeHandle, allDayItems, useAllDayResize } from "@/calendar/all-day-bar";
+import { AllDayResizeHandle, useAllDayResize } from "@/calendar/all-day-bar";
+import { DayItemsOverride, useAllDayTimeline } from "@/calendar/day-builder";
+import { useStableCallback } from "@/shared/use-stable-callback";
+import { WeekDayColumn } from "@/calendar/views/week-view";
 
 type Props = {
   focus: Date;
-  items: TimelineItem[];
+  items?: TimelineItem[];
   editorDraft?: CalendarDraft | null;
-  onOpen: (item: TimelineItem) => void;
+  onOpen: (item: TimelineItem, anchor?: DOMRect) => void;
   onCreateTimed: (hour: number, minute?: number, endHour?: number) => void;
   onCreateAllDay: () => void;
   onCompleteTask?: (id: string, completed: boolean) => void;
@@ -36,46 +27,29 @@ type Props = {
   hourPx?: number;
 };
 
-export function CalendarDayView({
-  focus,
-  items,
-  editorDraft,
+function DayAllDay({
+  date,
+  readOnly,
   onOpen,
-  onCreateTimed,
   onCreateAllDay,
   onCompleteTask,
-  readOnly = false,
-  hourPx = HOUR_PX,
-}: Props) {
-  const now = useNowMs();
-  const dayStart = startOfLocalDay(focus);
-  const dayStartMs = dayStart.getTime();
-  const timed = useMemo(() => layoutOverlappingBlocks(
-    items.filter((item) => !item.allDay && !item.pinned),
-    dayStartMs,
-    hourPx,
-  ), [items, dayStartMs, hourPx]);
-  const nowTop = nowLineTop(now, dayStart.getTime(), hourPx);
-  const interval = intervalMinutes(hourPx);
-  const labelStep = labelEvery(hourPx);
-  const [columnRef, columnWidths] = useColumnWidths(1);
+}: {
+  date: Date;
+  readOnly: boolean;
+  onOpen: (item: TimelineItem, anchor?: DOMRect) => void;
+  onCreateAllDay: () => void;
+  onCompleteTask: (id: string, completed: boolean) => void;
+}) {
+  const topped = useAllDayTimeline(date);
   const allDay = useAllDayResize();
-  const topped = allDayItems(items);
-  const slots = useSlotDrag<"day">((_key, startHour, endHour) => onCreateTimed(startHour, 0, endHour), hourPx);
-  const dragSlot = slots.selection;
-  const draftSlot = dragSlot ?? timedDraftSlotForDay(editorDraft ?? null, focus);
-  const draftLabel = editorDraft?.title;
-  const draftKind = editorDraft?.kind;
-
+  const empty = topped.length === 0;
   return (
-    <div className="calendar-day">
-      <div className="calendar-sticky">
-        <div className={`calendar-all-day-frame${allDay.resizing ? " is-resizing" : ""}`} data-empty={topped.length === 0}>
-        <div
-          className={`calendar-all-day-scroll${allDay.height != null ? " is-sized" : ""}`}
-          style={allDay.height != null ? { height: allDay.height } : undefined}
-        >
-        <div className="calendar-all-day" data-empty={topped.length === 0}>
+    <div className={`calendar-all-day-frame${allDay.resizing ? " is-resizing" : ""}`} data-empty={empty}>
+      <div
+        className={`calendar-all-day-scroll${allDay.height != null ? " is-sized" : ""}`}
+        style={allDay.height != null ? { height: allDay.height } : undefined}
+      >
+        <div className="calendar-all-day" data-empty={empty}>
           <span className="calendar-all-day-label">All-day</span>
           <div
             className="calendar-all-day-items"
@@ -99,9 +73,45 @@ export function CalendarDayView({
             ))}
           </div>
         </div>
-        </div>
-        <AllDayResizeHandle height={allDay.height} handleProps={allDay.handleProps} />
-        </div>
+      </div>
+      <AllDayResizeHandle height={allDay.height} handleProps={allDay.handleProps} />
+    </div>
+  );
+}
+
+function DayGrid({
+  focus,
+  editorDraft,
+  onOpen,
+  onCreateTimed,
+  onCreateAllDay,
+  onCompleteTask,
+  readOnly = false,
+  hourPx = HOUR_PX,
+}: Omit<Props, "items">) {
+  const openItem = useStableCallback(onOpen);
+  const createAllDay = useStableCallback(onCreateAllDay);
+  const completeTask = useStableCallback(onCompleteTask);
+  const createTimed = useStableCallback((_date: Date, hour: number, endHour?: number) => {
+    onCreateTimed(hour, 0, endHour);
+  });
+  const labelStep = labelEvery(hourPx);
+  const [columnRef, columnWidths] = useColumnWidths(1);
+  const slots = useSlotDrag<"day">((_key, startHour, endHour) => onCreateTimed(startHour, 0, endHour), hourPx);
+  const drag = slots.selection?.key === "day" ? slots.selection : null;
+  const draftSlot = drag ?? timedDraftSlotForDay(editorDraft ?? null, focus);
+  const selection = draftSlot ? { start: draftSlot.start, end: draftSlot.end } : null;
+
+  return (
+    <div className="calendar-day">
+      <div className="calendar-sticky">
+        <DayAllDay
+          date={focus}
+          readOnly={readOnly}
+          onOpen={openItem}
+          onCreateAllDay={createAllDay}
+          onCompleteTask={completeTask}
+        />
       </div>
       <div className="calendar-day-grid">
         <div className="calendar-hours" title="Scroll to zoom">
@@ -111,50 +121,32 @@ export function CalendarDayView({
             </div>
           ))}
         </div>
-        <div className="calendar-day-slots" data-interval={interval} ref={columnRef(0)} {...(readOnly ? {} : slots.bind("day"))}>
-          {HOURS.map((hour) => (
-            readOnly ? (
-              <div key={hour} className="calendar-hour-slot" style={{ height: hourPx }} />
-            ) : (
-              <button
-                key={hour}
-                type="button"
-                className="calendar-hour-slot"
-                style={{ height: hourPx }}
-                aria-label={`Create at ${formatHourLabel(hour)}`}
-                onClick={() => onCreateTimed(hour)}
-              />
-            )
-          ))}
-          {timed.map((layout) => (
-            <div
-              key={layout.item.id}
-              className={`calendar-timed-item ${timedItemClass(layout.height)}`}
-              style={timedItemStyle(layout, columnWidths[0] ?? 0)}
-              onPointerDown={(event) => event.stopPropagation()}
-            >
-              <TimelineStrip
-                item={layout.item}
-                layout="card"
-                onOpen={onOpen}
-                onCompleteTask={onCompleteTask}
-              />
-            </div>
-          ))}
-          {draftSlot ? (
-            <SlotDraft
-              start={draftSlot.start}
-              end={draftSlot.end}
-              kind={draftKind}
-              title={draftLabel}
-              hourPx={hourPx}
-            />
-          ) : null}
-          {nowTop != null ? (
-            <div className="calendar-now-line" style={{ top: nowTop }} />
-          ) : null}
-        </div>
+        <WeekDayColumn
+          date={focus}
+          hourPx={hourPx}
+          columnWidth={columnWidths[0] ?? 0}
+          readOnly={readOnly}
+          variant="day"
+          nodeRef={columnRef(0)}
+          bind={slots.bind("day")}
+          onOpen={openItem}
+          onCreateTimed={createTimed}
+          onCompleteTask={completeTask}
+          selection={selection}
+          draftKind={selection ? editorDraft?.kind : undefined}
+          draftTitle={selection ? editorDraft?.title : undefined}
+        />
       </div>
     </div>
   );
 }
+
+//same bail-out as the week shell: parent renders must not repaint this column
+export const CalendarDayView = memo(function CalendarDayView({ items, ...rest }: Props) {
+  const override = useMemo(() => (items ? () => items : null), [items]);
+  return (
+    <DayItemsOverride itemsForDay={override}>
+      <DayGrid {...rest} />
+    </DayItemsOverride>
+  );
+});

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { AccessError, onAccessError } from "@/auth/access";
+import { onAuthExpired } from "@/auth/auth-expired";
 import { AccountNotice } from "@/auth/account-notice";
 import { LoginScreen } from "@/auth/login-screen";
 import type { OnboardingAnswers } from "@/auth/onboarding";
@@ -23,6 +24,7 @@ type OnboardingState = { status: "loading" } | { status: "needed" } | { status: 
 
 export default function Home() {
   const [auth, setAuth] = useState<AuthState>({ status: "loading" });
+  const [sessionExpired, setSessionExpired] = useState(false);
   const [onboarding, setOnboarding] = useState<OnboardingState>({ status: "loading" });
   const userId = auth.status === "signed-in" ? auth.user.id : null;
 
@@ -63,6 +65,9 @@ export default function Home() {
         setAuth({ status: "banned", message: err.message, reason: err.reason });
       }
     });
+    const stopExpired = onAuthExpired(() => {
+      if (!cancelled) setSessionExpired(true);
+    });
     restoreSession()
       .then((user) => {
         if (!cancelled) setAuth(user ? { status: "signed-in", user } : { status: "signed-out" });
@@ -78,12 +83,16 @@ export default function Home() {
     return () => {
       cancelled = true;
       stop();
+      stopExpired();
     };
   }, []);
 
   const handleSignIn = useCallback(async () => {
     const user = await signIn();
-    if (user) setAuth({ status: "signed-in", user });
+    if (user) {
+      setSessionExpired(false);
+      setAuth({ status: "signed-in", user });
+    }
   }, []);
 
   const handleSignOut = useCallback(() => {
@@ -111,13 +120,23 @@ export default function Home() {
   }
 
   return (
-    <CalendarProvider key={auth.user.id}>
-      <CalendarApp
-        user={auth.user}
-        onSignOut={handleSignOut}
-        advancedView={onboarding.advancedView !== false}
-        onAdvancedViewChange={changeAdvancedView}
-      />
-    </CalendarProvider>
+    <>
+      {sessionExpired ? (
+        <div className="session-expired-banner" role="status">
+          <span>Session expired —</span>
+          <button type="button" onClick={() => void handleSignIn()}>
+            Sign in again
+          </button>
+        </div>
+      ) : null}
+      <CalendarProvider key={auth.user.id}>
+        <CalendarApp
+          user={auth.user}
+          onSignOut={handleSignOut}
+          advancedView={onboarding.advancedView !== false}
+          onAdvancedViewChange={changeAdvancedView}
+        />
+      </CalendarProvider>
+    </>
   );
 }

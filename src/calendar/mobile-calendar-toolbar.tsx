@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import type { CalendarView } from "@/calendar/types";
 import { addDays, isToday, sameLocalDay, startOfWeek } from "@/calendar/date-utils";
 import { ChevronLeftIcon, ChevronRightIcon, PlusIcon } from "@/shared/icons";
@@ -20,7 +20,7 @@ type Props = {
   allowCreate?: boolean;
 };
 
-export function MobileCalendarToolbar(props: Props) {
+export const MobileCalendarToolbar = memo(function MobileCalendarToolbar(props: Props) {
   const { focus, view, weekStartsOn } = props;
   const week = startOfWeek(focus, weekStartsOn);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -76,4 +76,4 @@ export function MobileCalendarToolbar(props: Props) {
       </div> : null}
     </header>
   );
-}
+});

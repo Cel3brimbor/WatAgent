@@ -8,13 +8,13 @@ import {
   useMemo,
   useRef,
   useState,
+  type Context,
   type ReactNode,
 } from "react";
 import { newId } from "@/shared/ids";
 import { parseCalendarMeta, type CalendarItemDoc, type CalendarItemMeta } from "@/calendar/types";
 import { deleteCalendarItem, listCalendarItems, upsertCalendarItem } from "@/calendar/client";
 import { syncGoogleCalendar } from "@/calendar/google-calendar-client";
-import type { BusyBlock, OverlayEvent } from "@/calendar/timeline";
 import type { CalendarChange } from "@/agent/stream";
 import type { ChatMessage, ChatSession } from "@/agent/types";
 import { createSaveQueue } from "@/agent/chat-save-queue";
@@ -27,20 +27,17 @@ import {
   setRequireAiApproval,
   type PendingAiChange,
 } from "@/calendar/approval-client";
+import { commitApprovedPendingChanges, mergePendingIntoItems, pendingChangesMatching } from "@/calendar/merge-pending";
 import {
-  commitApprovedPendingChanges,
-  mergePendingIntoItems,
-  pendingChangesMatching,
-} from "@/calendar/merge-pending";
+  createEventStore,
+  EventStoreProvider,
+  useAllItems,
+  type EventStore,
+} from "@/calendar/event-store";
 
-type CalendarContextValue = {
-  hydrated: boolean;
-  loadError: string | null;
-  items: CalendarItemDoc[];
-  displayItems: CalendarItemDoc[];
-  requireAiApproval: boolean;
-  pendingChanges: PendingAiChange[];
-  approvalBusy: boolean;
+type NoticeListener = (message: string) => void;
+
+type CalendarActions = {
   setRequireAiApproval: (value: boolean) => Promise<void>;
   refreshPending: () => Promise<void>;
   approvePendingChanges: (input: { ids?: string[]; all?: boolean }) => Promise<void>;
@@ -52,24 +49,29 @@ type CalendarContextValue = {
   stageImport: (source: string, items: CalendarItemDoc[]) => void;
   /** The server list is the truth for this feed again. */
   releaseImport: (source: string) => void;
-  syncFromGoogle: (range: {
-    rangeStartUTC: number;
-    rangeEndUTC: number;
-  }) => Promise<{
-    busyBlocks: BusyBlock[];
-    overlayEvents: OverlayEvent[];
+  syncFromGoogle: (range: { rangeStartUTC: number; rangeEndUTC: number }) => Promise<{
     calendars: Array<{ id: string; name: string; color?: string; group: "mine" | "other" }>;
     lastSyncedAt: number;
   }>;
   setAfterWrite: (listener: (() => void) | null) => void;
+  subscribeNotice: (listener: NoticeListener) => () => void;
   upsert: (input: { id?: string; title: string; calendar: CalendarItemMeta }) => void;
   completeTask: (id: string, completed: boolean) => void;
   remove: (id: string) => void;
   /** Deletes many items a few at a time; resolves with how many could not be deleted. */
   removeMany: (ids: string[]) => Promise<number>;
   applyRemoteCalendarChange: (change: CalendarChange) => void;
-  chats: ChatSession[];
-  activeChat: ChatSession | null;
+};
+
+type CalendarStatus = {
+  hydrated: boolean;
+  loadError: string | null;
+  requireAiApproval: boolean;
+  pendingChanges: PendingAiChange[];
+  approvalBusy: boolean;
+};
+
+type ChatActions = {
   activeChatRef: () => ChatSession | null;
   createChat: () => void;
   selectChat: (chatId: string) => void;
@@ -84,13 +86,25 @@ type CalendarContextValue = {
   pruneEmptyChats: () => void;
 };
 
+type ChatStateValue = {
+  chats: ChatSession[];
+  activeChat: ChatSession | null;
+};
+
+type CalendarContextValue = CalendarStatus &
+  CalendarActions &
+  ChatActions &
+  ChatStateValue & {
+    items: CalendarItemDoc[];
+    displayItems: CalendarItemDoc[];
+  };
+
 type ChatState = { chats: ChatSession[]; activeChatId: string | null };
 
-const CalendarContext = createContext<CalendarContextValue | null>(null);
-
-function sortItems(items: CalendarItemDoc[]): CalendarItemDoc[] {
-  return [...items].sort((a, b) => a.calendar.startUTC - b.calendar.startUTC);
-}
+const CalendarActionsContext = createContext<CalendarActions | null>(null);
+const CalendarStatusContext = createContext<CalendarStatus | null>(null);
+const ChatActionsContext = createContext<ChatActions | null>(null);
+const ChatStateContext = createContext<ChatStateValue | null>(null);
 
 function emptyChat(): ChatSession {
   const now = Date.now();
@@ -117,8 +131,16 @@ function logFailure(label: string) {
   return () => console.error(`[calendar] ${label} failed`);
 }
 
+function useRequiredContext<T>(context: Context<T | null>): T {
+  const value = useContext(context);
+  if (!value) throw new Error("useCalendar must be used within CalendarProvider");
+  return value;
+}
+
 export function CalendarProvider({ children }: { children: ReactNode }) {
-  const [items, setItems] = useState<CalendarItemDoc[]>([]);
+  const storeRef = useRef<EventStore | null>(null);
+  if (!storeRef.current) storeRef.current = createEventStore();
+  const store = storeRef.current;
   const [hydrated, setHydrated] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [chatState, setChatState] = useState<ChatState>({ chats: [], activeChatId: null });
@@ -127,25 +149,20 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
   const [approvalBusy, setApprovalBusy] = useState(false);
   const pendingChangesRef = useRef(pendingChanges);
   pendingChangesRef.current = pendingChanges;
-  const itemsRef = useRef(items);
-  itemsRef.current = items;
-  //feeds the screen changed before the server finished. refreshes honor these until releaseImport.
-  const hiddenImports = useRef(new Set<string>());
-  const stagedImports = useRef(new Map<string, CalendarItemDoc[]>());
-  const withLocalImports = useCallback((loaded: CalendarItemDoc[]) => {
-    const visible = loaded.filter((item) => !item.calendar.importSource || !hiddenImports.current.has(item.calendar.importSource));
-    const present = new Set<string>();
-    for (const item of visible) if (item.calendar.importSource) present.add(item.calendar.importSource);
-    const extra: CalendarItemDoc[] = [];
-    for (const [source, docs] of stagedImports.current) {
-      if (hiddenImports.current.has(source) || present.has(source)) continue;
-      extra.push(...docs);
-    }
-    return sortItems([...visible, ...extra]);
-  }, []);
-  //updated before react paints, so a save in the same turn reads the transcript just written
   const chatStateRef = useRef(chatState);
   const enqueueSave = useRef(createSaveQueue<ChatSession>((_chatId, snapshot) => saveChatSession(snapshot)));
+  const noticeListeners = useRef(new Set<NoticeListener>());
+
+  const raiseNotice = useCallback((message: string) => {
+    for (const listener of noticeListeners.current) listener(message);
+  }, []);
+
+  const subscribeNotice = useCallback((listener: NoticeListener) => {
+    noticeListeners.current.add(listener);
+    return () => {
+      noticeListeners.current.delete(listener);
+    };
+  }, []);
 
   const updateChats = useCallback((patch: (state: ChatState) => ChatState) => {
     const next = patch(chatStateRef.current);
@@ -153,48 +170,53 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     setChatState(next);
   }, []);
 
-  const putItem = useCallback((item: CalendarItemDoc) => {
-    setItems((prev) => sortItems([item, ...prev.filter((row) => row.id !== item.id)]));
-  }, []);
-
-  const dropItem = useCallback((id: string) => {
-    setItems((prev) => prev.filter((row) => row.id !== id));
-  }, []);
+  const commitPending = useCallback(
+    (next: PendingAiChange[]) => {
+      pendingChangesRef.current = next;
+      setPendingChanges(next);
+      store.setAiPending(next);
+    },
+    [store],
+  );
 
   const refresh = useCallback(async () => {
     try {
       const loaded = await listCalendarItems();
-      setItems(withLocalImports(loaded));
+      store.reconcileAll(loaded);
       setLoadError(null);
     } catch {
       setLoadError("Unable to load your calendar.");
     }
-  }, [withLocalImports]);
+  }, [store]);
 
-  const hideImport = useCallback((source: string) => {
-    stagedImports.current.delete(source);
-    hiddenImports.current.add(source);
-    setItems((prev) => prev.filter((item) => item.calendar.importSource !== source));
-  }, []);
+  const hideImport = useCallback(
+    (source: string) => {
+      store.hideImport(source);
+    },
+    [store],
+  );
 
-  const stageImport = useCallback((source: string, docs: CalendarItemDoc[]) => {
-    hiddenImports.current.delete(source);
-    stagedImports.current.set(source, docs);
-    setItems((prev) => withLocalImports(prev.filter((item) => item.calendar.importSource !== source)));
-  }, [withLocalImports]);
+  const stageImport = useCallback(
+    (source: string, docs: CalendarItemDoc[]) => {
+      store.stageImport(source, docs);
+    },
+    [store],
+  );
 
-  const releaseImport = useCallback((source: string) => {
-    hiddenImports.current.delete(source);
-    stagedImports.current.delete(source);
-  }, []);
+  const releaseImport = useCallback(
+    (source: string) => {
+      store.releaseImport(source);
+    },
+    [store],
+  );
 
   const refreshPending = useCallback(async () => {
     try {
-      setPendingChanges(await listPendingChanges());
+      commitPending(await listPendingChanges());
     } catch {
       logFailure("pending load")();
     }
-  }, []);
+  }, [commitPending]);
 
   const refreshSettings = useCallback(async () => {
     try {
@@ -228,22 +250,25 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
   const syncFromGoogle = useCallback(
     async (range: { rangeStartUTC: number; rangeEndUTC: number }) => {
       const result = await syncGoogleCalendar(range);
-      if (result.items.length > 0 || result.deletedIds.length > 0) {
-        const drop = new Set(result.deletedIds);
-        setItems((prev) => {
-          const byId = new Map(prev.filter((row) => !drop.has(row.id)).map((row) => [row.id, row]));
-          for (const item of result.items) if (!drop.has(item.id)) byId.set(item.id, item);
-          return sortItems([...byId.values()]);
-        });
-      }
+      const drop = new Set(result.deletedIds);
+      store.batch(() => {
+        //purge google rows only inside this chunk so other weeks stay put
+        store.reconcileGoogleRange(range, result.overlayEvents, result.busyBlocks);
+        for (const id of result.deletedIds) {
+          if (store.hasPendingWrite(id)) continue;
+          store.applyRemove(id);
+        }
+        for (const item of result.items) {
+          if (drop.has(item.id) || store.hasPendingWrite(item.id)) continue;
+          store.applyUpsert(item);
+        }
+      });
       return {
-        busyBlocks: result.busyBlocks,
-        overlayEvents: result.overlayEvents,
         calendars: result.calendars,
         lastSyncedAt: result.lastSyncedAt,
       };
     },
-    [],
+    [store],
   );
 
   const afterWriteRef = useRef<(() => void) | null>(null);
@@ -258,16 +283,23 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     (input: { id?: string; title: string; calendar: CalendarItemMeta }) => {
       const id = input.id || newId();
       const title = input.title.trim() || (input.calendar.kind === "task" ? "Task" : "Event");
-      const existing = itemsRef.current.find((row) => row.id === id);
+      const existing = store.getItem(id);
       const now = Date.now();
-      putItem({
+      const doc: CalendarItemDoc = {
         id,
         title,
-        calendar: { ...input.calendar, googleEventId: existing?.calendar.googleEventId,
-          icsImportId: existing?.calendar.icsImportId, importSource: existing?.calendar.importSource },
+        calendar: {
+          ...input.calendar,
+          googleEventId: existing?.calendar.googleEventId,
+          icsImportId: existing?.calendar.icsImportId,
+          importSource: existing?.calendar.importSource,
+        },
         createdAt: existing?.createdAt ?? now,
         updatedAt: now,
-      });
+      };
+      const seq = store.beginWrite(id, "upsert");
+      //external store updates render sync; startTransition cannot defer them
+      store.applyUpsert(doc);
       void upsertCalendarItem({
         id,
         title,
@@ -275,50 +307,78 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
         createdAt: existing?.createdAt ?? now,
       })
         .then((saved) => {
-          putItem(saved);
+          store.settleWrite(id, seq, saved);
           wrote();
         })
-        .catch(logFailure("save"));
+        .catch((err: unknown) => {
+          console.error("[calendar] save failed", err);
+          const note = store.rollbackWrite(id, seq);
+          if (note) raiseNotice(note);
+        });
     },
-    [putItem, wrote],
+    [raiseNotice, store, wrote],
   );
 
   const completeTask = useCallback(
     (id: string, completed: boolean) => {
-      const current = itemsRef.current.find((row) => row.id === id);
+      const current = store.getItem(id);
       if (!current || current.calendar.kind !== "task") return;
       upsert({ id, title: current.title, calendar: { ...current.calendar, completed } });
     },
-    [upsert],
+    [store, upsert],
   );
 
   const remove = useCallback(
     (id: string) => {
-      dropItem(id);
-      void deleteCalendarItem(id).then(wrote).catch(logFailure("delete"));
+      const seq = store.beginWrite(id, "remove");
+      store.applyRemove(id);
+      void deleteCalendarItem(id)
+        .then(() => {
+          store.settleWrite(id, seq, null);
+          wrote();
+        })
+        .catch((err: unknown) => {
+          console.error("[calendar] delete failed", err);
+          const note = store.rollbackWrite(id, seq);
+          if (note) raiseNotice(note);
+        });
     },
-    [dropItem, wrote],
+    [raiseNotice, store, wrote],
   );
 
   const removeMany = useCallback(
     async (ids: string[]) => {
-      const queue = [...ids];
+      const jobs: { id: string; seq: number }[] = [];
+      store.batch(() => {
+        for (const id of ids) {
+          const seq = store.beginWrite(id, "remove");
+          store.applyRemove(id);
+          jobs.push({ id, seq });
+        }
+      });
+      const queue = [...jobs];
       let failed = 0;
+      const notes: string[] = [];
       const worker = async () => {
-        for (let id = queue.shift(); id; id = queue.shift()) {
+        for (let job = queue.shift(); job; job = queue.shift()) {
           try {
-            await deleteCalendarItem(id);
-            dropItem(id);
-          } catch {
+            await deleteCalendarItem(job.id);
+            store.settleWrite(job.id, job.seq, null);
+          } catch (err: unknown) {
+            console.error("[calendar] delete failed", err);
             failed += 1;
+            const note = store.rollbackWrite(job.id, job.seq);
+            if (note) notes.push(note);
           }
         }
       };
       await Promise.all(Array.from({ length: Math.min(4, queue.length) }, worker));
+      if (notes.length === 1) raiseNotice(notes[0]);
+      else if (notes.length > 1) raiseNotice(`Couldn't delete ${notes.length} items. Those changes were undone.`);
       wrote();
       return failed;
     },
-    [dropItem, wrote],
+    [raiseNotice, store, wrote],
   );
 
   const applyRemoteCalendarChange = useCallback(
@@ -328,15 +388,15 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
         return;
       }
       if (change.action === "delete") {
-        dropItem(change.id);
+        store.applyRemove(change.id);
         wrote();
         return;
       }
       const calendar = parseCalendarMeta(change.calendar);
       if (!calendar) return;
-      const existing = itemsRef.current.find((row) => row.id === change.id);
+      const existing = store.getItem(change.id);
       const now = Date.now();
-      putItem({
+      store.applyUpsert({
         id: change.id,
         title: change.title?.trim() || (calendar.kind === "task" ? "Task" : "Event"),
         calendar,
@@ -345,7 +405,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
       });
       wrote();
     },
-    [dropItem, putItem, refreshPending, wrote],
+    [refreshPending, store, wrote],
   );
 
   const approvalWriteRef = useRef(0);
@@ -366,8 +426,17 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
       const approving = pendingChangesMatching(pendingChangesRef.current, input);
       if (approving.length === 0) return;
       const approvedIds = new Set(approving.map((change) => change.id));
-      setPendingChanges((prev) => prev.filter((change) => !approvedIds.has(change.id)));
-      setItems((prev) => commitApprovedPendingChanges(prev, approving));
+      const nextPending = pendingChangesRef.current.filter((change) => !approvedIds.has(change.id));
+      const beforeIds = store.getAllItems().map((item) => item.id);
+      const nextItems = commitApprovedPendingChanges(store.getAllItems(), approving);
+      const nextIds = new Set(nextItems.map((item) => item.id));
+      store.batch(() => {
+        store.setAiPending(nextPending);
+        for (const item of nextItems) store.applyUpsert(item);
+        for (const id of beforeIds) if (!nextIds.has(id)) store.applyRemove(id);
+      });
+      pendingChangesRef.current = nextPending;
+      setPendingChanges(nextPending);
 
       setApprovalBusy(true);
       try {
@@ -382,7 +451,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
         setApprovalBusy(false);
       }
     },
-    [refresh, refreshPending, wrote],
+    [refresh, refreshPending, store, wrote],
   );
 
   const rejectPendingChanges = useCallback(
@@ -390,7 +459,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
       const rejecting = pendingChangesMatching(pendingChangesRef.current, input);
       if (rejecting.length === 0) return;
       const rejectedIds = new Set(rejecting.map((change) => change.id));
-      setPendingChanges((prev) => prev.filter((change) => !rejectedIds.has(change.id)));
+      commitPending(pendingChangesRef.current.filter((change) => !rejectedIds.has(change.id)));
 
       setApprovalBusy(true);
       try {
@@ -403,12 +472,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
         setApprovalBusy(false);
       }
     },
-    [refreshPending],
-  );
-
-  const displayItems = useMemo(
-    () => mergePendingIntoItems(items, pendingChanges),
-    [items, pendingChanges],
+    [commitPending, refreshPending],
   );
 
   const persistChat = useCallback((chatId: string) => {
@@ -456,9 +520,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
             ? state.chats.filter((chat) => chat.id !== chatId)
             : state.chats.map((chat) => (chat.id === chatId ? { ...chat, open: false } : chat));
         const activeChatId =
-          state.activeChatId === chatId
-            ? (chats.find((chat) => chat.open)?.id ?? null)
-            : state.activeChatId;
+          state.activeChatId === chatId ? (chats.find((chat) => chat.open)?.id ?? null) : state.activeChatId;
         return { chats, activeChatId };
       });
     },
@@ -483,9 +545,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
         return {
           chats,
           activeChatId:
-            state.activeChatId === chatId
-              ? (chats.find((chat) => chat.open)?.id ?? null)
-              : state.activeChatId,
+            state.activeChatId === chatId ? (chats.find((chat) => chat.open)?.id ?? null) : state.activeChatId,
         };
       });
     },
@@ -496,9 +556,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     (orderedIds: string[]) => {
       updateChats((state) => {
         const byId = new Map(state.chats.map((chat) => [chat.id, chat]));
-        const ordered = orderedIds
-          .map((id) => byId.get(id))
-          .filter((chat): chat is ChatSession => Boolean(chat));
+        const ordered = orderedIds.map((id) => byId.get(id)).filter((chat): chat is ChatSession => Boolean(chat));
         const rest = state.chats.filter((chat) => !orderedIds.includes(chat.id));
         return { ...state, chats: [...ordered, ...rest] };
       });
@@ -568,15 +626,8 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
 
   const activeChat = useMemo(() => pickActive(chatState), [chatState]);
 
-  const value = useMemo<CalendarContextValue>(
+  const actions = useMemo<CalendarActions>(
     () => ({
-      hydrated,
-      loadError,
-      items,
-      displayItems,
-      requireAiApproval,
-      pendingChanges,
-      approvalBusy,
       setRequireAiApproval: updateRequireAiApproval,
       refreshPending,
       approvePendingChanges,
@@ -587,13 +638,40 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
       releaseImport,
       syncFromGoogle,
       setAfterWrite,
+      subscribeNotice,
       upsert,
       completeTask,
       remove,
       removeMany,
       applyRemoteCalendarChange,
-      chats: chatState.chats,
-      activeChat,
+    }),
+    [
+      updateRequireAiApproval,
+      refreshPending,
+      approvePendingChanges,
+      rejectPendingChanges,
+      refresh,
+      hideImport,
+      stageImport,
+      releaseImport,
+      syncFromGoogle,
+      setAfterWrite,
+      subscribeNotice,
+      upsert,
+      completeTask,
+      remove,
+      removeMany,
+      applyRemoteCalendarChange,
+    ],
+  );
+
+  const status = useMemo<CalendarStatus>(
+    () => ({ hydrated, loadError, requireAiApproval, pendingChanges, approvalBusy }),
+    [hydrated, loadError, requireAiApproval, pendingChanges, approvalBusy],
+  );
+
+  const chatActions = useMemo<ChatActions>(
+    () => ({
       activeChatRef,
       createChat,
       selectChat,
@@ -608,30 +686,6 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
       pruneEmptyChats,
     }),
     [
-      hydrated,
-      loadError,
-      items,
-      displayItems,
-      requireAiApproval,
-      pendingChanges,
-      approvalBusy,
-      updateRequireAiApproval,
-      refreshPending,
-      approvePendingChanges,
-      rejectPendingChanges,
-      refresh,
-      hideImport,
-      stageImport,
-      releaseImport,
-      syncFromGoogle,
-      setAfterWrite,
-      upsert,
-      completeTask,
-      remove,
-      removeMany,
-      applyRemoteCalendarChange,
-      chatState.chats,
-      activeChat,
       activeChatRef,
       createChat,
       selectChat,
@@ -647,11 +701,52 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     ],
   );
 
-  return <CalendarContext.Provider value={value}>{children}</CalendarContext.Provider>;
+  const chatStateValue = useMemo<ChatStateValue>(
+    () => ({ chats: chatState.chats, activeChat }),
+    [chatState.chats, activeChat],
+  );
+
+  return (
+    <EventStoreProvider store={store}>
+      <CalendarActionsContext.Provider value={actions}>
+        <CalendarStatusContext.Provider value={status}>
+          <ChatActionsContext.Provider value={chatActions}>
+            <ChatStateContext.Provider value={chatStateValue}>{children}</ChatStateContext.Provider>
+          </ChatActionsContext.Provider>
+        </CalendarStatusContext.Provider>
+      </CalendarActionsContext.Provider>
+    </EventStoreProvider>
+  );
+}
+
+export function useCalendarActions(): CalendarActions {
+  return useRequiredContext(CalendarActionsContext);
+}
+
+export function useCalendarStatus(): CalendarStatus {
+  return useRequiredContext(CalendarStatusContext);
+}
+
+export function useChatActions(): ChatActions {
+  return useRequiredContext(ChatActionsContext);
+}
+
+export function useChatState(): ChatStateValue {
+  return useRequiredContext(ChatStateContext);
 }
 
 export function useCalendar(): CalendarContextValue {
-  const ctx = useContext(CalendarContext);
-  if (!ctx) throw new Error("useCalendar must be used within CalendarProvider");
-  return ctx;
+  const actions = useCalendarActions();
+  const status = useCalendarStatus();
+  const chatActions = useChatActions();
+  const chatState = useChatState();
+  const items = useAllItems();
+  const displayItems = useMemo(
+    () => mergePendingIntoItems(items, status.pendingChanges),
+    [items, status.pendingChanges],
+  );
+  return useMemo(
+    () => ({ ...status, ...actions, ...chatState, ...chatActions, items, displayItems }),
+    [status, actions, chatState, chatActions, items, displayItems],
+  );
 }
