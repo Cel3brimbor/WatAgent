@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { memo, useEffect, useState, type ReactNode } from "react";
 import { PlusIcon } from "@/shared/icons";
 
 export type AppSection = "calendar" | "tasks" | "events" | "displays" | "map" | "settings";
@@ -24,7 +24,7 @@ const BARS: Array<{ id: AppSection; label: string }> = [
   { id: "map", label: "Configuration" },
 ];
 
-export function SideNav({ section, collapsed, onSection, onToggle, onCreateEvent, advanced = true, children }: Props) {
+export const SideNav = memo(function SideNav({ section, collapsed, onSection, onToggle, onCreateEvent, advanced = true, children }: Props) {
   const [mobile, setMobile] = useState(false);
   const [calendarsOpen, setCalendarsOpen] = useState(false);
   useEffect(() => {
@@ -106,7 +106,7 @@ export function SideNav({ section, collapsed, onSection, onToggle, onCreateEvent
       <div id="calendar-sidebar" className={`side-nav-extra${mobile && calendarsOpen ? " is-mobile-open" : ""}`}>{children}</div>
     </nav>
   );
-}
+});
 
 function MenuIcon() {
   return (

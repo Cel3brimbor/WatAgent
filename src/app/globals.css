@@ -42,13 +42,13 @@
   /*motion. --ease-spring is a critically damped spring (damping 1.0) sampled into linear(); cubic fallback below*/
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --ease-spring: cubic-bezier(0.25, 1, 0.5, 1);
-  --dur-press: 90ms;
-  --dur-fast: 160ms;
-  --dur-exit: 100ms;
-  --dur-spring: 420ms;
+  --dur-press: 70ms;
+  --dur-fast: 140ms;
+  --dur-exit: 160ms;
+  --dur-spring: 300ms;
   /*travel distances; zeroed under reduced motion so every transition degrades to a cross-fade*/
   --rise: 6px;
-  --pop: 0.96;
+  --pop: 0.985;
   --nudge: 14px;
   --sheet-travel: 100%;
   --event-color: #5b8a72;
@@ -629,7 +629,7 @@ select {
 .gcal-card-icon-btn:active,
 .composer-send:active:not(:disabled),
 .todo-check:active {
-  transform: scale(0.9);
+  transform: scale(0.96);
   transition-duration: var(--dur-press);
 }
 
@@ -2874,6 +2874,34 @@ button.qd-cal-swatch:active {
   background: var(--gcal-color);
 }
 
+.session-expired-banner {
+  position: fixed;
+  z-index: 80;
+  top: var(--safe-top);
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  padding: 0.55rem 1rem;
+  background: var(--glow);
+  color: var(--accent-deep);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.session-expired-banner button {
+  font: inherit;
+  font-weight: 700;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
 /*unfolds from under the toolbar and folds back the same way*/
 .calendar-notice {
   display: grid;
@@ -3150,8 +3178,8 @@ button.qd-cal-swatch:active {
   font-size: 0.74rem;
   pointer-events: none;
   transition:
-    top 140ms var(--ease-out),
-    height 140ms var(--ease-out),
+    top 80ms var(--ease-out),
+    height 80ms var(--ease-out),
     opacity var(--dur-fast) var(--ease-out),
     transform var(--dur-spring) var(--ease-spring);
 }
@@ -4092,11 +4120,11 @@ button.qd-cal-swatch:active {
 }
 
 .calendar-editor-overlay[data-state="open"] {
-  animation: calendar-editor-scrim-in 80ms ease-out both;
+  animation: calendar-editor-scrim-in var(--dur-fast) var(--ease-out) both;
 }
 
 .calendar-editor-overlay[data-state="open"] .calendar-editor {
-  animation: calendar-editor-in 90ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation: calendar-editor-in 200ms var(--ease-out) both;
 }
 
 @keyframes calendar-editor-scrim-in {
@@ -6099,7 +6127,7 @@ button.qd-cal-swatch:active {
 }
 
 .chat-history-more:active {
-  transform: scale(0.9);
+  transform: scale(0.96);
   transition-duration: var(--dur-press);
 }
 
@@ -8252,7 +8280,7 @@ h3 {
     border-radius: 16px 16px 0 0;
     background: var(--paper);
     box-shadow: 0 -8px 30px rgba(29, 27, 24, 0.16);
-    transition: transform 460ms var(--ease-spring);
+    transition: transform var(--dur-spring) var(--ease-spring);
   }
 
   @starting-style {
@@ -8265,7 +8293,7 @@ h3 {
   .chat-panel[data-state="closed"] {
     width: 100%;
     transform: translate3d(0, var(--sheet-travel), 0);
-    transition-duration: 280ms;
+    transition-duration: var(--dur-exit);
   }
 
   .chat-panel-inner {
@@ -9613,10 +9641,10 @@ h3 {
  .calendar-editor-overlay[data-state="closed"][data-pending],
 .modal-backdrop[data-state="closed"][data-pending] {
   pointer-events: auto;
-  animation: dialog-action-scrim-out 90ms ease-out both;
+  animation: dialog-action-scrim-out 120ms var(--ease-out) both;
 }
 .calendar-editor-overlay[data-pending] .calendar-editor,
-.modal-backdrop[data-pending] .modal { animation: dialog-action-out 90ms ease-out both; }
+.modal-backdrop[data-pending] .modal { animation: dialog-action-out 120ms var(--ease-out) both; }
 @keyframes dialog-action-scrim-out { from { opacity: 1; } to { opacity: 0; } }
 @keyframes dialog-action-out {
   from { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
@@ -9627,4 +9655,15 @@ h3 {
   .modal-backdrop[data-state="closed"][data-pending],
   .calendar-editor-overlay[data-pending] .calendar-editor,
   .modal-backdrop[data-pending] .modal { animation: none; }
+}
+
+/* Reduced motion applies to nested controls and CSS modules as well as overlays. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+    scroll-behavior: auto !important;
+  }
 }

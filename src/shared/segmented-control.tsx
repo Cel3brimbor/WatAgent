@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, type CSSProperties, type KeyboardEvent } from "react";
+import { memo, useRef, type CSSProperties, type KeyboardEvent } from "react";
 
 export type SegmentOption<T extends string> = { value: T; label: string; hint?: string };
 
@@ -12,7 +12,7 @@ type Props<T extends string> = {
   className?: string;
 };
 
-export function SegmentedControl<T extends string>({ value, options, onChange, label, className }: Props<T>) {
+function SegmentedControlView<T extends string>({ value, options, onChange, label, className }: Props<T>) {
   const refs = useRef<Array<HTMLButtonElement | null>>([]);
   const index = Math.max(
     0,
@@ -65,3 +65,5 @@ export function SegmentedControl<T extends string>({ value, options, onChange, l
     </div>
   );
 }
+
+export const SegmentedControl = memo(SegmentedControlView) as typeof SegmentedControlView;

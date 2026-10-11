@@ -46,10 +46,10 @@ export function EditorDraftProvider({ value, children }: { value: CalendarDraft 
   return <EditorDraftContext.Provider value={value}>{children}</EditorDraftContext.Provider>;
 }
 
-//only this subscribes, so opening the dialog does not rebuild the day or week
+//only this subscribes, so a draft edit does not rebuild the day or week
 export function EditorSlot({ day, hourPx }: { day: Date; hourPx?: number }) {
   const draft = useContext(EditorDraftContext);
-  const slot = !draft || draft.id || draft.google ? null : timedDraftSlotForDay(draft, day);
+  const slot = timedDraftSlotForDay(draft, day);
   if (!draft || !slot) return null;
   return <SlotDraft start={slot.start} end={slot.end} kind={draft.kind} title={draft.title} hourPx={hourPx} />;
 }

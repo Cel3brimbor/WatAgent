@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { memo, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import type { AgentEffort } from "@/agent/agent-effort";
 import { useAgentEffort } from "@/agent/use-agent-effort";
 import { AgentActivity } from "@/agent/agent-activity";
@@ -47,6 +47,7 @@ function AssistantAnswer({
     wasSettling.current = settling;
     if (started && prev > 0 && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
       const shrinking = prev > next + 12;
+      animRef.current?.cancel();
       el.style.overflow = "hidden";
       const anim = el.animate(
         shrinking
@@ -123,7 +124,7 @@ type Props = {
   ruleNames?: Record<string, string>;
 };
 
-export function CalendarChatPanel({
+export const CalendarChatPanel = memo(function CalendarChatPanel({
   open,
   chats,
   activeChat,
@@ -403,7 +404,7 @@ export function CalendarChatPanel({
       </div>
     </aside>
   );
-}
+});
 
 function UserMessage({
   content,

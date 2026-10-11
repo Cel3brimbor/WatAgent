@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useLayoutEffect, useRef, useState, type RefObject } from "react";
+import { memo, useEffect, useId, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { ConfirmDialog } from "@/shared/confirm-dialog";
 import { RenameCalendarDialog } from "@/calendar/imported-calendars-panel";
 import { formatFeedSyncSummary, syncImportedFeed } from "@/calendar/calendar-sync";
@@ -90,7 +90,7 @@ function googleChecked(sources: CalendarSourceFilter, id: string): boolean {
   return sources.google && !sources.mutedGoogleIds.includes(id);
 }
 
-export function CalendarSidePanel({
+export const CalendarSidePanel = memo(function CalendarSidePanel({
   focus,
   view,
   weekStartsOn,
@@ -568,7 +568,7 @@ export function CalendarSidePanel({
         }} /> : null}
     </div>
   );
-}
+});
 
 /** A category calendar under UWaterloo Events, not a merge and not LEARN or Portal. */
 export function isCampusSideCalendar(calendar: SideExternalCalendar): boolean {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { memo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import type { KeywordTask } from "@/calendar/keyword-tasks";
 import type { SmartTagHit } from "@/calendar/smart-tags";
 import type { CalendarItemDoc } from "@/calendar/types";
@@ -66,7 +66,7 @@ function groupOf(row: Row, now: number, today: Date): GroupId {
   return "later";
 }
 
-export function TodoList({ items, onOpen, onComplete, onCreate, keywordTasks = [], calendarName, onKeywordComplete, onKeywordOpen, tagForItem, rules }: Props) {
+export const TodoList = memo(function TodoList({ items, onOpen, onComplete, onCreate, keywordTasks = [], calendarName, onKeywordComplete, onKeywordOpen, tagForItem, rules }: Props) {
   const listRef = useRef<HTMLDivElement>(null);
   const [showOlder, setShowOlder] = useState(false);
   const [doneOpen, setDoneOpen] = useState(false);
@@ -227,4 +227,4 @@ export function TodoList({ items, onOpen, onComplete, onCreate, keywordTasks = [
       {rules ? <div className="todo-automation">{rules}</div> : null}
     </section>
   );
-}
+});

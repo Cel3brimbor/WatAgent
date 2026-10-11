@@ -1,6 +1,6 @@
 "use client";
 
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import type { TimelineItem } from "@/calendar/types";
 import { formatDueWhen, formatGoogleWhen } from "@/calendar/date-utils";
@@ -21,7 +21,7 @@ type EventPeekProps = {
 };
 
 //owns its own state so opening and closing don't re-render the calendar
-export const EventPeek = forwardRef<EventPeekHandle, EventPeekProps>(function EventPeek(
+export const EventPeek = memo(forwardRef<EventPeekHandle, EventPeekProps>(function EventPeek(
   { labelFor, editFor, deleteFor },
   ref,
 ) {
@@ -54,7 +54,7 @@ export const EventPeek = forwardRef<EventPeekHandle, EventPeekProps>(function Ev
     />,
     document.body,
   );
-});
+}));
 
 type Props = {
   item: TimelineItem;

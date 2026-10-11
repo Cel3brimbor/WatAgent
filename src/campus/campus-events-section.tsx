@@ -9,7 +9,6 @@ import {
   campusOvernightSession,
   campusFreshnessLabel,
   campusEventIcs,
-  campusFeedUrl,
   campusPlacements,
   eventInCampusCategory,
   eventInCampusDepartment,
@@ -18,7 +17,6 @@ import {
   isDropInSport,
   localSpan,
   matchesCampusQuery,
-  toggledCategories,
   type CampusEvent,
   type CampusEventsPayload,
   type CampusSeries,
@@ -196,10 +194,7 @@ export function CampusEventsSection({ items, calendars, onAdd, subscriptions, on
   const [limit, setLimit] = useState(PAGE);
   const [menu, setMenu] = useState<{ position: ContextMenuPosition; event: CampusEvent } | null>(null);
   const now = useMinute();
-  //the switches move at once and settle when the calendar has synced
-  const [pendingCategories, setPendingCategories] = useState<string[] | null>(null);
   const savedCategories = subscriptions.flatMap((entry) => entry.categories);
-  const subscribed = pendingCategories ?? savedCategories;
   const feedIds = useMemo(() => subscriptions.map((entry) => entry.feedId), [subscriptions]);
   const placementOf = useMemo(() => campusPlacements(items, feedIds), [items, feedIds]);
 
@@ -271,19 +266,8 @@ export function CampusEventsSection({ items, calendars, onAdd, subscriptions, on
     );
   }
 
-  async function toggleSubscription(id: string, on: boolean) {
-    if (!data || pendingCategories) return;
-    const next = toggledCategories(savedCategories, id, on, data.categories);
-    setPendingCategories(next);
-    try {
-      await onSubscribe(next.map((categoryId) => ({ id: categoryId, label: labels.get(categoryId) ?? campusCategoryLabel(categoryId) })));
-    } finally {
-      setPendingCategories(null);
-    }
-  }
-
   function subscribedTitle(event: CampusEvent): string {
-    const categoryId = event.categories.find((id) => subscribed.includes(id));
+    const categoryId = event.categories.find((id) => savedCategories.includes(id));
     const name = categoryId ? labels.get(categoryId) ?? campusCategoryLabel(categoryId) : "UWaterloo Events";
     return `On your ${name} calendar`;
   }
@@ -418,11 +402,6 @@ export function CampusEventsSection({ items, calendars, onAdd, subscriptions, on
   }
 
   const chips = (data?.categories ?? []).filter((entry) => entry.group !== "drop-ins" && (counts.get(entry.id) ?? 0) > 0);
-  //calendar apps can only reach a public https server, so development has no link to share
-  const feedLink = (() => {
-    const link = campusFeedUrl(subscribed);
-    return link.startsWith("https://") ? link : null;
-  })();
   //localhost is the scraper. the hosted app only downloads the list that API already has.
   const scrapingHere = apiIsLocal() && Boolean(data && (data.updating || data.status === "loading"));
   const pulling = !apiIsLocal() && loading;
@@ -446,10 +425,8 @@ export function CampusEventsSection({ items, calendars, onAdd, subscriptions, on
         <CampusSubscriptions
           categories={data.categories}
           counts={counts}
-          subscribed={subscribed}
-          busy={pendingCategories != null}
-          onToggle={(id, on) => void toggleSubscription(id, on)}
-          feedLink={feedLink}
+          subscribed={savedCategories}
+          onSubscribe={onSubscribe}
         />
       ) : null}
       <SearchInput

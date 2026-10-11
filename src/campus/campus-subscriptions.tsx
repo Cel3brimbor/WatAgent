@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
-import type { CampusCategory } from "@/campus/campus-events";
+import { useEffect, useState } from "react";
+import { campusCategoryLabel, campusFeedUrl, toggledCategories, type CampusCategory } from "@/campus/campus-events";
 import { ChevronIcon } from "@/calendar/sidebar-icons";
 import { Disclosure } from "@/shared/disclosure";
+import { afterPaint } from "@/shared/after-paint";
 import { Switch } from "@/shared/switch";
 import styles from "./campus-events.module.css";
 
@@ -12,11 +13,16 @@ type Props = {
   /** Upcoming events in each category. */
   counts: Map<string, number>;
   subscribed: string[];
-  busy: boolean;
-  onToggle: (id: string, on: boolean) => void;
-  /** A public https link other calendar apps can subscribe to, when the server has one. */
-  feedLink: string | null;
+  /** Saves the categories that should each have a calendar. None removes them. */
+  onSubscribe: (categories: Array<{ id: string; label: string }>) => Promise<void>;
 };
+
+function sameIds(a: readonly string[], b: readonly string[]): boolean {
+  if (a.length !== b.length) return false;
+  const have = new Set(b);
+  for (const id of a) if (!have.has(id)) return false;
+  return true;
+}
 
 function enabledSummary(labels: string[]): string {
   if (labels.length === 0) return "Turn a sport on and it gets its own calendar.";
@@ -29,7 +35,6 @@ function DropInSports({
   sports,
   counts,
   subscribed,
-  busy,
   onToggle,
   legacy,
 }: {
@@ -37,7 +42,6 @@ function DropInSports({
   sports: CampusCategory[];
   counts: Map<string, number>;
   subscribed: string[];
-  busy: boolean;
   onToggle: (id: string, on: boolean) => void;
   /** The previous calendar that held every drop-in. Turning it off removes that calendar. */
   legacy: boolean;
@@ -71,7 +75,6 @@ function DropInSports({
               <Switch
                 id="campus-sub-recreation"
                 checked
-                disabled={busy}
                 aria-describedby="campus-sub-recreation-hint"
                 onChange={(on) => {
                   if (!on) onToggle("recreation", false);
@@ -87,7 +90,7 @@ function DropInSports({
             const id = `campus-sub-${sport.id}`;
             return (
               <li key={sport.id} className={`${styles.subRow} ${styles.subSport}`}>
-                <Switch id={id} checked={subscribed.includes(sport.id)} disabled={busy} aria-describedby={`${id}-hint`} onChange={(on) => onToggle(sport.id, on)} />
+                <Switch id={id} checked={subscribed.includes(sport.id)} aria-describedby={`${id}-hint`} onChange={(on) => onToggle(sport.id, on)} />
                 <span className={styles.subLabel}>
                   <label htmlFor={id}>{sport.label}</label>
                   <small id={`${id}-hint`}>{sport.hint}</small>
@@ -104,17 +107,35 @@ function DropInSports({
   );
 }
 
-export function CampusSubscriptions({ categories, counts, subscribed, busy, onToggle, feedLink }: Props) {
+export function CampusSubscriptions({ categories, counts, subscribed, onSubscribe }: Props) {
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  //the knob follows this list on the click. the saved calendars catch up after paint
+  const [picked, setPicked] = useState<string[] | null>(null);
+  useEffect(() => {
+    if (picked && sameIds(picked, subscribed)) setPicked(null);
+  }, [picked, subscribed]);
+  const shown = picked ?? subscribed;
   const sports = categories.filter((category) => category.group === "drop-ins");
   const rows = categories.filter((category) => category.group !== "drop-ins");
-  const named = categories.filter((category) => subscribed.includes(category.id)).map((category) => category.label);
-  const summary = busy
-    ? "Updating your UWaterloo Events calendars…"
-    : named.length === 0
-      ? "Turn a category on and it gets its own calendar."
-      : `${named.length > 2 ? `${named.slice(0, 2).join(", ")} +${named.length - 2}` : named.join(" and ")} ${named.length === 1 ? "has its own calendar" : "each have their own calendar"}`;
+  const named = categories.filter((category) => shown.includes(category.id)).map((category) => category.label);
+  const summary = named.length === 0
+    ? "Turn a category on and it gets its own calendar."
+    : `${named.length > 2 ? `${named.slice(0, 2).join(", ")} +${named.length - 2}` : named.join(" and ")} ${named.length === 1 ? "has its own calendar" : "each have their own calendar"}`;
+  const link = campusFeedUrl(shown);
+  const feedLink = link.startsWith("https://") ? link : null;
+
+  function toggle(id: string, on: boolean) {
+    const next = toggledCategories(shown, id, on, categories);
+    setPicked(next);
+    const payload = next.map((categoryId) => ({
+      id: categoryId,
+      label: categories.find((category) => category.id === categoryId)?.label ?? campusCategoryLabel(categoryId),
+    }));
+    afterPaint(() => {
+      void onSubscribe(payload);
+    });
+  }
 
   async function copyLink() {
     if (!feedLink) return;
@@ -152,17 +173,16 @@ export function CampusSubscriptions({ categories, counts, subscribed, busy, onTo
                     label={category.label}
                     sports={sports}
                     counts={counts}
-                    subscribed={subscribed}
-                    busy={busy}
-                    onToggle={onToggle}
-                    legacy={subscribed.includes("recreation")}
+                    subscribed={shown}
+                    onToggle={toggle}
+                    legacy={shown.includes("recreation")}
                   />
                 );
               }
               const id = `campus-sub-${category.id}`;
               return (
                 <li key={category.id} className={styles.subRow}>
-                  <Switch id={id} checked={subscribed.includes(category.id)} disabled={busy} aria-describedby={`${id}-hint`} onChange={(on) => onToggle(category.id, on)} />
+                  <Switch id={id} checked={shown.includes(category.id)} aria-describedby={`${id}-hint`} onChange={(on) => toggle(category.id, on)} />
                   <span className={styles.subLabel}>
                     <label htmlFor={id}>{category.label}</label>
                     <small id={`${id}-hint`}>{category.hint}</small>

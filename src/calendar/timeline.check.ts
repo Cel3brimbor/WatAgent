@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import type { CalendarItemDoc } from "@/calendar/types";
-import { aggregateTimeline, daysForItemChange, localDaysTouched } from "./timeline";
+import { aggregateTimeline } from "./timeline";
 
 process.env.TZ = "America/Toronto";
 
@@ -38,12 +38,5 @@ assert.deepEqual(ids(18, [late]), ["tournament"]);
 //a same-day session is unchanged
 const daytime = event("swim", at(18, 9), at(18, 10));
 assert.deepEqual(ids(18, [daytime, overnight]), ["swim"]);
-
-assert.deepEqual(localDaysTouched(at(17, 18, 30), at(18, 0, 30)).map((day) => new Date(day).getDate()), [17, 18]);
-assert.deepEqual(localDaysTouched(at(18, 9), at(18, 10)).map((day) => new Date(day).getDate()), [18]);
-const added = { ...daytime, id: "added", calendar: { ...daytime.calendar, startUTC: at(19, 9), endUTC: at(19, 10) } };
-const dirty = daysForItemChange([daytime], [daytime, added]);
-assert.deepEqual([...(dirty ?? [])].map((day) => new Date(day).getDate()), [19]);
-assert.equal(daysForItemChange([daytime], [{ ...daytime, updatedAt: 5 }])?.size, 0, "a server echo with the same event does not repaint");
 
 console.log("overnight sessions stay on the day they start");

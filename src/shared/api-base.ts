@@ -1,4 +1,5 @@
 import { accessErrorFrom, reportAccessError } from "@/auth/access";
+import { reportAuthExpired } from "@/auth/auth-expired";
 import { getAccessToken } from "@/auth/session";
 import { API_BASE_URL } from "@/shared/config";
 
@@ -39,6 +40,8 @@ export async function errorFromResponse(res: Response, fallback: string): Promis
     reportAccessError(access);
     return access;
   }
+  //apiFetch already retried a 401 once. this response is the final one
+  if (res.status === 401) reportAuthExpired();
   const message =
     payload && typeof payload.error === "string" && payload.error.length <= 300 ? payload.error : fallback;
   return new ApiError(message, res.status);
