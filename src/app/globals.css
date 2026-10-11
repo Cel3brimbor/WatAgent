@@ -9608,3 +9608,23 @@ h3 {
   .calendar-editor .icon-btn,
   .modal-actions button { transition: none; }
 }
+
+/* Keep input shielded until the accepted action runs after its exit animation. */
+ .calendar-editor-overlay[data-state="closed"][data-pending],
+.modal-backdrop[data-state="closed"][data-pending] {
+  pointer-events: auto;
+  animation: dialog-action-scrim-out 90ms ease-out both;
+}
+.calendar-editor-overlay[data-pending] .calendar-editor,
+.modal-backdrop[data-pending] .modal { animation: dialog-action-out 90ms ease-out both; }
+@keyframes dialog-action-scrim-out { from { opacity: 1; } to { opacity: 0; } }
+@keyframes dialog-action-out {
+  from { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+  to { opacity: 0; transform: translate3d(0, 4px, 0) scale(0.985); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .calendar-editor-overlay[data-state="closed"][data-pending],
+  .modal-backdrop[data-state="closed"][data-pending],
+  .calendar-editor-overlay[data-pending] .calendar-editor,
+  .modal-backdrop[data-pending] .modal { animation: none; }
+}

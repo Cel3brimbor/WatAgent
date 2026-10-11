@@ -7,6 +7,7 @@ import { SegmentedControl, type SegmentOption } from "@/shared/segmented-control
 import { Switch } from "@/shared/switch";
 import { EditorDatePicker } from "@/calendar/editor-date-picker";
 import { ChevronDownIcon, CloseIcon } from "@/shared/icons";
+import { useDialogAction } from "@/shared/use-dialog-action";
 import { useDialog } from "@/shared/use-dialog";
 import { LocationField } from "@/calendar/location-field";
 import { PRIMARY_EVENT_CALENDAR_NAME, type LocalCalendar } from "@/calendar/local-calendars";
@@ -176,8 +177,14 @@ export function CalendarItemEditor({
     setDraft(next);
     updateDraft(next);
   }
+  const action = useDialogAction(open);
+  const cancel = () => action.run(onCancel);
   function onSave() {
-    saveDraft(draft);
+    if (readOnly) return;
+    // Keep invalid drafts visible so the existing validation can explain the error.
+    if (!draft.allDay && draft.endUTC <= draft.startUTC) { saveDraft(draft); return; }
+    const snapshot = draft;
+    action.run(() => saveDraft(snapshot));
   }
   const [dateTarget, setDateTarget] = useState<"start" | "end" | null>(null);
   const ref = useRef<HTMLDivElement>(null);
@@ -207,12 +214,13 @@ export function CalendarItemEditor({
   const durationId = useId();
   const duration = draft.endUTC - draft.startUTC;
   const endsBeforeStart = duration <= 0;
-  useDialog(ref, { open, onEscape: dateTarget ? closeDatePicker : onCancel });
+  useDialog(ref, { open, onEscape: dateTarget ? closeDatePicker : cancel });
 
   return (
-    <div className="calendar-editor-overlay" data-state={open ? "open" : "closed"} inert={!open}>
+    <div className="calendar-editor-overlay" data-state={action.visible ? "open" : "closed"} data-pending={action.pending || undefined} onAnimationEnd={(event) => { if (event.target === event.currentTarget && action.pending) action.complete(); }} inert={!open}>
       <div
         ref={ref}
+        inert={action.pending}
         className="calendar-editor"
         role="dialog"
         aria-modal="true"
@@ -227,7 +235,7 @@ export function CalendarItemEditor({
       >
         <header className="calendar-editor-heading">
           <div><span className="calendar-editor-eyebrow">{draft.id || draft.google ? "Edit your plan" : "Make time for something"}</span><h2>{draft.id || draft.google ? "Edit" : "New"} {draft.kind === "task" ? "task" : "event"}</h2></div>
-          <button type="button" className="icon-btn" aria-label="Close event editor" onClick={onCancel}><CloseIcon /></button>
+          <button type="button" className="icon-btn" aria-label="Close event editor" onClick={cancel}><CloseIcon /></button>
         </header>
         {draft.google ? (
           <p className="calendar-editor-source">
@@ -431,7 +439,7 @@ export function CalendarItemEditor({
             <span />
           )}
           <div className="calendar-editor-actions-right">
-            <button type="button" className="ghost-btn" onClick={onCancel}>
+            <button type="button" className="ghost-btn" onClick={cancel}>
               Cancel
             </button>
             {readOnly ? null : (
