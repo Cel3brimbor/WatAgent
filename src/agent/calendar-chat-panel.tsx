@@ -298,7 +298,11 @@ export function CalendarChatPanel({
                     >
                       <span className="bubble-role">{m.role === "user" ? "You" : "WatAgent"}</span>
                       <div className="bubble-body">
-                        <AgentActivity parts={m.activity} streaming={streaming && !m.content.trim()} />
+                        <AgentActivity
+                          parts={m.activity}
+                          streaming={streaming && !m.content.trim()}
+                          toolsLive={streaming}
+                        />
                         {editing ? (
                           <>
                             <MentionField

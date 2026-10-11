@@ -13,10 +13,11 @@ function toolEventOf(raw: unknown): ToolEventRecord | null {
   if (typeof rec.id !== "string" || !SAFE_ID.test(rec.id)) return null;
   if (typeof rec.tool !== "string" || !TOOL_NAME.test(rec.tool)) return null;
   if (rec.state !== "calling" && rec.state !== "succeeded" && rec.state !== "failed") return null;
+  //a saved "calling" step is from a turn that already ended. keep it from flashing after reopen.
   return {
     id: rec.id,
     tool: rec.tool,
-    state: rec.state,
+    state: rec.state === "calling" ? "succeeded" : rec.state,
     callLabel: typeof rec.callLabel === "string" ? rec.callLabel.slice(0, 240) : undefined,
     resultSummary: typeof rec.resultSummary === "string" ? rec.resultSummary.slice(0, 500) : undefined,
   };

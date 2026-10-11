@@ -15,20 +15,31 @@ const PROGRESS: Record<string, string> = {
   complete_calendar_task: "Updating that task…",
 };
 
+const DONE: Record<string, string> = {
+  list_calendar_items: "Checked your calendar",
+  search_calendar_history: "Searched past events",
+  search_upcoming_events: "Searched upcoming events",
+  add_calendar_item: "Added to your calendar",
+  update_calendar_item: "Updated your calendar",
+  delete_calendar_item: "Removed from your calendar",
+  complete_calendar_task: "Updated that task",
+};
+
 function progressLabel(event: ToolEventRecord): string {
   return PROGRESS[event.tool] || "Working…";
 }
 
 function settledLabel(event: ToolEventRecord): string {
-  return event.resultSummary || event.tool;
+  return event.resultSummary || DONE[event.tool] || event.callLabel || event.tool;
 }
 
-function toolSummary(steps: ToolEventRecord[]): string {
-  const live = steps.find((event) => event.state === "calling");
-  if (live) return progressLabel(live);
+function toolSummary(steps: ToolEventRecord[], live: boolean): string {
+  const pending = live ? steps.find((event) => event.state === "calling") : undefined;
+  if (pending) return progressLabel(pending);
   const failed = steps.find((event) => event.state === "failed");
   if (failed) return settledLabel(failed);
-  return settledLabel(steps[steps.length - 1]);
+  const settled = [...steps].reverse().find((event) => event.state !== "calling") ?? steps[steps.length - 1];
+  return settledLabel(settled);
 }
 
 function StateGlyph({ state }: { state: ToolEventRecord["state"] }) {
@@ -37,9 +48,18 @@ function StateGlyph({ state }: { state: ToolEventRecord["state"] }) {
   return <ToolIcon />;
 }
 
-export function AgentThinkingBlock({ events, active = true }: { events?: ToolEventRecord[]; active?: boolean }) {
+export function AgentThinkingBlock({
+  events,
+  active = true,
+  live = false,
+}: {
+  events?: ToolEventRecord[];
+  active?: boolean;
+  /**true only while this turn is still streaming a call*/
+  live?: boolean;
+}) {
   const steps = events ?? [];
-  const toolBusy = steps.some((event) => event.state === "calling");
+  const toolBusy = live && steps.some((event) => event.state === "calling");
   const [open, setOpen] = useState(true);
   const panelId = useId();
   const activeRef = useRef(active);
@@ -52,7 +72,7 @@ export function AgentThinkingBlock({ events, active = true }: { events?: ToolEve
 
   if (steps.length === 0) return null;
 
-  const summary = toolSummary(steps);
+  const summary = toolSummary(steps, live);
   const stepCount = steps.length;
 
   return (
@@ -70,19 +90,23 @@ export function AgentThinkingBlock({ events, active = true }: { events?: ToolEve
       </button>
       <Disclosure open={open} id={panelId}>
         <ol className="agent-thinking-timeline">
-          {steps.map((event) => (
-            <li key={event.id} data-state={event.state}>
-              <span className="agent-tool-icon" aria-hidden>
-                <StateGlyph state={event.state} />
-              </span>
-              <p className="agent-call-line">
-                <span className={event.state === "calling" ? "agent-call-verb agent-activity-live" : "agent-call-verb"}>
-                  {event.state === "calling" ? "calling" : event.state === "failed" ? "failed" : "called"}
+          {steps.map((event) => {
+            const pending = live && event.state === "calling";
+            const shown = pending ? "calling" : event.state === "failed" ? "failed" : "succeeded";
+            return (
+              <li key={event.id} data-state={shown}>
+                <span className="agent-tool-icon" aria-hidden>
+                  <StateGlyph state={shown} />
                 </span>
-                <span className="agent-activity-detail">{event.callLabel || event.tool}</span>
-              </p>
-            </li>
-          ))}
+                <p className="agent-call-line">
+                  <span className={pending ? "agent-call-verb agent-activity-live" : "agent-call-verb"}>
+                    {pending ? "calling" : event.state === "failed" ? "failed" : "called"}
+                  </span>
+                  <span className="agent-activity-detail">{event.callLabel || event.tool}</span>
+                </p>
+              </li>
+            );
+          })}
         </ol>
       </Disclosure>
     </div>

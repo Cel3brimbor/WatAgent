@@ -14,6 +14,8 @@ import {
   timedItemClass,
   timedItemStyle,
 } from "@/calendar/calendar-grid";
+import { intervalMinutes, labelEvery } from "@/calendar/time-scale";
+import { useColumnWidths } from "@/calendar/use-column-width";
 import { useNowMs } from "@/calendar/calendar-item-editor";
 import { useSlotDrag } from "@/calendar/use-slot-drag";
 import { SlotDraft } from "@/calendar/slot-draft";
@@ -30,6 +32,7 @@ type Props = {
   onCreateAllDay: () => void;
   onCompleteTask?: (id: string, completed: boolean) => void;
   readOnly?: boolean;
+  hourPx?: number;
 };
 
 export function CalendarDayView({
@@ -41,17 +44,22 @@ export function CalendarDayView({
   onCreateAllDay,
   onCompleteTask,
   readOnly = false,
+  hourPx = HOUR_PX,
 }: Props) {
   const now = useNowMs();
   const dayStart = startOfLocalDay(focus);
   const timed = layoutOverlappingBlocks(
     items.filter((item) => !item.allDay && !item.pinned),
     dayStart.getTime(),
+    hourPx,
   );
-  const nowTop = nowLineTop(now, dayStart.getTime());
+  const nowTop = nowLineTop(now, dayStart.getTime(), hourPx);
+  const interval = intervalMinutes(hourPx);
+  const labelStep = labelEvery(hourPx);
+  const [columnRef, columnWidths] = useColumnWidths(1);
   const allDay = useAllDayResize();
   const topped = allDayItems(items);
-  const slots = useSlotDrag<"day">((_key, startHour, endHour) => onCreateTimed(startHour, 0, endHour));
+  const slots = useSlotDrag<"day">((_key, startHour, endHour) => onCreateTimed(startHour, 0, endHour), hourPx);
   const dragSlot = slots.selection;
   const draftSlot = dragSlot ?? timedDraftSlotForDay(editorDraft ?? null, focus);
   const draftLabel = editorDraft?.title;
@@ -94,23 +102,23 @@ export function CalendarDayView({
         </div>
       </div>
       <div className="calendar-day-grid">
-        <div className="calendar-hours">
+        <div className="calendar-hours" title="Scroll to zoom">
           {HOURS.map((hour) => (
-            <div key={hour} className="calendar-hour-label" style={{ height: HOUR_PX }}>
-              {hour === 0 ? "" : formatHourLabel(hour)}
+            <div key={hour} className="calendar-hour-label" style={{ height: hourPx }}>
+              {hour === 0 || hour % labelStep !== 0 ? "" : formatHourLabel(hour)}
             </div>
           ))}
         </div>
-        <div className="calendar-day-slots" {...(readOnly ? {} : slots.bind("day"))}>
+        <div className="calendar-day-slots" data-interval={interval} ref={columnRef(0)} {...(readOnly ? {} : slots.bind("day"))}>
           {HOURS.map((hour) => (
             readOnly ? (
-              <div key={hour} className="calendar-hour-slot" style={{ height: HOUR_PX }} />
+              <div key={hour} className="calendar-hour-slot" style={{ height: hourPx }} />
             ) : (
               <button
                 key={hour}
                 type="button"
                 className="calendar-hour-slot"
-                style={{ height: HOUR_PX }}
+                style={{ height: hourPx }}
                 aria-label={`Create at ${formatHourLabel(hour)}`}
                 onClick={() => onCreateTimed(hour)}
               />
@@ -120,7 +128,7 @@ export function CalendarDayView({
             <div
               key={layout.item.id}
               className={`calendar-timed-item ${timedItemClass(layout.height)}`}
-              style={timedItemStyle(layout)}
+              style={timedItemStyle(layout, columnWidths[0] ?? 0)}
               onPointerDown={(event) => event.stopPropagation()}
             >
               <TimelineStrip
@@ -137,6 +145,7 @@ export function CalendarDayView({
               end={draftSlot.end}
               kind={draftKind}
               title={draftLabel}
+              hourPx={hourPx}
             />
           ) : null}
           {nowTop != null ? (
