@@ -63,6 +63,28 @@ export function isToday(date: Date): boolean {
   return sameLocalDay(date, new Date());
 }
 
+/** Days currently on screen. Month and year have no timed grid. */
+export function daysInView(focus: Date, view: CalendarView, weekStartsOn: 0 | 1): Date[] {
+  if (view === "day") return [startOfLocalDay(focus)];
+  if (view === "workweek") {
+    const start = startOfWorkWeek(focus);
+    return Array.from({ length: 5 }, (_, index) => addDays(start, index));
+  }
+  if (view === "week") {
+    const start = startOfWeek(focus, weekStartsOn);
+    return Array.from({ length: 7 }, (_, index) => addDays(start, index));
+  }
+  return [];
+}
+
+/** Saturday and Sunday are missing from the 5-day view, so Today opens the full week. */
+export function viewForToday(view: CalendarView, today: Date): CalendarView {
+  if (view !== "workweek") return view;
+  const day = startOfLocalDay(today).getDay();
+  if (day === 0 || day === 6) return "week";
+  return view;
+}
+
 export function shiftFocus(focus: Date, view: CalendarView, delta: number): Date {
   if (view === "day") return addDays(focus, delta);
   if (view === "week" || view === "workweek") return addDays(focus, delta * 7);

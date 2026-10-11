@@ -12,6 +12,12 @@ assert.equal(at(9.39), 9.5);
 assert.equal(at(-1), 0);
 assert.equal(at(25), 24);
 
+for (const hourPx of [26, 52, 78, 104]) {
+  for (const hour of [0, 9.25, 10.5, 23.75, 24]) {
+    assert.equal(quarterHourFromClientY(grid, -200 + hour * hourPx, hourPx), hour, "Quarter-hour snapping follows calendar zoom");
+  }
+}
+
 const day = new Date(2026, 9, 9);
 for (const [anchor, current, expected] of [
   [9.25, 10.5, { start: 9.25, end: 10.5 }],

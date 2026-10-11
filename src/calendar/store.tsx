@@ -17,6 +17,7 @@ import { syncGoogleCalendar } from "@/calendar/google-calendar-client";
 import type { BusyBlock, OverlayEvent } from "@/calendar/timeline";
 import type { CalendarChange } from "@/agent/stream";
 import type { ChatMessage, ChatSession } from "@/agent/types";
+import { createSaveQueue } from "@/agent/chat-save-queue";
 import { deleteChatSession, loadChatSessions, saveChatSession } from "@/agent/snapshots-client";
 import {
   approvePending,
@@ -142,15 +143,14 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     }
     return sortItems([...visible, ...extra]);
   }, []);
+  //updated before react paints, so a save in the same turn reads the transcript just written
   const chatStateRef = useRef(chatState);
-  chatStateRef.current = chatState;
+  const enqueueSave = useRef(createSaveQueue<ChatSession>((_chatId, snapshot) => saveChatSession(snapshot)));
 
   const updateChats = useCallback((patch: (state: ChatState) => ChatState) => {
-    setChatState((prev) => {
-      const next = patch(prev);
-      chatStateRef.current = next;
-      return next;
-    });
+    const next = patch(chatStateRef.current);
+    chatStateRef.current = next;
+    setChatState(next);
   }, []);
 
   const putItem = useCallback((item: CalendarItemDoc) => {
@@ -414,7 +414,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
   const persistChat = useCallback((chatId: string) => {
     const chat = chatStateRef.current.chats.find((row) => row.id === chatId);
     if (!chat) return;
-    void saveChatSession(chat).catch(logFailure("chat save"));
+    void enqueueSave.current(chatId, chat).catch(logFailure("chat save"));
   }, []);
 
   const createChat = useCallback(() => {

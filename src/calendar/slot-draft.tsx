@@ -13,18 +13,20 @@ export function SlotDraft({
   end,
   kind = "event",
   title,
+  hourPx = HOUR_PX,
 }: {
   start: number;
   end: number;
   kind?: CalendarItemKind;
   title?: string;
+  hourPx?: number;
 }) {
   const label =
     title?.trim() || (kind === "task" ? "New task" : "New event");
   return (
     <div
       className={`calendar-slot-draft is-${kind}${end - start < 0.75 ? " is-short" : ""}`}
-      style={{ top: start * HOUR_PX, height: (end - start) * HOUR_PX }}
+      style={{ top: start * hourPx, height: (end - start) * hourPx }}
       aria-hidden="true"
     >
       <span className="calendar-slot-draft-title">{label}</span>

@@ -5,31 +5,31 @@ export const HOUR_PX = 52;
 export const HOURS = Array.from({ length: 24 }, (_, hour) => hour);
 export const MONTH_CELL_STRIP_MAX = 5;
 
-export function nowLineTop(now: number, dayStartMs: number): number | null {
+export function nowLineTop(now: number, dayStartMs: number, hourPx = HOUR_PX): number | null {
   const minutes = (now - dayStartMs) / 60000;
   if (minutes < 0 || minutes > 24 * 60) return null;
-  return (minutes / 60) * HOUR_PX;
+  return (minutes / 60) * hourPx;
 }
 
-export function itemTopPx(startUTC: number, dayStartMs: number): number {
+export function itemTopPx(startUTC: number, dayStartMs: number, hourPx = HOUR_PX): number {
   const minutes = Math.max(0, (startUTC - dayStartMs) / 60000);
-  return (minutes / 60) * HOUR_PX;
+  return (minutes / 60) * hourPx;
 }
 
-export function itemHeightPx(startUTC: number, endUTC: number): number {
+export function itemHeightPx(startUTC: number, endUTC: number, hourPx = HOUR_PX): number {
   const minutes = Math.max(0, (endUTC - startUTC) / 60000);
-  return Math.max(18, (minutes / 60) * HOUR_PX);
+  return Math.max(18, (minutes / 60) * hourPx);
 }
 
-export function hourFromClientY(el: HTMLElement, clientY: number): number {
+export function hourFromClientY(el: HTMLElement, clientY: number, hourPx = HOUR_PX): number {
   const rect = el.getBoundingClientRect();
-  return Math.max(0, Math.min(23, Math.floor((clientY - rect.top) / HOUR_PX)));
+  return Math.max(0, Math.min(23, Math.floor((clientY - rect.top) / hourPx)));
 }
 
 // Fractional hours at quarter-hour boundaries, including midnight at the bottom.
-export function quarterHourFromClientY(el: HTMLElement, clientY: number): number {
+export function quarterHourFromClientY(el: HTMLElement, clientY: number, hourPx = HOUR_PX): number {
   const rect = el.getBoundingClientRect();
-  return Math.max(0, Math.min(24, Math.round((clientY - rect.top) / HOUR_PX * 4) / 4));
+  return Math.max(0, Math.min(24, Math.round((clientY - rect.top) / hourPx * 4) / 4));
 }
 
 // End is exclusive; even a stationary pointer selects at least fifteen minutes.
@@ -48,36 +48,54 @@ export type TimedLayout = {
   depth: number;
 };
 
-export function layoutOverlappingBlocks(items: TimelineItem[], dayStartMs: number): TimedLayout[] {
+//close starts sit side by side; a start 45 minutes later reuses the column and indents
+const HEADER_MS = 45 * 60 * 1000;
+
+type WorkingLayout = TimedLayout & { startMs: number; endMs: number };
+
+function rangesOverlap(a0: number, a1: number, b0: number, b1: number): boolean {
+  return a0 < b1 && b0 < a1;
+}
+
+//column indexes are local to each cluster, so compare the fraction of the day each card owns
+function horizontalOverlap(a: TimedLayout, b: TimedLayout): boolean {
+  return rangesOverlap(a.col * b.cols, (a.col + a.span) * b.cols, b.col * a.cols, (b.col + b.span) * a.cols);
+}
+
+export function layoutOverlappingBlocks(items: TimelineItem[], dayStartMs: number, hourPx = HOUR_PX): TimedLayout[] {
   const day = new Date(dayStartMs);
   const dayEndMs = new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1).getTime();
-  // Protect the title area, not the entire duration. This mirrors the observed
-  // Apple Calendar pattern: close starts share columns, later starts are inset.
-  const headerHeight = HOUR_PX * 0.75;
-  const sorted = items
+  const dayBottom = itemTopPx(dayEndMs, dayStartMs, hourPx);
+  //columns follow clock time. pixel tops drift by a fraction while zooming and packed cards jump sideways
+  const sorted: WorkingLayout[] = items
     .filter((item) => !item.allDay && Number.isFinite(item.startUTC) && Number.isFinite(item.endUTC)
       && item.endUTC >= item.startUTC && item.startUTC < dayEndMs
       && (item.endUTC > dayStartMs || item.startUTC === dayStartMs))
     .map((item) => {
-      const start = Math.max(item.startUTC, dayStartMs);
-      const end = Math.min(item.endUTC, dayEndMs);
-      const top = itemTopPx(start, dayStartMs);
-      const height = Math.min(itemHeightPx(start, end), itemTopPx(dayEndMs, dayStartMs) - top);
-      return { item, top, height, col: 0, cols: 1, span: 1, depth: 0 };
+      const startMs = Math.round(Math.max(item.startUTC, dayStartMs));
+      const endMs = Math.round(Math.min(Math.max(item.endUTC, startMs), dayEndMs));
+      const top = itemTopPx(startMs, dayStartMs, hourPx);
+      const bottom = Math.min(itemTopPx(endMs, dayStartMs, hourPx), dayBottom);
+      const height = Math.min(Math.max(18, bottom - top), Math.max(0, dayBottom - top));
+      return { item, top, height, col: 0, cols: 1, span: 1, depth: 0, startMs, endMs };
     })
-    .sort((a, b) => a.top - b.top || b.height - a.height || a.item.id.localeCompare(b.item.id));
-  const laid: TimedLayout[] = [];
-  let cluster: TimedLayout[] = [];
+    .sort((a, b) => a.startMs - b.startMs || (b.endMs - b.startMs) - (a.endMs - a.startMs) || a.item.id.localeCompare(b.item.id));
+  const laid: WorkingLayout[] = [];
+  let cluster: WorkingLayout[] = [];
   let clusterEnd = Number.NEGATIVE_INFINITY;
-  const overlaps = (a: TimedLayout, b: TimedLayout) => a.top < b.top + b.height && b.top < a.top + a.height;
+  //a zero-length task still conflicts with whatever shares that instant
+  const collisionEnd = (row: WorkingLayout) => row.endMs > row.startMs ? row.endMs : row.startMs + 1;
+  const overlaps = (a: WorkingLayout, b: WorkingLayout) => rangesOverlap(a.startMs, collisionEnd(a), b.startMs, collisionEnd(b));
 
   function flush() {
     if (cluster.length === 0) return;
-    const columns: TimedLayout[][] = [];
+    const columns: WorkingLayout[][] = [];
     for (const row of cluster) {
-      let col = columns.findIndex((entries) => entries.every((previous) =>
-        row.top >= previous.top + Math.min(previous.height, headerHeight),
-      ));
+      let col = columns.findIndex((entries) => entries.every((previous) => {
+        const duration = previous.endMs - previous.startMs;
+        const blocked = Math.min(duration > 0 ? duration : 1, HEADER_MS);
+        return row.startMs >= previous.startMs + blocked;
+      }));
       if (col < 0) {
         col = columns.length;
         columns.push([]);
@@ -89,8 +107,8 @@ export function layoutOverlappingBlocks(items: TimelineItem[], dayStartMs: numbe
     }
     for (const row of cluster) {
       row.cols = columns.length;
-      // Recover unused space once neighboring events finish, rather than keeping
-      // the rest of a busy day squeezed into the group's maximum column count.
+      //recover unused space once neighboring events finish, rather than keeping
+      //the rest of a busy stretch squeezed into the group's maximum column count
       for (let col = row.col + 1; col < columns.length; col++) {
         if (columns[col].some((other) => overlaps(row, other))) break;
         row.span++;
@@ -102,12 +120,21 @@ export function layoutOverlappingBlocks(items: TimelineItem[], dayStartMs: numbe
   }
 
   for (const row of sorted) {
-    if (cluster.length > 0 && row.top >= clusterEnd) flush();
+    if (cluster.length > 0 && row.startMs >= clusterEnd) flush();
     cluster.push(row);
-    // Include minimum-height cards so very short events cannot hide each other.
-    clusterEnd = Math.max(clusterEnd, row.top + row.height);
+    clusterEnd = Math.max(clusterEnd, collisionEnd(row));
   }
   flush();
+  //the 18px floor is paint only. it must not cover the next card, and it must not open a column
+  for (const row of laid) {
+    const trueHeight = Math.max(0, Math.min(itemTopPx(row.endMs, dayStartMs, hourPx), dayBottom) - row.top);
+    let paintBottom = row.top + row.height;
+    for (const other of laid) {
+      if (other === row || other.startMs < collisionEnd(row) || !horizontalOverlap(row, other)) continue;
+      if (other.top < paintBottom) paintBottom = other.top;
+    }
+    row.height = Math.min(Math.max(trueHeight, paintBottom - row.top), Math.max(0, dayBottom - row.top));
+  }
   return laid;
 }
 
@@ -117,18 +144,29 @@ export function timedItemClass(height: number): string {
   return "is-timed-tall";
 }
 
-export function timedItemStyle(layout: TimedLayout): CSSProperties {
+export function timedItemStyle(layout: TimedLayout, columnPx = 0): CSSProperties {
   const gap = 2;
+  const style = {
+    top: layout.top,
+    height: layout.height,
+    "--timed-z": 1 + layout.depth,
+  } as CSSProperties;
+  //whole pixels from one shared edge. rounding each card alone leaves a gap that sticks while the column width jitters
+  if (columnPx > 0) {
+    const edge = (index: number) => Math.round((columnPx * index) / layout.cols);
+    const inset = Math.min(layout.depth * 12, (edge(layout.col + layout.span) - edge(layout.col)) * 0.3);
+    const left = Math.round(edge(layout.col) + gap + inset);
+    const right = edge(layout.col + layout.span) - gap;
+    style.left = left;
+    style.width = Math.max(0, right - left);
+    return style;
+  }
   const widthPct = (100 * layout.span) / layout.cols;
   const inset = `min(${layout.depth * 12}px, ${widthPct * 0.3}%)`;
   const leftPct = (layout.col / layout.cols) * 100;
-  return {
-    top: layout.top,
-    height: layout.height,
-    left: `calc(${leftPct}% + ${gap}px + ${inset})`,
-    width: `calc(${widthPct}% - ${gap * 2}px - ${inset})`,
-    "--timed-z": 1 + layout.depth,
-  } as CSSProperties;
+  style.left = `calc(${leftPct}% + ${gap}px + ${inset})`;
+  style.width = `calc(${widthPct}% - ${gap * 2}px - ${inset})`;
+  return style;
 }
 
 export function monthCellVisible(items: TimelineItem[]): {

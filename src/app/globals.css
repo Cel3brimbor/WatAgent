@@ -3210,6 +3210,7 @@ button.qd-cal-swatch:active {
 .calendar-hours {
   color: var(--ink-soft);
   font-size: 0.7rem;
+  cursor: ns-resize;
 }
 
 .calendar-hour-label {
@@ -3225,6 +3226,8 @@ button.qd-cal-swatch:active {
   border-left: 1px solid var(--line);
   touch-action: pan-y;
   cursor: pointer;
+  /*events share this layer, so scrolling can't slide a packed card off the edge*/
+  transform: translate3d(0, 0, 0);
 }
 
 .calendar-hour-slot {
@@ -3237,7 +3240,40 @@ button.qd-cal-swatch:active {
 }
 
 .calendar-hour-slot:hover {
-  background: var(--hover);
+  background-color: var(--hover);
+}
+
+/*taller hours reveal half-hour, then quarter-hour, lines*/
+.calendar-day-slots[data-interval="30"] > .calendar-hour-slot,
+.calendar-week-col[data-interval="30"] > .calendar-hour-slot,
+.calendar-day-slots[data-interval="15"] > .calendar-hour-slot,
+.calendar-week-col[data-interval="15"] > .calendar-hour-slot {
+  background-image: linear-gradient(
+    to bottom,
+    transparent calc(50% - 0.5px),
+    color-mix(in srgb, var(--line-soft) 80%, transparent) calc(50% - 0.5px),
+    color-mix(in srgb, var(--line-soft) 80%, transparent) calc(50% + 0.5px),
+    transparent calc(50% + 0.5px)
+  );
+}
+
+.calendar-day-slots[data-interval="15"] > .calendar-hour-slot,
+.calendar-week-col[data-interval="15"] > .calendar-hour-slot {
+  background-image: linear-gradient(
+    to bottom,
+    transparent calc(25% - 0.5px),
+    color-mix(in srgb, var(--line-soft) 80%, transparent) calc(25% - 0.5px),
+    color-mix(in srgb, var(--line-soft) 80%, transparent) calc(25% + 0.5px),
+    transparent calc(25% + 0.5px),
+    transparent calc(50% - 0.5px),
+    color-mix(in srgb, var(--line-soft) 80%, transparent) calc(50% - 0.5px),
+    color-mix(in srgb, var(--line-soft) 80%, transparent) calc(50% + 0.5px),
+    transparent calc(50% + 0.5px),
+    transparent calc(75% - 0.5px),
+    color-mix(in srgb, var(--line-soft) 80%, transparent) calc(75% - 0.5px),
+    color-mix(in srgb, var(--line-soft) 80%, transparent) calc(75% + 0.5px),
+    transparent calc(75% + 0.5px)
+  );
 }
 
 .calendar-week-col.is-weekend {
@@ -4946,32 +4982,21 @@ button.qd-cal-swatch:active {
 
 .todo-list li.is-tag-half,
 .todo-list li.is-tag-quarter {
-  isolation: isolate;
+  background-image: linear-gradient(
+    to bottom right,
+    color-mix(in srgb, var(--tag-color) 18%, transparent) 50%,
+    transparent 50%
+  );
+  background-repeat: no-repeat;
+  background-position: top left;
 }
 
-.todo-list li.is-tag-half::before,
-.todo-list li.is-tag-quarter::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  border-radius: inherit;
-  pointer-events: none;
-  background: color-mix(in srgb, var(--tag-color) 18%, transparent);
+.todo-list li.is-tag-half {
+  background-size: 100% 100%;
 }
 
-.todo-list li.is-tag-half::before {
-  clip-path: polygon(0 0, 100% 0, 0 100%);
-}
-
-.todo-list li.is-tag-quarter::before {
-  clip-path: polygon(0 0, 70.71% 0, 0 70.71%);
-}
-
-.todo-list li.is-tag-half > *,
-.todo-list li.is-tag-quarter > * {
-  position: relative;
-  z-index: 1;
+.todo-list li.is-tag-quarter {
+  background-size: 70.71% 70.71%;
 }
 
 .todo-list li.is-done.is-tagged {
@@ -5474,9 +5499,12 @@ button.qd-cal-swatch:active {
   background: var(--panel-solid);
   color: var(--ink);
   box-shadow: var(--shadow-dialog);
+  opacity: 1;
+  transform: scale(1);
+  /*shorter than --dur-spring: this is a popover, not a page transition*/
   transition:
-    opacity var(--dur-fast) var(--ease-out),
-    transform var(--dur-spring) var(--ease-spring);
+    opacity 120ms var(--ease-out),
+    transform 200ms var(--ease-spring);
 }
 
 @starting-style {
@@ -5489,7 +5517,8 @@ button.qd-cal-swatch:active {
 .gcal-card[data-state="closed"] {
   opacity: 0;
   transform: scale(var(--pop));
-  transition-duration: var(--dur-exit);
+  pointer-events: none;
+  transition-duration: 110ms;
 }
 
 .gcal-card-head {
@@ -7976,37 +8005,26 @@ h3 {
   --strip-tint: 22%;
 }
 
-/*tag color stays left of the diagonal; the rest keeps the calendar colour*/
+/*tag color stays left of the diagonal; painted on the chip so it can't drift off the edge while scrolling*/
 .calendar-strip.is-tag-half,
 .calendar-strip.is-tag-quarter {
-  position: relative;
-  isolation: isolate;
   border-left-color: var(--tag-color);
-  background: color-mix(in srgb, var(--strip-color) var(--strip-tint, 16%), var(--strip-surface, var(--paper)));
+  background-color: color-mix(in srgb, var(--strip-color) var(--strip-tint, 16%), var(--strip-surface, var(--paper)));
+  background-image: linear-gradient(
+    to bottom right,
+    color-mix(in srgb, var(--tag-color) var(--strip-tint, 16%), var(--strip-surface, var(--paper))) 50%,
+    transparent 50%
+  );
+  background-repeat: no-repeat;
+  background-position: top left;
 }
 
-.calendar-strip.is-tag-half::before,
-.calendar-strip.is-tag-quarter::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  background: color-mix(in srgb, var(--tag-color) var(--strip-tint, 16%), var(--strip-surface, var(--paper)));
+.calendar-strip.is-tag-half {
+  background-size: 100% 100%;
 }
 
-.calendar-strip.is-tag-half::before {
-  clip-path: polygon(0 0, 100% 0, 0 100%);
-}
-
-.calendar-strip.is-tag-quarter::before {
-  clip-path: polygon(0 0, 70.71% 0, 0 70.71%);
-}
-
-.calendar-strip.is-tag-half > *,
-.calendar-strip.is-tag-quarter > * {
-  position: relative;
-  z-index: 1;
+.calendar-strip.is-tag-quarter {
+  background-size: 70.71% 70.71%;
 }
 
 .calendar-strip.is-tag-half .calendar-strip-title,
