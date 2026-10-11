@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
+import type { SmartTag } from "./smart-tags";
 import {
   deadlineTasksOf,
   keywordTasksOf,
   newKeywordTaskRule,
   parseKeywordTasksFromUnknown,
+  smartTagTasksOf,
   withKeywordTaskDone,
+  withTaskTags,
   type KeywordTaskRule,
   type KeywordTaskSource,
 } from "./keyword-tasks";
@@ -60,10 +63,35 @@ config = withKeywordTaskDone(withKeywordTaskDone(config, "q1", true), "q1", fals
 assert.deepEqual(config.doneKeys, []);
 
 //parsing
-assert.deepEqual(parseKeywordTasksFromUnknown(null), { rules: [], doneKeys: [] });
+assert.deepEqual(parseKeywordTasksFromUnknown(null), { rules: [], doneKeys: [], includeDeadlines: true });
 const parsed = parseKeywordTasksFromUnknown({ rules: [{ id: "r", keywords: "exam", calendarIds: [learn, learn, 4], due: "soon", field: "x" }], doneKeys: ["a", "a", 3] });
 assert.deepEqual(parsed.rules[0], { id: "r", name: "", keywords: "exam", field: "title", calendarIds: [learn], due: "start", enabled: true });
 assert.deepEqual(parsed.doneKeys, ["a"]);
+assert.equal(parsed.includeDeadlines, true, "deadlines stay on unless the saved choice says otherwise");
+assert.equal(parseKeywordTasksFromUnknown({ rules: [], doneKeys: [], includeDeadlines: false }).includeDeadlines, false);
+
+const assignmentTag: SmartTag = {
+  id: "tag-assign",
+  name: "Assignments",
+  color: "#f83a22",
+  enabled: true,
+  match: "any",
+  cover: "full",
+  rules: [{ id: "rule-assign", field: "title", operator: "contains", value: "assignment" }],
+  exemptCalendarIds: [],
+};
+const fromRules = keywordTasksOf({ rules: [rule], doneKeys: [] }, sources);
+const painted = withTaskTags(fromRules, [assignmentTag]);
+assert.equal(painted.find((task) => task.key === "a2")?.tag?.color, "#f83a22", "a task tag colors the assignment it matches");
+assert.equal(painted.find((task) => task.key === "q1")?.tag, undefined, "a quiz keeps its place without that color");
+const taken = new Set(fromRules.map((task) => task.key));
+assert.deepEqual(smartTagTasksOf([assignmentTag], sources, [], taken).map((task) => task.key), ["other"], "a tag does not add a second row for an event a rule already claimed");
+assert.deepEqual(
+  smartTagTasksOf([assignmentTag], sources, [], new Set()).map((task) => task.key),
+  ["a2", "other"],
+  "with no keyword rule, the tag still brings assignments in",
+);
+assert.deepEqual(smartTagTasksOf([{ ...assignmentTag, enabled: false }], sources, [], new Set()), [], "a paused tag adds nothing");
 
 const deadline = deadlineTasksOf([source("deliverable", "Group Deliverable - Due", learn, 7)], ["deliverable"]);
 assert.equal(deadline[0]?.dueUTC, at(7));

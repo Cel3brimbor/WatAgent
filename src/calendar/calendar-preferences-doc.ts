@@ -21,7 +21,7 @@ import {
   type CalendarSourceFilter,
   type SidePanelSectionsOpen,
 } from "@/calendar/preferences";
-import { parseSmartTagsFromUnknown, readSmartTags, type SmartTag } from "@/calendar/smart-tags";
+import { parseSmartTagsFromUnknown, readSmartTags, readTaskSmartTags, type SmartTag } from "@/calendar/smart-tags";
 import { parseKeywordTasksFromUnknown, readKeywordTasks, type KeywordTasks } from "@/calendar/keyword-tasks";
 import type { CalendarView, ImportedCalendar, MergedCalendar } from "@/calendar/types";
 import {
@@ -54,6 +54,7 @@ export type UserCalendarPreferencesV1 = {
   colorOverrides: Record<string, string>;
   campusSubscriptions: CampusSubscriptionPref[];
   smartTags: SmartTag[];
+  taskSmartTags: SmartTag[];
   keywordTasks: KeywordTasks;
   navCollapsed: boolean;
   sidePanelSections: SidePanelSectionsOpen;
@@ -168,6 +169,7 @@ export function readLocalCalendarPreferences(): UserCalendarPreferencesV1 {
     colorOverrides: colorOverridesWithCampusSubscriptions(colorOverrides, campusSubscriptions),
     campusSubscriptions,
     smartTags: readSmartTags(),
+    taskSmartTags: readTaskSmartTags(),
     keywordTasks: readKeywordTasks(),
     navCollapsed,
     sidePanelSections: readSidePanelSections(),
@@ -229,6 +231,7 @@ export function parseUserCalendarPreferencesDoc(
     colorOverrides: colorOverridesWithCampusSubscriptions(colorOverrides, campusSubscriptions),
     campusSubscriptions,
     smartTags: rec.smartTags !== undefined ? parseSmartTagsFromUnknown(rec.smartTags) : fallbacks.smartTags,
+    taskSmartTags: rec.taskSmartTags !== undefined ? parseSmartTagsFromUnknown(rec.taskSmartTags) : fallbacks.taskSmartTags,
     keywordTasks: rec.keywordTasks !== undefined ? parseKeywordTasksFromUnknown(rec.keywordTasks) : fallbacks.keywordTasks,
     navCollapsed: typeof rec.navCollapsed === "boolean" ? rec.navCollapsed : fallbacks.navCollapsed,
     sidePanelSections:
@@ -245,8 +248,8 @@ export function parseUserCalendarPreferencesDoc(
 export function preferencesDocHasContent(doc: UserCalendarPreferencesV1): boolean {
   if (doc.importedCalendars.length > 0 || doc.campusCalendars.length > 0 || doc.mergedCalendars.length > 0 || doc.agentHiddenCalendarIds.length > 0) return true;
   if (!doc.newCalendarsShown) return true;
-  if (doc.smartTags.length > 0) return true;
-  if (doc.keywordTasks.rules.length > 0 || doc.keywordTasks.doneKeys.length > 0) return true;
+  if (doc.smartTags.length > 0 || doc.taskSmartTags.length > 0) return true;
+  if (doc.keywordTasks.rules.length > 0 || doc.keywordTasks.doneKeys.length > 0 || doc.keywordTasks.includeDeadlines === false) return true;
   if (JSON.stringify(doc.localCalendars) !== JSON.stringify(BUILTIN_CALENDARS)) return true;
   if (doc.navCollapsed) return true;
   if (JSON.stringify(doc.sidePanelSections) !== JSON.stringify(DEFAULT_SIDE_PANEL_SECTIONS)) return true;

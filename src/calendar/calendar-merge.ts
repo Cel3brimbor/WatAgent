@@ -356,6 +356,33 @@ export function pinBottomDeadlines(items: TimelineItem[], day: Date, imported: I
     if (!sameLocalDay(item.startUTC, day.getTime())) return [];
     return [{ ...item, pinned: true }];
   });
-  const rank = (item: TimelineItem) => (item.allDay || item.pinned ? 0 : 1);
-  return placed.sort((a, b) => rank(a) - rank(b) || a.startUTC - b.startUTC || a.id.localeCompare(b.id));
+  return sortPinnedFirst(placed);
+}
+
+//a one-hour due block ends an hour after it is due. tasks use the start, so the chip should too
+function listedDueUTC(item: TimelineItem, dueById: ReadonlyMap<string, number>): number | undefined {
+  if (item.kind === "gcal_busy") return undefined;
+  if (item.kind === "task" && !item.allDay) return dueById.get(item.id) ?? item.startUTC;
+  const due = dueById.get(item.id);
+  if (due == null || item.allDay) return undefined;
+  const duration = item.endUTC - item.startUTC;
+  if (duration < 0 || duration > HOUR_MS) return undefined;
+  return due;
+}
+
+function sortPinnedFirst(items: TimelineItem[]): TimelineItem[] {
+  const rank = (item: TimelineItem) => (item.pinned ? 0 : item.allDay ? 1 : 2);
+  const when = (item: TimelineItem) => item.pinnedDueUTC ?? item.startUTC;
+  return items.sort((a, b) => rank(a) - rank(b) || when(a) - when(b) || a.title.localeCompare(b.title) || a.id.localeCompare(b.id));
+}
+
+/**short dues and calendar tasks sit at the top, labeled with the deadline tasks already uses*/
+export function pinListedDues(items: TimelineItem[], dueById: ReadonlyMap<string, number>, day: Date): TimelineItem[] {
+  const placed = items.flatMap((item) => {
+    const due = listedDueUTC(item, dueById);
+    if (due == null) return [item];
+    if (!sameLocalDay(due, day.getTime())) return [];
+    return [{ ...item, pinned: true, pinnedDueUTC: due }];
+  });
+  return sortPinnedFirst(placed);
 }

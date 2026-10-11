@@ -26,7 +26,11 @@ import {
   setRequireAiApproval,
   type PendingAiChange,
 } from "@/calendar/approval-client";
-import { mergePendingIntoItems } from "@/calendar/merge-pending";
+import {
+  commitApprovedPendingChanges,
+  mergePendingIntoItems,
+  pendingChangesMatching,
+} from "@/calendar/merge-pending";
 
 type CalendarContextValue = {
   hydrated: boolean;
@@ -120,6 +124,8 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
   const [requireAiApproval, setRequireAiApprovalState] = useState(false);
   const [pendingChanges, setPendingChanges] = useState<PendingAiChange[]>([]);
   const [approvalBusy, setApprovalBusy] = useState(false);
+  const pendingChangesRef = useRef(pendingChanges);
+  pendingChangesRef.current = pendingChanges;
   const itemsRef = useRef(items);
   itemsRef.current = items;
   //feeds the screen changed before the server finished. refreshes honor these until releaseImport.
@@ -357,11 +363,21 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
 
   const approvePendingChanges = useCallback(
     async (input: { ids?: string[]; all?: boolean }) => {
+      const approving = pendingChangesMatching(pendingChangesRef.current, input);
+      if (approving.length === 0) return;
+      const approvedIds = new Set(approving.map((change) => change.id));
+      setPendingChanges((prev) => prev.filter((change) => !approvedIds.has(change.id)));
+      setItems((prev) => commitApprovedPendingChanges(prev, approving));
+
       setApprovalBusy(true);
       try {
         await approvePending(input);
-        await Promise.all([refresh(), refreshPending()]);
         wrote();
+        void refresh().catch(logFailure("refresh"));
+        void refreshPending().catch(logFailure("pending load"));
+      } catch {
+        await Promise.all([refresh(), refreshPending()]);
+        throw new Error("approve failed");
       } finally {
         setApprovalBusy(false);
       }
@@ -371,10 +387,18 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
 
   const rejectPendingChanges = useCallback(
     async (input: { ids?: string[]; all?: boolean }) => {
+      const rejecting = pendingChangesMatching(pendingChangesRef.current, input);
+      if (rejecting.length === 0) return;
+      const rejectedIds = new Set(rejecting.map((change) => change.id));
+      setPendingChanges((prev) => prev.filter((change) => !rejectedIds.has(change.id)));
+
       setApprovalBusy(true);
       try {
         await rejectPending(input);
+        void refreshPending().catch(logFailure("pending load"));
+      } catch {
         await refreshPending();
+        throw new Error("reject failed");
       } finally {
         setApprovalBusy(false);
       }

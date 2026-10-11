@@ -1,7 +1,8 @@
 "use client";
 
-import { useRef, useState, type ReactNode } from "react";
+import { useRef, useState, type CSSProperties, type ReactNode } from "react";
 import type { KeywordTask } from "@/calendar/keyword-tasks";
+import type { SmartTagHit } from "@/calendar/smart-tags";
 import type { CalendarItemDoc } from "@/calendar/types";
 import { addDays, startOfLocalDay } from "@/calendar/date-utils";
 import { ChevronIcon } from "@/calendar/sidebar-icons";
@@ -18,6 +19,8 @@ type Props = {
   calendarName?: (id: string) => string;
   onKeywordComplete?: (key: string, done: boolean) => void;
   onKeywordOpen?: (task: KeywordTask) => void;
+  /**color a calendar task when a task smart tag matches it*/
+  tagForItem?: (item: CalendarItemDoc) => SmartTagHit | null;
   /** The keyword rules panel, shown below the list. */
   rules?: ReactNode;
 };
@@ -63,7 +66,7 @@ function groupOf(row: Row, now: number, today: Date): GroupId {
   return "later";
 }
 
-export function TodoList({ items, onOpen, onComplete, onCreate, keywordTasks = [], calendarName, onKeywordComplete, onKeywordOpen, rules }: Props) {
+export function TodoList({ items, onOpen, onComplete, onCreate, keywordTasks = [], calendarName, onKeywordComplete, onKeywordOpen, tagForItem, rules }: Props) {
   const listRef = useRef<HTMLDivElement>(null);
   const [showOlder, setShowOlder] = useState(false);
   const [doneOpen, setDoneOpen] = useState(false);
@@ -109,9 +112,16 @@ export function TodoList({ items, onOpen, onComplete, onCreate, keywordTasks = [
 
   function renderRow(row: Row) {
     const draft = row.kind === "own" && row.item.editorDraft;
-    const className = [row.done ? "is-done" : "", draft ? "is-editor-draft" : ""].filter(Boolean).join(" ");
+    const tag = row.kind === "keyword" ? row.task.tag : tagForItem?.(row.item);
+    const cover = tag?.cover === "half" || tag?.cover === "quarter" ? tag.cover : "full";
+    const className = [row.done ? "is-done" : "", draft ? "is-editor-draft" : "", tag ? `is-tagged is-tag-${cover}` : ""].filter(Boolean).join(" ");
     return (
-      <li key={row.id} data-flip-id={row.id} className={className || undefined}>
+      <li
+        key={row.id}
+        data-flip-id={row.id}
+        className={className || undefined}
+        style={tag ? { "--tag-color": tag.color } as CSSProperties : undefined}
+      >
         <button
           type="button"
           className={`todo-check${row.done ? " is-checked" : ""}`}
@@ -140,6 +150,7 @@ export function TodoList({ items, onOpen, onComplete, onCreate, keywordTasks = [
             {row.kind === "keyword" && calendarName ? (
               <span className="todo-origin">{calendarName(row.task.source.mergedCalendarId ?? row.task.calendarId)}</span>
             ) : null}
+            {tag ? <span className="todo-origin">{tag.name}</span> : null}
           </small>
         </button>
       </li>

@@ -82,8 +82,9 @@ export type TimelineItem = {
   /** Display-only overlay; never sent to Google or the API. */
   calendarColor?: string;
   smartTag?: { id: string; name: string; color: string; cover: "full" | "half" | "quarter" };
-  /** A late due-instant drawn with the all-day items, still due at startUTC. */
+  /** A due instant drawn with the all-day items. The deadline is pinnedDueUTC, or startUTC. */
   pinned?: boolean;
+  pinnedDueUTC?: number;
 };
 
 export type CalendarView = "day" | "workweek" | "week" | "month" | "year";

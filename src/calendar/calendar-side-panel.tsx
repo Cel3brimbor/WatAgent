@@ -78,6 +78,8 @@ type Props = {
   onCreateCalendar: (name: string) => void;
   onRenameCalendar: (id: string, name: string) => void;
   onDeleteCalendar: (id: string) => Promise<void>;
+  /**tasks keeps the month and shows only the tags that color the task list*/
+  variant?: "calendar" | "tasks";
 };
 
 function sameDay(a: Date, b: Date): boolean {
@@ -117,6 +119,7 @@ export function CalendarSidePanel({
   onCreateCalendar,
   onRenameCalendar,
   onDeleteCalendar,
+  variant = "calendar",
 }: Props) {
   const [externalOpen, setExternalOpen] = useState(true);
   const [renaming, setRenaming] = useState<SideExternalCalendar | null>(null);
@@ -125,6 +128,7 @@ export function CalendarSidePanel({
   const [removeError, setRemoveError] = useState<string | null>(null);
   const [syncBusy, setSyncBusy] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [taskTagsOpen, setTaskTagsOpen] = useState(true);
   const [renamingLocal, setRenamingLocal] = useState<LocalCalendar | null>(null);
   const [deleting, setDeleting] = useState<LocalCalendar | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
@@ -416,6 +420,21 @@ export function CalendarSidePanel({
         })}
       </div>
       <div className="side-cal-groups">
+        {variant === "tasks" ? (
+          <SmartTagsPanel
+            tags={smartTags}
+            onChange={onSmartTags}
+            calendars={smartTagCalendars}
+            samples={smartTagSamples}
+            open={taskTagsOpen}
+            onOpenChange={setTaskTagsOpen}
+            heading="Smart tags"
+            emptyCopy="Color tasks by words like “assignment”. Matching calendar events join this list in the color you pick. Tasks you add always stay."
+            footnote="Matching events join your tasks. Tasks you add always stay."
+            namePlaceholder="Tag name (e.g. Assignments)"
+          />
+        ) : null}
+        {variant === "calendar" ? <>
         <CalendarGroup
           title="WatAgent Calendars"
           headingId={headingId}
@@ -486,6 +505,7 @@ export function CalendarSidePanel({
             onUnhide={unhideCalendar}
           />
         ) : null}
+        </> : null}
       </div>
       {shownMenu ? (
         <CalendarOptionsMenu

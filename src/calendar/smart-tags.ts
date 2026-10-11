@@ -61,6 +61,7 @@ export const SMART_TAG_OPERATORS: Array<{ id: SmartTagOperator; label: string }>
 ];
 
 const STORAGE_KEY = "watagent.calendar.smartTags.v1";
+const TASK_STORAGE_KEY = "watagent.calendar.taskSmartTags.v1";
 const MAX_TAGS = 50;
 const MAX_RULES = 20;
 const MAX_VALUE = 300;
@@ -243,9 +244,17 @@ export function parseSmartTagsFromUnknown(raw: unknown): SmartTag[] {
 }
 
 export function readSmartTags(): SmartTag[] {
+  return readTagList(STORAGE_KEY);
+}
+
+export function writeSmartTags(tags: SmartTag[]): void {
+  writeTagList(STORAGE_KEY, tags);
+}
+
+function readTagList(key: string): SmartTag[] {
   if (typeof window === "undefined") return [];
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const raw = window.localStorage.getItem(key);
     if (!raw) return [];
     return parseSmartTagsFromUnknown(JSON.parse(raw) as unknown);
   } catch {
@@ -253,11 +262,20 @@ export function readSmartTags(): SmartTag[] {
   }
 }
 
-export function writeSmartTags(tags: SmartTag[]): void {
+function writeTagList(key: string, tags: SmartTag[]): void {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(tags));
+    window.localStorage.setItem(key, JSON.stringify(tags));
   } catch {
     return;
   }
+}
+
+/**smart tags that color tasks and can pull matching events into the task list*/
+export function readTaskSmartTags(): SmartTag[] {
+  return readTagList(TASK_STORAGE_KEY);
+}
+
+export function writeTaskSmartTags(tags: SmartTag[]): void {
+  writeTagList(TASK_STORAGE_KEY, tags);
 }

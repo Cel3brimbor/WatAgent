@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { isBottomDeadline, mergeTimeline, normalizedCalendarTitle, pinBottomDeadlines, sharedEventCounts } from "./calendar-merge";
+import { isBottomDeadline, mergeTimeline, normalizedCalendarTitle, pinBottomDeadlines, pinListedDues, sharedEventCounts } from "./calendar-merge";
 import {
   defaultImportedName,
   detectCalendarLink,
@@ -189,6 +189,21 @@ assert.equal(pinBottomDeadlines([deliverable], wednesday, [])[0]?.pinned, true);
 assert.deepEqual(pinBottomDeadlines([deliverable], thursday, []), []);
 const eveningQuiz: TimelineItem = { ...learn, id: "evening", title: "Exercise 01", startUTC: quizStart, endUTC: quizStart + 3600000 };
 assert.equal(pinBottomDeadlines([eveningQuiz], new Date(2026, 9, 9), [])[0]?.pinned, undefined, "a 10pm quiz stays on the grid");
+const dueAtTen = new Map([[eveningQuiz.id, quizStart]]);
+const pinnedQuiz = pinListedDues([eveningQuiz], dueAtTen, new Date(2026, 9, 9))[0];
+assert.equal(pinnedQuiz?.pinned, true, "a task due at 10 sits with the all-day items");
+assert.equal(pinnedQuiz?.pinnedDueUTC, quizStart, "the chip uses 10, not the one-hour block that ends at 11");
+const ten = new Date(2026, 9, 7, 22).getTime();
+const laterDue: TimelineItem = { ...deliverable, id: "later-due" };
+const earlierDue: TimelineItem = { ...learn, id: "earlier-due", title: "Assignment", startUTC: ten, endUTC: ten + 3600000 };
+const ordered = pinListedDues(
+  [laterDue, earlierDue],
+  new Map([[laterDue.id, laterDue.startUTC], [earlierDue.id, ten]]),
+  wednesday,
+);
+assert.deepEqual(ordered.map((item) => item.id), ["earlier-due", "later-due"], "dues at the top stay chronological");
+const taskAtTen: TimelineItem = { ...eveningQuiz, id: "task-ten", kind: "task", importSource: undefined };
+assert.equal(pinListedDues([taskAtTen], new Map(), new Date(2026, 9, 9))[0]?.pinnedDueUTC, quizStart, "a calendar task is due when it starts");
 const nightLab: TimelineItem = { ...learn, id: "night-lab", title: "Night lab", startUTC: new Date(2026, 9, 7, 23, 30).getTime(), endUTC: new Date(2026, 9, 8, 0, 30).getTime() };
 assert.equal(pinBottomDeadlines([nightLab], wednesday, [])[0]?.pinned, undefined, "a class that starts at 11:30 stays timed");
 const ownLate: TimelineItem = { ...deliverable, id: "own-late", importSource: undefined };

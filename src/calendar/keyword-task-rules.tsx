@@ -72,12 +72,16 @@ export function KeywordTaskRules({ config, onChange, calendars, sources }: Props
 
   const nameOf = (id: string) => calendars.find((calendar) => calendar.id === id)?.name ?? "Removed calendar";
   const watched = [...new Set(rules.filter((rule) => rule.enabled).flatMap((rule) => rule.calendarIds))].map(nameOf);
+  const deadlinesOn = config.includeDeadlines !== false;
+  const deadlineNote = deadlinesOn ? "" : " · deadlines off";
   const summary =
     rules.length === 0
-      ? "Turn assignments and quizzes on your calendars into tasks."
+      ? deadlinesOn
+        ? "Tasks you add always stay. Course deadlines stay on."
+        : "Tasks you add always stay. Course deadlines are off."
       : watched.length === 0
-        ? "Every rule is paused."
-        : `Watching ${watched.slice(0, 2).join(", ")}${watched.length > 2 ? ` +${watched.length - 2}` : ""} · ${taskCount} match${taskCount === 1 ? "" : "es"}`;
+        ? `Every rule is paused.${deadlineNote}`
+        : `Watching ${watched.slice(0, 2).join(", ")}${watched.length > 2 ? ` +${watched.length - 2}` : ""} · ${taskCount} match${taskCount === 1 ? "" : "es"}${deadlineNote}`;
 
   return (
     <section className={`ktask-rules${open ? " is-open" : ""}`} aria-labelledby="ktask-rules-heading">
@@ -92,9 +96,22 @@ export function KeywordTaskRules({ config, onChange, calendars, sources }: Props
       </div>
       <Disclosure open={open} id="ktask-rules-body">
         <div className="ktask-rules-body">
+          <div className="ktask-deadlines">
+            <Switch
+              id="ktask-deadlines"
+              checked={deadlinesOn}
+              aria-label="Include course deadlines"
+              onChange={(includeDeadlines) => onChange({ ...config, includeDeadlines })}
+            />
+            <label htmlFor="ktask-deadlines">
+              <strong>Course deadlines</strong>
+              <small>End-of-day dues on LEARN and Portal stay in this list. This is on unless you turn it off.</small>
+            </label>
+          </div>
+          <p className="ktask-always">Tasks you add always stay here, whether or not a rule matches.</p>
           {rules.length === 0 ? (
             <p className="ktask-empty">
-              Pick calendars like LEARN and keywords like “assignment” or “quiz”. Each matching event shows up as a task, due when it starts.
+              Pick calendars like LEARN and keywords like “assignment” or “quiz”. Each matching event shows up as a task, due when it starts. Color them from Smart tags in the side panel.
             </p>
           ) : (
             <ul className="ktask-rule-list">
