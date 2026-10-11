@@ -19,9 +19,8 @@ import { intervalMinutes, labelEvery } from "@/calendar/time-scale";
 import { useColumnWidths } from "@/calendar/use-column-width";
 import { useNowMs } from "@/calendar/calendar-item-editor";
 import { useSlotDrag } from "@/calendar/use-slot-drag";
-import { SlotDraft } from "@/calendar/slot-draft";
+import { SlotDragPreview } from "@/calendar/slot-draft";
 import type { CalendarDraft } from "@/calendar/calendar-item-editor";
-import { timedDraftSlotForDay } from "@/calendar/editor-draft";
 import { AllDayResizeHandle, allDayItems, useAllDayResize } from "@/calendar/all-day-bar";
 
 type Props = {
@@ -62,10 +61,6 @@ export function CalendarDayView({
   const allDay = useAllDayResize();
   const topped = allDayItems(items);
   const slots = useSlotDrag<"day">((_key, startHour, endHour) => onCreateTimed(startHour, 0, endHour), hourPx);
-  const dragSlot = slots.selection;
-  const draftSlot = dragSlot ?? timedDraftSlotForDay(editorDraft ?? null, focus);
-  const draftLabel = editorDraft?.title;
-  const draftKind = editorDraft?.kind;
 
   return (
     <div className="calendar-day">
@@ -122,7 +117,7 @@ export function CalendarDayView({
                 className="calendar-hour-slot"
                 style={{ height: hourPx }}
                 aria-label={`Create at ${formatHourLabel(hour)}`}
-                onClick={() => onCreateTimed(hour)}
+                onClick={(event) => { if (event.detail === 0) onCreateTimed(hour); }}
               />
             )
           ))}
@@ -141,15 +136,7 @@ export function CalendarDayView({
               />
             </div>
           ))}
-          {draftSlot ? (
-            <SlotDraft
-              start={draftSlot.start}
-              end={draftSlot.end}
-              kind={draftKind}
-              title={draftLabel}
-              hourPx={hourPx}
-            />
-          ) : null}
+          <SlotDragPreview store={slots.selectionStore} slotKey="day" day={focus} editorDraft={editorDraft} hourPx={hourPx} />
           {nowTop != null ? (
             <div className="calendar-now-line" style={{ top: nowTop }} />
           ) : null}

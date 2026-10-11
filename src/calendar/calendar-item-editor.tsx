@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import type { CalendarItemKind, CalendarItemMeta, TimelineItem } from "@/calendar/types";
 import { hourGridMs, startOfLocalDay } from "@/calendar/date-utils";
 import { SegmentedControl, type SegmentOption } from "@/shared/segmented-control";
 import { Switch } from "@/shared/switch";
+import { useDraftTitlePublisher } from "@/calendar/draft-title-preview";
 import { EditorDatePicker } from "@/calendar/editor-date-picker";
 import { ChevronDownIcon, CloseIcon } from "@/shared/icons";
 import { useDialogAction } from "@/shared/use-dialog-action";
@@ -173,6 +174,9 @@ export function CalendarItemEditor({
     setPreviousDraft(initialDraft);
     setDraft(initialDraft);
   }
+  const titlePreview = useDraftTitlePublisher();
+  useLayoutEffect(() => { titlePreview?.set(draft.title); }, [titlePreview, draft.title]);
+  useLayoutEffect(() => () => titlePreview?.set(null), [titlePreview]);
   function onChange(next: CalendarDraft) {
     setDraft(next);
     updateDraft(next);

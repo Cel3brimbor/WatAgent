@@ -3131,7 +3131,7 @@ button.qd-cal-swatch:active {
   max-width: 100%;
 }
 
-/*live range while dragging to create; snaps to quarter-hours with a short glide*/
+/* Live drag geometry follows the pointer without interpolation or an entrance delay. */
 .calendar-slot-draft {
   position: absolute;
   left: 2px;
@@ -3149,18 +3149,7 @@ button.qd-cal-swatch:active {
   color: var(--ink);
   font-size: 0.74rem;
   pointer-events: none;
-  transition:
-    top 140ms var(--ease-out),
-    height 140ms var(--ease-out),
-    opacity var(--dur-fast) var(--ease-out),
-    transform var(--dur-spring) var(--ease-spring);
-}
-
-@starting-style {
-  .calendar-slot-draft {
-    opacity: 0;
-    transform: scale(0.98);
-  }
+  transition: none;
 }
 
 .calendar-slot-draft-title {
@@ -3177,9 +3166,9 @@ button.qd-cal-swatch:active {
   justify-content: center;
 }
 
-.calendar-slot-draft.is-short .calendar-slot-draft-title {
-  display: none;
-}
+.calendar-slot-draft.is-short:not(.is-editing) .calendar-slot-draft-title { display: none; }
+.calendar-slot-draft.is-short.is-editing .calendar-slot-draft-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1; }
+.calendar-slot-draft.is-short.is-editing .calendar-slot-draft-time { display: none; }
 
 .calendar-slot-draft.is-short .calendar-slot-draft-time {
   white-space: nowrap;

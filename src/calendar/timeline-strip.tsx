@@ -1,5 +1,6 @@
 "use client";
 
+import { DraftTitle } from "@/calendar/draft-title-preview";
 import type { CSSProperties } from "react";
 import type { TimelineItem } from "@/calendar/types";
 import { formatTime } from "@/calendar/date-utils";
@@ -59,7 +60,7 @@ function StripCardBody({
   const location = itemLocation(item);
   return (
     <span className="calendar-strip-main">
-      <span className="calendar-strip-title">{item.title}</span>
+      <span className="calendar-strip-title">{item.editorDraft ? <DraftTitle fallback={item.title} placeholder={item.kind === "task" ? "New task" : "New event"} /> : item.title}</span>
       {timeLabel ? <span className="calendar-strip-time">{timeLabel}</span> : null}
       {location ? <span className="calendar-strip-location">{location}</span> : null}
     </span>
@@ -76,7 +77,7 @@ export function TimelineStrip({ item, compact, layout = "inline", onOpen, onComp
         aria-label="Busy on Google Calendar"
         onClick={(event) => event.stopPropagation()}
       >
-        <span className="calendar-strip-title">{item.title}</span>
+        <span className="calendar-strip-title">{item.editorDraft ? <DraftTitle fallback={item.title} placeholder="New event" /> : item.title}</span>
       </div>
     );
   }
@@ -100,7 +101,7 @@ export function TimelineStrip({ item, compact, layout = "inline", onOpen, onComp
           <StripCardBody item={item} timeLabel={timeLabel} />
         ) : (
           <>
-            <span className="calendar-strip-title">{item.title}</span>
+            <span className="calendar-strip-title">{item.editorDraft ? <DraftTitle fallback={item.title} placeholder="New event" /> : item.title}</span>
             {timeLabel ? <span className="calendar-strip-time">{timeLabel}</span> : null}
           </>
         )}
@@ -142,7 +143,7 @@ export function TimelineStrip({ item, compact, layout = "inline", onOpen, onComp
         <StripCardBody item={item} timeLabel={timeLabel} />
       ) : (
         <>
-          <span className="calendar-strip-title">{item.title}</span>
+          <span className="calendar-strip-title">{item.editorDraft ? <DraftTitle fallback={item.title} placeholder={item.kind === "task" ? "New task" : "New event"} /> : item.title}</span>
           {timeLabel ? <span className="calendar-strip-time">{timeLabel}</span> : null}
         </>
       )}

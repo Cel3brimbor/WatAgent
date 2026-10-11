@@ -87,6 +87,7 @@ import {
   type CalendarDraft,
   type GoogleDraftTarget,
 } from "@/calendar/calendar-item-editor";
+import { DraftTitleProvider } from "@/calendar/draft-title-preview";
 import { mergeEditorDraft } from "@/calendar/editor-draft";
 import { EventPeek, type EventPeekHandle } from "@/calendar/google-event-card";
 import { rememberPlace } from "@/calendar/place-memory";
@@ -2130,6 +2131,7 @@ export function CalendarApp({
   }
 
   return (
+    <DraftTitleProvider>
     <div
       className={`app-frame${navCollapsed ? " is-nav-collapsed" : ""}${chatResizing ? " is-resizing-chat" : ""}`}
       style={colorVars}
@@ -2612,5 +2614,6 @@ export function CalendarApp({
       ) : null}
     </div>
     </div>
+    </DraftTitleProvider>
   );
 }
