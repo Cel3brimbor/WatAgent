@@ -1,8 +1,10 @@
 import { attachedIdsOf } from "@/agent/calendar-mention";
+import { CHAT_IMAGE_MEDIA, MAX_CHAT_IMAGE_B64, MAX_CHAT_IMAGE_TEXT, MAX_CHAT_IMAGES, type ChatImage } from "@/agent/chat-image";
 import type { ActivityPart, ChatMessage, ChatSession, ThoughtSegment, ToolEventRecord } from "@/agent/types";
 import { apiJson } from "@/shared/api-base";
 
 const SAFE_ID = /^[A-Za-z0-9._:-]{1,128}$/;
+const IMAGE_B64 = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
 const TOOL_NAME = /^[A-Za-z0-9_]{1,64}$/;
 const MAX_TOOL_EVENTS = 40;
 const MAX_ACTIVITY = 40;
@@ -78,6 +80,26 @@ function legacyActivity(messageId: string, reasoning: unknown, toolEvents: unkno
   return parts.length > 0 ? parts : undefined;
 }
 
+function imageTextOf(raw: unknown): string | undefined {
+  if (typeof raw !== "string") return undefined;
+  const clean = raw.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, "").trim();
+  return clean ? clean.slice(0, MAX_CHAT_IMAGE_TEXT) : undefined;
+}
+
+function imagesOf(raw: unknown): ChatImage[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const images: ChatImage[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const rec = item as Record<string, unknown>;
+    if (typeof rec.mediaType !== "string" || !CHAT_IMAGE_MEDIA.includes(rec.mediaType as ChatImage["mediaType"])) continue;
+    if (typeof rec.data !== "string" || !IMAGE_B64.test(rec.data) || rec.data.length > MAX_CHAT_IMAGE_B64) continue;
+    images.push({ mediaType: rec.mediaType as ChatImage["mediaType"], data: rec.data });
+    if (images.length >= MAX_CHAT_IMAGES) break;
+  }
+  return images.length > 0 ? images : undefined;
+}
+
 function messageOf(raw: unknown): ChatMessage | null {
   if (!raw || typeof raw !== "object") return null;
   const rec = raw as Record<string, unknown>;
@@ -95,6 +117,8 @@ function messageOf(raw: unknown): ChatMessage | null {
     content: rec.content.slice(0, 20_000),
     createdAt,
     calendarIds,
+    images: rec.role === "user" ? imagesOf(rec.images) : undefined,
+    imageText: rec.role === "user" ? imageTextOf(rec.imageText) : undefined,
     activity:
       rec.role === "assistant"
         ? activityOf(rec.activity, rec.id) ?? legacyActivity(rec.id, rec.reasoning, rec.toolEvents, createdAt)
@@ -131,6 +155,8 @@ export async function saveChatSession(chat: ChatSession): Promise<void> {
       (message) =>
         message.content.trim().length > 0 ||
         (message.calendarIds?.length ?? 0) > 0 ||
+        (message.images?.length ?? 0) > 0 ||
+        Boolean(message.imageText?.trim()) ||
         (message.activity?.length ?? 0) > 0,
     )
     .slice(-200)
@@ -170,18 +196,33 @@ export async function saveChatSession(chat: ChatSession): Promise<void> {
         content: message.content.slice(0, 20_000),
         createdAt: message.createdAt,
         calendarIds: message.role === "user" ? attachedIdsOf(message.calendarIds) : undefined,
+        images:
+          message.role === "user"
+            ? message.images?.slice(0, MAX_CHAT_IMAGES).flatMap((image) => {
+                if (!CHAT_IMAGE_MEDIA.includes(image.mediaType) || image.data.length > MAX_CHAT_IMAGE_B64) return [];
+                return [{ mediaType: image.mediaType, data: image.data }];
+              })
+            : undefined,
+        imageText: message.role === "user" ? imageTextOf(message.imageText) : undefined,
         activity: message.role === "assistant" && activity?.length ? activity : undefined,
         toolEvents: message.role === "assistant" && toolEvents?.length ? toolEvents : undefined,
       };
     });
   if (messages.length === 0) return;
+  //older pictures are dropped first so a long chat still saves under the request cap
+  let stored = messages;
+  while (JSON.stringify(stored).length > 800_000) {
+    const index = stored.findIndex((message) => (message.images?.length ?? 0) > 0);
+    if (index < 0) break;
+    stored = stored.map((message, at) => (at === index ? { ...message, images: undefined } : message));
+  }
   await apiJson("/api/calendar/chats", {
     method: "POST",
     body: JSON.stringify({
       id: chat.id,
       title: chat.title.slice(0, 200),
       titleSource: chat.titleSource,
-      messages,
+      messages: stored,
       createdAt: chat.createdAt,
     }),
   });

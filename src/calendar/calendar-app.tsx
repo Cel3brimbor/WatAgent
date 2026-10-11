@@ -144,11 +144,12 @@ import { CalendarChatPanel } from "@/agent/calendar-chat-panel";
 import type { PendingAiChange } from "@/calendar/approval-client";
 import { attachedIdsOf, textForModel, type MentionCalendar } from "@/agent/calendar-mention";
 import type { AgentEffort } from "@/agent/agent-effort";
+import { withImageTranscripts } from "@/agent/image-ocr";
 import { requestChatTitle } from "@/agent/chat-title";
 import { readAgentStream } from "@/agent/stream";
 import { cloneActivity } from "@/agent/agent-activity";
 import { settleCallingTools } from "@/agent/settle-tools";
-import type { ActivityPart, ChatMessage, ThoughtSegment, ToolEventRecord } from "@/agent/types";
+import type { ActivityPart, ChatImage, ChatMessage, ThoughtSegment, ToolEventRecord } from "@/agent/types";
 import { afterMotion, afterPaint } from "@/shared/after-paint";
 import { ApiError, apiFetch, apiJson, errorFromResponse } from "@/shared/api-base";
 import { uid } from "@/shared/ids";
@@ -209,6 +210,8 @@ type SendPayload = {
   text: string;
   effort: AgentEffort;
   calendarIds?: string[];
+  images?: ChatImage[];
+  imageText?: string;
   branch?: { kind: "edit"; messageId: string } | { kind: "regenerate"; messageId: string };
 };
 
@@ -2071,12 +2074,14 @@ export function CalendarApp({
     const existing = currentMessages();
     let text = payload.text.trim();
     let calendarIds = attachedIdsOf(payload.calendarIds);
+    let images = payload.images?.slice(0, 4);
+    let imageText = payload.imageText?.trim();
     let history = existing;
     let reuseUser = false;
     if (payload.branch?.kind === "edit") {
       const index = existing.findIndex((message) => message.id === payload.branch?.messageId);
       const target = existing[index];
-      if (!target || target.role !== "user" || (!text && !calendarIds?.length)) return;
+      if (!target || target.role !== "user" || (!text && !calendarIds?.length && !images?.length && !imageText)) return;
       history = existing.slice(0, index);
     } else if (payload.branch?.kind === "regenerate") {
       const index = existing.findIndex((message) => message.id === payload.branch?.messageId);
@@ -2086,10 +2091,12 @@ export function CalendarApp({
       const priorUser = [...prior].reverse().find((message) => message.role === "user");
       text = priorUser?.content.trim() ?? "";
       calendarIds = attachedIdsOf(priorUser?.calendarIds);
-      if (!text && !calendarIds?.length) return;
+      images = priorUser?.images;
+      imageText = priorUser?.imageText?.trim();
+      if (!text && !calendarIds?.length && !images?.length && !imageText) return;
       history = prior;
       reuseUser = true;
-    } else if (!text && !calendarIds?.length) {
+    } else if (!text && !calendarIds?.length && !images?.length && !imageText) {
       return;
     }
 
@@ -2099,12 +2106,23 @@ export function CalendarApp({
       content: text.slice(0, 20_000),
       createdAt: Date.now(),
       calendarIds,
+      images: images?.length ? images : undefined,
+      imageText: imageText || undefined,
     };
     const assistantId = uid("msg");
     const visible = reuseUser ? history : [...history, userMessage];
-    const parts: ActivityPart[] = [
-      { kind: "thought", thought: { id: uid("thought"), text: "", startedAt: Date.now() } },
-    ];
+    const willRead = visible.some(
+      (message) => message.role === "user" && (message.images?.length ?? 0) > 0 && !message.imageText?.trim(),
+    );
+    //the read shows up with the message, then flashes like a tool call while ocr runs
+    const parts: ActivityPart[] = willRead
+      ? [
+          {
+            kind: "tools",
+            events: [{ id: uid("tool"), tool: "read_image", state: "calling", callLabel: "read_image()" }],
+          },
+        ]
+      : [{ kind: "thought", thought: { id: uid("thought"), text: "", startedAt: Date.now() } }];
     calendar.setChatMessages([
       ...visible,
       { id: assistantId, role: "assistant", content: "", createdAt: Date.now(), activity: cloneActivity(parts) },
@@ -2185,6 +2203,29 @@ export function CalendarApp({
     };
 
     try {
+      if (willRead) {
+        //let the calling row paint before ocr starts
+        await new Promise<void>((resolve) => {
+          window.setTimeout(resolve, 0);
+        });
+      }
+      const outgoing = willRead ? await withImageTranscripts(visible, controller.signal) : visible;
+      if (willRead) {
+        const read = toolEvents().find((event) => event.tool === "read_image" && event.state === "calling");
+        if (read) {
+          read.state = "succeeded";
+          read.resultSummary = "Read the image";
+        }
+        parts.push({ kind: "thought", thought: { id: uid("thought"), text: "", startedAt: Date.now() } });
+        const filled = new Map(outgoing.map((message) => [message.id, message.imageText]));
+        calendar.setChatMessages(
+          currentMessages().map((message) => {
+            const nextText = filled.get(message.id);
+            return nextText && nextText !== message.imageText ? { ...message, imageText: nextText } : message;
+          }),
+        );
+        writeAssistant();
+      }
       const res = await apiFetch("/api/calendar/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -2195,18 +2236,28 @@ export function CalendarApp({
           timeZone: timeZone(),
           timelineDigest: readTimelineDigest(),
           effort: payload.effort,
-          attachedCalendarIds: [...visible].reverse().find((message) => message.role === "user")?.calendarIds,
-          messages: visible
-            .filter((message) => message.content.trim() || (message.role === "user" && (message.calendarIds?.length ?? 0) > 0))
+          attachedCalendarIds: [...outgoing].reverse().find((message) => message.role === "user")?.calendarIds,
+          messages: outgoing
+            .filter(
+              (message) =>
+                message.content.trim() ||
+                (message.role === "user" &&
+                  ((message.calendarIds?.length ?? 0) > 0 ||
+                    (message.images?.length ?? 0) > 0 ||
+                    Boolean(message.imageText?.trim()))),
+            )
             .slice(-80)
-            .map((message) => ({
-              role: message.role,
-              content:
+            .map((message) => {
+              const text =
                 message.role === "user"
-                  ? textForModel(message.content, (id) => mentionRef.current.find((calendar) => calendar.id === id)?.name ?? "calendar") ||
-                    "Use the attached calendar."
-                  : message.content.trim() || "Use the attached calendar.",
-            })),
+                  ? textForModel(message.content, (id) => mentionRef.current.find((calendar) => calendar.id === id)?.name ?? "calendar")
+                  : message.content.trim();
+              return {
+                role: message.role,
+                content: text || (message.imageText || message.images?.length ? "Look at the attached image." : "Use the attached calendar."),
+                imageText: message.role === "user" ? message.imageText : undefined,
+              };
+            }),
         }),
       });
       if (!res.ok) throw await errorFromResponse(res, "An unexpected error occurred");
@@ -2314,6 +2365,10 @@ export function CalendarApp({
         completed = true;
       }
     } catch (err) {
+      if (!(err instanceof DOMException && err.name === "AbortError")) {
+        const read = toolEvents().find((event) => event.tool === "read_image" && event.state === "calling");
+        if (read) read.resultSummary = err instanceof Error ? err.message : "That image couldn't be read.";
+      }
       if (err instanceof DOMException && err.name === "AbortError") return;
       if (err instanceof AccessError && err.code === "ai_restricted") {
         setRestriction({ message: err.message, reason: err.reason });
@@ -2338,7 +2393,7 @@ export function CalendarApp({
       if (nameThisChat && nameAfterReply && chatId) {
         const userText =
           textForModel(text, (id) => mentionRef.current.find((calendar) => calendar.id === id)?.name ?? "calendar") ||
-          "Attached calendar";
+          (images?.length ? "Attached image" : "Attached calendar");
         void requestChatTitle(userText, assistantText).then((title) => {
           if (title) calendar.applyAutoTitle(chatId, title);
         });

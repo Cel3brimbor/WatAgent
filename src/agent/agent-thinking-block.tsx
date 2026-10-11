@@ -13,6 +13,7 @@ const PROGRESS: Record<string, string> = {
   update_calendar_item: "Updating your calendar…",
   delete_calendar_item: "Removing from your calendar…",
   complete_calendar_task: "Updating that task…",
+  read_image: "Reading the image…",
 };
 
 const DONE: Record<string, string> = {
@@ -23,6 +24,7 @@ const DONE: Record<string, string> = {
   update_calendar_item: "Updated your calendar",
   delete_calendar_item: "Removed from your calendar",
   complete_calendar_task: "Updated that task",
+  read_image: "Read the image",
 };
 
 function progressLabel(event: ToolEventRecord): string {
