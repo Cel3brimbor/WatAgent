@@ -208,6 +208,10 @@ export function createEventStore(): EventStore {
   const dirtyItems = new Set<string>();
   let dirtyAll = false;
   let dirtyGoogle = false;
+  //whole-list listeners rebuild side panels. they wait until the day paint has landed
+  let listTimer: ReturnType<typeof setTimeout> | null = null;
+  let queuedAll = false;
+  let queuedGoogle = false;
 
   function subscribeKey(map: Map<string, Set<Listener>>, key: string, listener: Listener): () => void {
     const set = map.get(key) ?? new Set<Listener>();
@@ -242,12 +246,32 @@ export function createEventStore(): EventStore {
           if (!set) continue;
           for (const listener of [...set]) listener();
         }
-        if (all) for (const listener of [...allListeners]) listener();
-        if (google) for (const listener of [...googleListeners]) listener();
+        //day columns paint first. the full-list rebuild follows on the next task, after that frame
+        if (all || google) queueListNotify(all, google);
       }
     } finally {
       flushing = false;
     }
+  }
+
+  function queueListNotify(all: boolean, google: boolean) {
+    if (all) queuedAll = true;
+    if (google) queuedGoogle = true;
+    if (listTimer != null) return;
+    const timer = setTimeout(runListNotify, 0);
+    listTimer = timer;
+    if (typeof timer === "object" && timer !== null && "unref" in timer) timer.unref();
+  }
+
+  function runListNotify() {
+    listTimer = null;
+    const all = queuedAll;
+    const google = queuedGoogle;
+    queuedAll = false;
+    queuedGoogle = false;
+    if (all) for (const listener of [...allListeners]) listener();
+    if (google) for (const listener of [...googleListeners]) listener();
+    if (dirtyDays.size > 0 || dirtyItems.size > 0 || dirtyAll || dirtyGoogle) flush();
   }
 
   function touch(days: readonly string[], ids: readonly string[], all: boolean) {
