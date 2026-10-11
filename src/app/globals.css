@@ -9534,3 +9534,53 @@ h3 {
   outline: none;
 }
 
+
+/* Event composer: a quiet header, distinct schedule controls, and an inline date calendar. */
+.calendar-editor-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1.35rem 1.4rem 0.35rem; }
+.calendar-editor-eyebrow { color: var(--ink-soft); font-size: 0.73rem; letter-spacing: 0.025em; }
+.calendar-editor-heading h2 { margin: 0.2rem 0 0; font-family: var(--font-display); font-size: 1.6rem; font-weight: 500; letter-spacing: -0.025em; }
+.calendar-editor .calendar-editor-body { padding: 1rem 1.4rem 1.2rem; }
+.calendar-editor .calendar-editor-title { padding: 0.65rem 0 0.8rem; font-size: 1.35rem; font-weight: 500; }
+.calendar-editor .calendar-editor-toolbar { margin: 1rem 0 1.3rem; }
+.calendar-editor-section-label { margin: 0 0 0.5rem; font-size: 0.72rem; font-weight: 650; color: var(--ink-soft); letter-spacing: 0.08em; text-transform: uppercase; }
+.calendar-editor .calendar-editor-section { margin-bottom: 1rem; }
+.calendar-editor .calendar-editor-group { border-radius: 14px; }
+.calendar-editor .calendar-editor-cell { padding: 0.7rem 0.8rem; grid-template-columns: 3.1rem minmax(0, 1fr); }
+.calendar-editor .calendar-editor-when { flex-wrap: wrap; gap: 0.4rem; }
+.calendar-editor-date-trigger { display: inline-flex; align-items: center; justify-content: space-between; gap: 0.6rem; padding: 0.5rem 0.65rem; border: 1px solid var(--line); border-radius: 9px; background: var(--panel-solid); color: var(--ink); font: inherit; font-size: 0.83rem; cursor: pointer; }
+.calendar-editor-date-trigger .glyph { width: 12px; height: 12px; color: var(--ink-soft); }
+.calendar-editor-date-trigger:hover, .calendar-editor-date-trigger[aria-expanded="true"] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--panel-solid)); }
+.calendar-editor-date-trigger:focus-visible, .editor-date-picker button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.calendar-editor-date-trigger[data-invalid] { border-color: var(--danger); }
+.calendar-editor .calendar-editor-duration { flex-basis: 100%; margin-top: 0.15rem; font-size: 0.72rem; }
+.calendar-editor .calendar-editor-actions { padding: 1rem 1.4rem; background: color-mix(in srgb, var(--paper) 40%, var(--panel-solid)); }
+.calendar-editor .calendar-editor-actions .primary-btn { min-width: 8rem; border-radius: 10px; }
+.calendar-editor .calendar-editor-source { padding: 0.5rem 1.4rem 0; }
+.editor-date-picker { margin-top: 0.65rem; padding: 0.9rem; border: 1px solid var(--line); border-radius: 14px; background: var(--panel-solid); animation: calendar-editor-in 140ms ease-out both; }
+.editor-date-picker-head { display: flex; gap: 0.3rem; align-items: center; margin-bottom: 0.8rem; }
+.editor-date-picker-head > div { flex: 1; }
+.editor-date-picker-caption { font-size: 0.7rem; color: var(--ink-soft); }
+.editor-date-picker-head h3 { margin: 0.15rem 0 0; font-size: 0.95rem; font-weight: 600; }
+.editor-date-picker-head .icon-btn { width: 30px; height: 30px; }
+.editor-date-weekdays, .editor-date-grid > [role="row"] { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); text-align: center; gap: 0.2rem; }
+.editor-date-weekdays { color: var(--ink-soft); font-size: 0.72rem; margin-bottom: 0.35rem; }
+.editor-date-grid button { position: relative; display: block; width: 100%; min-height: 34px; padding: 0.4rem 0; border: 0; border-radius: 9px; background: transparent; color: var(--ink); font: inherit; font-size: 0.82rem; cursor: pointer; }
+.editor-date-grid button[data-outside] { color: var(--ink-soft); opacity: 0.55; }
+.editor-date-grid button:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.editor-date-grid button[aria-current="date"]::after { content: ""; position: absolute; bottom: 3px; left: calc(50% - 2px); width: 4px; height: 4px; background: currentColor; border-radius: 50%; }
+.editor-date-grid button[data-selected] { background: var(--accent); color: var(--paper); font-weight: 700; opacity: 1; }
+.editor-date-picker button:disabled { opacity: 0.25; cursor: default; }
+.editor-date-shortcuts { display: flex; align-items: center; gap: 0.5rem; border-top: 1px solid var(--line); margin-top: 0.6rem; padding-top: 0.7rem; }
+.editor-date-shortcuts button { border: 1px solid var(--line); background: transparent; color: var(--ink); font: inherit; font-size: 0.75rem; border-radius: 8px; padding: 0.4rem 0.6rem; cursor: pointer; }
+.editor-date-shortcuts span { margin-left: auto; color: var(--ink-soft); font-size: 0.65rem; }
+@media (max-width: 600px) {
+  .calendar-editor .calendar-editor-cell { grid-template-columns: minmax(0, 1fr); }
+  .editor-date-grid button { min-height: 40px; }
+  .editor-date-shortcuts span { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { .editor-date-picker { animation: none; } }
+
+.calendar-editor-fields { border: 0; padding: 0; margin: 0; min-inline-size: 0; }
+
+.calendar-editor-section[aria-label="Details"] .calendar-editor-cell { grid-template-columns: 5rem minmax(0, 1fr); }
+@media (max-width: 600px) { .calendar-editor-section[aria-label="Details"] .calendar-editor-cell { grid-template-columns: minmax(0, 1fr); } }

@@ -5,6 +5,8 @@ import type { CalendarItemKind, CalendarItemMeta, TimelineItem } from "@/calenda
 import { hourGridMs, startOfLocalDay } from "@/calendar/date-utils";
 import { SegmentedControl, type SegmentOption } from "@/shared/segmented-control";
 import { Switch } from "@/shared/switch";
+import { EditorDatePicker } from "@/calendar/editor-date-picker";
+import { ChevronDownIcon, CloseIcon } from "@/shared/icons";
 import { useDialog } from "@/shared/use-dialog";
 import { LocationField } from "@/calendar/location-field";
 import { PRIMARY_EVENT_CALENDAR_NAME, type LocalCalendar } from "@/calendar/local-calendars";
@@ -102,16 +104,23 @@ function chipText(type: "date" | "time", utc: number): string {
   return (new Date(utc).getFullYear() === new Date().getFullYear() ? CHIP_DATE : CHIP_DATE_YEAR).format(utc);
 }
 
-//a readable chip ("Fri, Oct 2", "6:00 AM") with the native input laid over it, so clicks and keys still reach the system picker
-function PickerChip({ type, utc, label, invalid, describedBy, min, onPick }: {
+// Dates open the inline calendar; times keep the native keyboard and picker controls.
+function PickerChip({ type, utc, label, invalid, describedBy, min, onPick, onOpenDate, expanded }: {
   type: "date" | "time";
   utc: number;
   label: string;
   invalid?: boolean;
   describedBy?: string;
   min?: string;
-  onPick: (value: string) => void;
+  onPick?: (value: string) => void;
+  onOpenDate?: () => void;
+  expanded?: boolean;
 }) {
+  if (type === "date") return (
+    <button type="button" className="calendar-editor-date-trigger" aria-label={`${label}: ${chipText(type, utc)}`} aria-expanded={expanded} data-invalid={invalid || undefined} aria-describedby={describedBy} onClick={onOpenDate}>
+      {chipText(type, utc)}<ChevronDownIcon />
+    </button>
+  );
   return (
     <span className="calendar-editor-pill" data-invalid={invalid || undefined}>
       <span aria-hidden="true">{chipText(type, utc)}</span>
@@ -122,8 +131,8 @@ function PickerChip({ type, utc, label, invalid, describedBy, min, onPick }: {
         aria-invalid={invalid || undefined}
         aria-describedby={describedBy}
         min={min}
-        step={type === "time" ? 300 : undefined}
-        value={type === "date" ? toDateInputValue(utc) : toTimeInputValue(utc)}
+        step={900}
+        value={toTimeInputValue(utc)}
         onClick={(event) => {
           try {
             event.currentTarget.showPicker?.();
@@ -132,7 +141,7 @@ function PickerChip({ type, utc, label, invalid, describedBy, min, onPick }: {
           }
         }}
         onChange={(event) => {
-          if (event.target.value) onPick(event.target.value);
+          if (event.target.value) onPick?.(event.target.value);
         }}
       />
     </span>
@@ -170,7 +179,23 @@ export function CalendarItemEditor({
   function onSave() {
     saveDraft(draft);
   }
+  const [dateTarget, setDateTarget] = useState<"start" | "end" | null>(null);
   const ref = useRef<HTMLDivElement>(null);
+  const pickerScrollTop = useRef(0);
+  function toggleDatePicker(target: "start" | "end") {
+    if (dateTarget === target) { closeDatePicker(); return; }
+    if (!dateTarget) pickerScrollTop.current = ref.current?.querySelector(".calendar-editor-body")?.scrollTop ?? 0;
+    setDateTarget(target);
+  }
+  function closeDatePicker() {
+    const target = dateTarget;
+    setDateTarget(null);
+    requestAnimationFrame(() => {
+      ref.current?.querySelector<HTMLButtonElement>(`button[aria-label^="${target === "end" ? "End date" : draft.allDay ? "Date:" : "Start date"}"]`)?.focus({ preventScroll: true });
+      const body = ref.current?.querySelector(".calendar-editor-body");
+      if (body) body.scrollTop = pickerScrollTop.current;
+    });
+  }
   const allDayId = useId();
   const eventCalendars = calendars.filter((calendar) => calendar.kind === "event");
   const chosenCalendar = draft.calendarId ?? defaultCalendarId;
@@ -182,7 +207,7 @@ export function CalendarItemEditor({
   const durationId = useId();
   const duration = draft.endUTC - draft.startUTC;
   const endsBeforeStart = duration <= 0;
-  useDialog(ref, { open, onEscape: onCancel });
+  useDialog(ref, { open, onEscape: dateTarget ? closeDatePicker : onCancel });
 
   return (
     <div className="calendar-editor-overlay" data-state={open ? "open" : "closed"} inert={!open}>
@@ -203,6 +228,10 @@ export function CalendarItemEditor({
           }
         }}
       >
+        <header className="calendar-editor-heading">
+          <div><span className="calendar-editor-eyebrow">{draft.id || draft.google ? "Edit your plan" : "Make time for something"}</span><h2>{draft.id || draft.google ? "Edit" : "New"} {draft.kind === "task" ? "task" : "event"}</h2></div>
+          <button type="button" className="icon-btn" aria-label="Close event editor" onClick={onCancel}><CloseIcon /></button>
+        </header>
         {draft.google ? (
           <p className="calendar-editor-source">
             Changes save to {draft.google.calendarName || "your Google calendar"} in Google Calendar.
@@ -212,7 +241,7 @@ export function CalendarItemEditor({
             {draft.imported ? "Imported calendars are read only. This event changes when its calendar syncs." : "This calendar is read-only."}
           </p>
         ) : null}
-        <fieldset className="calendar-editor-body" disabled={readOnly}>
+        <div className="calendar-editor-body"><fieldset className="calendar-editor-fields" disabled={readOnly}>
           <input
             className="calendar-editor-title"
             value={draft.title}
@@ -226,7 +255,7 @@ export function CalendarItemEditor({
                 onSave();
               }
             }}
-            placeholder={draft.kind === "task" ? "New task" : "New event"}
+            placeholder={draft.kind === "task" ? "What needs to get done?" : "Add a title"}
             autoFocus
           />
           <div className="calendar-editor-toolbar">
@@ -246,10 +275,11 @@ export function CalendarItemEditor({
             )}
             <div className="calendar-editor-toggle">
               <label htmlFor={allDayId}>All-day</label>
-              <Switch id={allDayId} checked={draft.allDay} onChange={(allDay) => onChange({ ...draft, allDay })} />
+              <Switch id={allDayId} checked={draft.allDay} onChange={(allDay) => { setDateTarget(null); onChange({ ...draft, allDay }); }} />
             </div>
           </div>
           <section className="calendar-editor-section" aria-label="Schedule">
+            <h3 className="calendar-editor-section-label">When</h3>
             <div className="calendar-editor-group">
               {draft.allDay ? (
                 <div className="calendar-editor-cell">
@@ -259,13 +289,8 @@ export function CalendarItemEditor({
                       type="date"
                       utc={draft.startUTC}
                       label="Date"
-                      onPick={(value) => {
-                        const [y, m, d] = value.split("-").map(Number);
-                        const start = new Date(y, m - 1, d).getTime();
-                        if (!Number.isFinite(start)) return;
-                        const days = Math.max(1, Math.round((draft.endUTC - draft.startUTC) / DAY_MS));
-                        onChange({ ...draft, startUTC: start, endUTC: new Date(y, m - 1, d + days).getTime() });
-                      }}
+                      expanded={dateTarget === "start"}
+                      onOpenDate={() => toggleDatePicker("start")}
                     />
                   </span>
                 </div>
@@ -278,11 +303,8 @@ export function CalendarItemEditor({
                         type="date"
                         utc={draft.startUTC}
                         label="Start date"
-                        onPick={(value) => {
-                          const startUTC = withDate(draft.startUTC, value);
-                          if (startUTC == null) return;
-                          onChange({ ...draft, startUTC, endUTC: startUTC + Math.max(MIN_DURATION_MS, duration) });
-                        }}
+                        expanded={dateTarget === "start"}
+                        onOpenDate={() => toggleDatePicker("start")}
                       />
                       <PickerChip
                         type="time"
@@ -303,13 +325,11 @@ export function CalendarItemEditor({
                         type="date"
                         utc={draft.endUTC}
                         label="End date"
+                        expanded={dateTarget === "end"}
+                        onOpenDate={() => toggleDatePicker("end")}
                         invalid={endsBeforeStart}
                         describedBy={durationId}
                         min={toDateInputValue(draft.startUTC)}
-                        onPick={(value) => {
-                          const endUTC = withDate(draft.endUTC, value);
-                          if (endUTC != null) onChange({ ...draft, endUTC });
-                        }}
                       />
                       <PickerChip
                         type="time"
@@ -331,9 +351,31 @@ export function CalendarItemEditor({
                 </>
               )}
             </div>
+            {dateTarget ? <EditorDatePicker
+              key={dateTarget}
+              utc={dateTarget === "end" ? draft.endUTC : draft.startUTC}
+              label={dateTarget === "end" ? "End date" : draft.allDay ? "Date" : "Start date"}
+              min={dateTarget === "end" ? toDateInputValue(draft.startUTC) : undefined}
+              onClose={closeDatePicker}
+              onPick={(value) => {
+                if (dateTarget === "end") {
+                  const endUTC = withDate(draft.endUTC, value);
+                  if (endUTC != null) onChange({ ...draft, endUTC });
+                } else if (draft.allDay) {
+                  const [y, m, d] = value.split("-").map(Number);
+                  const days = Math.max(1, Math.round(duration / DAY_MS));
+                  onChange({ ...draft, startUTC: new Date(y, m - 1, d).getTime(), endUTC: new Date(y, m - 1, d + days).getTime() });
+                } else {
+                  const startUTC = withDate(draft.startUTC, value);
+                  if (startUTC != null) onChange({ ...draft, startUTC, endUTC: startUTC + Math.max(MIN_DURATION_MS, duration) });
+                }
+                closeDatePicker();
+              }}
+            /> : null}
           </section>
           {draft.kind === "event" && !draft.google ? (
             <section className="calendar-editor-section" aria-label="Details">
+              <h3 className="calendar-editor-section-label">Details</h3>
               <div className="calendar-editor-group">
                 {showCalendarPicker ? (
                   <label className="calendar-editor-cell">
@@ -382,7 +424,7 @@ export function CalendarItemEditor({
               </div>
             </section>
           ) : null}
-        </fieldset>
+        </fieldset></div>
         <footer className="calendar-editor-actions">
           {onDelete ? (
             <button type="button" className="ghost-btn calendar-editor-danger" onClick={onDelete}>
@@ -397,7 +439,7 @@ export function CalendarItemEditor({
             </button>
             {readOnly ? null : (
               <button type="button" className="primary-btn" onClick={onSave}>
-                Save
+                {draft.id || draft.google ? "Save changes" : draft.kind === "task" ? "Create task" : "Create event"}
               </button>
             )}
           </div>
