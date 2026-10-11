@@ -9584,3 +9584,27 @@ h3 {
 
 .calendar-editor-section[aria-label="Details"] .calendar-editor-cell { grid-template-columns: 5rem minmax(0, 1fr); }
 @media (max-width: 600px) { .calendar-editor-section[aria-label="Details"] .calendar-editor-cell { grid-template-columns: minmax(0, 1fr); } }
+
+/* Dialog actions settle quickly and release the underlying page as soon as they close. */
+.calendar-editor-overlay[data-state="closed"],
+.modal-backdrop[data-state="closed"] {
+  pointer-events: none;
+  transition-duration: 90ms;
+}
+.calendar-editor-overlay[data-state="closed"] .calendar-editor,
+.modal-backdrop[data-state="closed"] .modal {
+  transition-duration: 90ms;
+}
+.calendar-editor .ghost-btn,
+.calendar-editor .primary-btn,
+.calendar-editor .icon-btn,
+.modal-actions button {
+  touch-action: manipulation;
+  transition: background-color 80ms ease-out, border-color 80ms ease-out, color 80ms ease-out, transform 80ms ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .calendar-editor .ghost-btn,
+  .calendar-editor .primary-btn,
+  .calendar-editor .icon-btn,
+  .modal-actions button { transition: none; }
+}

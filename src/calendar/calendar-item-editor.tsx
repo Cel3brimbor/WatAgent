@@ -165,7 +165,7 @@ export function CalendarItemEditor({
   defaultCalendarId = "events",
   readOnlyCalendarIds = [],
 }: Props) {
-  // Text stays local while typing so the calendar is not rebuilt per keystroke.
+  // Text stays local until save or a schedule change; moving focus to an action must not rebuild the calendar.
   const [draft, setDraft] = useState(initialDraft);
   const [previousDraft, setPreviousDraft] = useState(initialDraft);
   if (initialDraft !== previousDraft) {
@@ -216,9 +216,6 @@ export function CalendarItemEditor({
         className="calendar-editor"
         role="dialog"
         aria-modal="true"
-        onBlur={() => {
-          if (open && draft !== initialDraft) updateDraft(draft);
-        }}
         aria-label={draft.id || draft.google ? "Edit item" : "New item"}
         onKeyDown={(event) => {
           if (readOnly) return;
