@@ -47,7 +47,6 @@ function AssistantAnswer({
     wasSettling.current = settling;
     if (started && prev > 0 && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
       const shrinking = prev > next + 12;
-      animRef.current?.cancel();
       el.style.overflow = "hidden";
       const anim = el.animate(
         shrinking

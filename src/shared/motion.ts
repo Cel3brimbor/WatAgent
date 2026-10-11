@@ -39,7 +39,7 @@ export function animateSpring({
   let value = from;
   let speed = velocity;
   let frame = 0;
-  let last = performance.now();
+  let last = 0;
   let done = false;
 
   //reduced motion: skip the travel, land on the target
@@ -56,7 +56,7 @@ export function animateSpring({
   function tick(now: number) {
     if (done) return;
     //clamp long frames (tab switch) so the integrator can't explode
-    const elapsed = Math.max(0, Math.min(0.064, (now - last) / 1000));
+    const elapsed = last ? Math.min(0.064, (now - last) / 1000) : 1 / 60;
     last = now;
     for (let t = 0; t < elapsed; t += STEP_S) {
       const h = Math.min(STEP_S, elapsed - t);
