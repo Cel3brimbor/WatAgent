@@ -21,7 +21,6 @@ import { useSlotDrag } from "@/calendar/use-slot-drag";
 import { SlotDraft } from "@/calendar/slot-draft";
 import type { CalendarDraft } from "@/calendar/calendar-item-editor";
 import { timedDraftSlotForDay } from "@/calendar/editor-draft";
-import { PlusIcon } from "@/shared/icons";
 import { AllDayResizeHandle, allDayItems, useAllDayResize } from "@/calendar/all-day-bar";
 
 type Props = {
@@ -76,7 +75,17 @@ export function CalendarDayView({
         >
         <div className="calendar-all-day" data-empty={topped.length === 0}>
           <span className="calendar-all-day-label">All-day</span>
-          <div className="calendar-all-day-items">
+          <div
+            className="calendar-all-day-items"
+            onDoubleClick={
+              readOnly
+                ? undefined
+                : (event) => {
+                    if ((event.target as HTMLElement).closest(".calendar-strip")) return;
+                    onCreateAllDay();
+                  }
+            }
+          >
             {topped.map((item) => (
               <TimelineStrip
                 key={item.id}
@@ -86,16 +95,6 @@ export function CalendarDayView({
                 onCompleteTask={onCompleteTask}
               />
             ))}
-            {readOnly ? null : (
-              <button
-                type="button"
-                className="calendar-all-day-add"
-                onClick={onCreateAllDay}
-                aria-label="Add all-day item"
-              >
-                <PlusIcon />
-              </button>
-            )}
           </div>
         </div>
         </div>

@@ -145,7 +145,7 @@ import { settleCallingTools } from "@/agent/settle-tools";
 import type { ActivityPart, ChatMessage, ThoughtSegment, ToolEventRecord } from "@/agent/types";
 import { ApiError, apiFetch, apiJson, errorFromResponse } from "@/shared/api-base";
 import { uid } from "@/shared/ids";
-import { ChevronLeftIcon, ChevronRightIcon, CloseIcon } from "@/shared/icons";
+import { ChevronLeftIcon, ChevronRightIcon, CloseIcon, PlusIcon } from "@/shared/icons";
 import { SegmentedControl, type SegmentOption } from "@/shared/segmented-control";
 import { usePresence } from "@/shared/use-presence";
 import type { AuthUser } from "@/auth/types";
@@ -2238,6 +2238,17 @@ export function CalendarApp({
               </div>
               <SegmentedControl label="Calendar view" value={shownView} options={VIEW_OPTIONS} onChange={changeView} />
             </>
+          ) : null}
+          {section === "calendar" ? (
+            <button
+              type="button"
+              className="icon-btn calendar-add-btn"
+              aria-label="New event"
+              title="New event"
+              onClick={() => setDraft(defaultTimedDraft(focus, 9))}
+            >
+              <PlusIcon />
+            </button>
           ) : null}
           <button
             type="button"
