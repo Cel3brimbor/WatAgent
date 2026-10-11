@@ -1,6 +1,4 @@
 import assert from "node:assert/strict";
-import { createSlotSelectionStore } from "./use-slot-drag";
-import { createDraftTitleStore } from "./draft-title-preview";
 import { HOUR_PX, quarterHourFromClientY, quarterHourRange } from "./calendar-grid";
 import { defaultTimedDraft } from "./calendar-item-editor";
 import { timedDraftSlotForDay } from "./editor-draft";
@@ -44,35 +42,3 @@ assert.match(formatHourLabel(9.25), /15/);
 assert.match(formatHourLabel(9.5), /30/);
 assert.match(formatHourLabel(9.75), /45/);
 console.log("Quarter-hour drag checks passed: snapping, reverse drag, minimum duration, midnight, editor preview and labels.");
-
-// Pointer updates notify only the overlay subscribers, and equal snapped ranges are ignored.
-const selectionStore = createSlotSelectionStore<string>();
-let paints = 0;
-const unsubscribe = selectionStore.subscribe(() => paints++);
-selectionStore.set({ key: "Monday", start: 9.25, end: 9.5 });
-const firstSnapshot = selectionStore.getSnapshot();
-selectionStore.set({ key: "Monday", start: 9.25, end: 9.5 });
-assert.equal(selectionStore.getSnapshot(), firstSnapshot, "Same snapped range keeps a stable snapshot");
-assert.equal(paints, 1);
-selectionStore.set({ key: "Monday", start: 9.25, end: 9.75 });
-assert.equal(paints, 2);
-selectionStore.set(null);
-assert.equal(selectionStore.getSnapshot(), null);
-assert.equal(paints, 3);
-unsubscribe();
-selectionStore.set({ key: "Tuesday", start: 0, end: 0.25 });
-assert.equal(paints, 3);
-
-const titles = createDraftTitleStore();
-let titlePaints = 0;
-const stopTitle = titles.subscribe(() => titlePaints++);
-titles.set("Practice piano");
-assert.equal(titles.getSnapshot(), "Practice piano");
-titles.set("Practice piano");
-assert.equal(titlePaints, 1, "Equal names do not repaint the preview");
-titles.set("");
-assert.equal(titles.getSnapshot(), "", "Clearing the name is a live update");
-titles.set(null);
-assert.equal(titles.getSnapshot(), null, "Closing the editor clears the preview name");
-stopTitle();
-console.log("Lightweight selection and live-title subscription checks passed.");

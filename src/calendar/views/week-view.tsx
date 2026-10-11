@@ -22,8 +22,9 @@ import { intervalMinutes, labelEvery } from "@/calendar/time-scale";
 import { useColumnWidths } from "@/calendar/use-column-width";
 import { useNowMs } from "@/calendar/calendar-item-editor";
 import { useSlotDrag } from "@/calendar/use-slot-drag";
-import { SlotDragPreview } from "@/calendar/slot-draft";
+import { SlotDraft } from "@/calendar/slot-draft";
 import type { CalendarDraft } from "@/calendar/calendar-item-editor";
+import { timedDraftSlotForDay } from "@/calendar/editor-draft";
 import { AllDayResizeHandle, allDayItems, useAllDayResize } from "@/calendar/all-day-bar";
 
 type Props = {
@@ -148,6 +149,10 @@ export function CalendarWeekView({
           const { timed } = dayLayouts[dayIndex];
           const nowTop = isToday(date) ? nowLineTop(now, dayStart.getTime(), hourPx) : null;
           const tone = `${isToday(date) ? " is-today" : ""}${date.getDay() % 6 === 0 ? " is-weekend" : ""}`;
+          const selection =
+            slots.selection?.key === dayIndex
+              ? slots.selection
+              : timedDraftSlotForDay(editorDraft ?? null, date);
           return (
             <div
               key={date.toISOString()}
@@ -166,7 +171,7 @@ export function CalendarWeekView({
                     className="calendar-hour-slot"
                     style={{ height: hourPx }}
                     aria-label={`Create at ${formatHourLabel(hour)}`}
-                    onClick={(event) => { if (event.detail === 0) onCreateTimed(date, hour); }}
+                    onClick={() => onCreateTimed(date, hour)}
                   />
                 )
               ))}
@@ -185,7 +190,15 @@ export function CalendarWeekView({
                   />
                 </div>
               ))}
-              <SlotDragPreview store={slots.selectionStore} slotKey={dayIndex} day={date} editorDraft={editorDraft} hourPx={hourPx} />
+              {selection ? (
+                <SlotDraft
+                  start={selection.start}
+                  end={selection.end}
+                  kind={editorDraft?.kind}
+                  title={editorDraft?.title}
+                  hourPx={hourPx}
+                />
+              ) : null}
               {nowTop != null ? (
                 <div className="calendar-now-line" style={{ top: nowTop }} />
               ) : null}
