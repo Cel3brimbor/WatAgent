@@ -1,6 +1,7 @@
 "use client";
 
 import { useId, useRef } from "react";
+import { useDialogAction } from "@/shared/use-dialog-action";
 import { useDialog } from "@/shared/use-dialog";
 
 type Props = {
@@ -14,23 +15,28 @@ type Props = {
 };
 
 export function ConfirmDialog({ title, message, confirmLabel = "Delete", open = true, onCancel, onConfirm }: Props) {
+  const action = useDialogAction(open);
+  const cancel = () => action.run(onCancel);
+  const confirm = () => action.run(onConfirm);
   const ref = useRef<HTMLDivElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
   const titleId = useId();
   const messageId = useId();
   //destructive confirms start on the safe choice
-  useDialog(ref, { open, onEscape: onCancel, initialFocus: cancelRef });
+  useDialog(ref, { open, onEscape: cancel, initialFocus: cancelRef });
 
   return (
     <div
       className="modal-backdrop"
       role="presentation"
-      data-state={open ? "open" : "closed"}
+      data-state={action.visible ? "open" : "closed"}
+      data-pending={action.pending || undefined} onAnimationEnd={(event) => { if (event.target === event.currentTarget && action.pending) action.complete(); }}
       inert={!open}
-      onClick={onCancel}
+      onClick={cancel}
     >
       <div
         ref={ref}
+        inert={action.pending}
         className="modal"
         role="alertdialog"
         aria-modal="true"
@@ -43,10 +49,10 @@ export function ConfirmDialog({ title, message, confirmLabel = "Delete", open = 
           {message}
         </p>
         <div className="modal-actions">
-          <button ref={cancelRef} type="button" className="ghost-btn" onClick={onCancel}>
+          <button ref={cancelRef} type="button" className="ghost-btn" onClick={cancel}>
             Cancel
           </button>
-          <button type="button" className="danger-btn" onClick={onConfirm}>
+          <button type="button" className="danger-btn" onClick={confirm}>
             {confirmLabel}
           </button>
         </div>
