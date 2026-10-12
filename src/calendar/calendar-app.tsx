@@ -27,10 +27,13 @@ import {
   localDayBounds,
   localeWeekStartsOn,
   shiftFocus,
+  focusEnteringWorkweek,
+  stageViewKey,
   startOfLocalDay,
   startOfWeek,
   startOfWorkWeek,
   viewForToday,
+  viewsShareTimedWeek,
 } from "@/calendar/date-utils";
 import { removeImportedCalendar } from "@/calendar/client";
 import { externalCalendarId } from "@/calendar/external-calendars";
@@ -902,6 +905,12 @@ export function CalendarApp({
   const [calendarSpaces, setCalendarSpaces] = useState<CalendarSpace[]>(() => readCalendarSpaces().spaces);
   const [activeCalendarSpaceId, setActiveCalendarSpaceId] = useState(() => readCalendarSpaces().activeId);
   const [openDisplayId, setOpenDisplayId] = useState<string | null>(null);
+  const [displayView, setDisplayView] = useState<CalendarView>(() => readCalendarView());
+  const displayViewRef = useRef(displayView);
+  displayViewRef.current = displayView;
+  const viewRef = useRef(view);
+  viewRef.current = view;
+  const lastOpenDisplayIdRef = useRef<string | null>(null);
   const [importedCalendars, setImportedCalendars] = useState<ImportedCalendar[]>(() => splitCampusCalendars(readImportedCalendars(), readCampusCalendars()).imported);
   const [campusCalendarFeeds, setCampusCalendarFeeds] = useState<ImportedCalendar[]>(() => splitCampusCalendars(readImportedCalendars(), readCampusCalendars()).campus);
   const [mergedCalendars, setMergedCalendars] = useState<MergedCalendar[]>(() => readMergedCalendars([...readImportedCalendars(), ...readCampusCalendars()]));
@@ -1100,14 +1109,43 @@ export function CalendarApp({
     : "";
   const displayForGrid = useContentStable(viewingDisplay, displayFilterKey);
   const displayForTags = useContentStable(viewingDisplay, viewingDisplay ? `on\n${smartTagKey(viewingDisplay.smartTags)}` : "off");
-  const shownView = viewingDisplay?.view ?? view;
+  //like main `view`, kept out of calendarSpaces until the display closes so toggles stay cheap
+  const shownView = viewingDisplay ? displayView : view;
+
+  const persistDisplayView = useCallback((spaceId: string, nextView: CalendarView) => {
+    setCalendarSpaces((current) => {
+      const space = current.find((entry) => entry.id === spaceId);
+      if (!space || space.view === nextView) return current;
+      return mapCalendarSpace(current, spaceId, (entry) => ({ ...entry, view: nextView }));
+    });
+  }, []);
+
   const changeView = useCallback((next: CalendarView) => {
     if (viewingDisplay) {
-      setCalendarSpaces((current) => mapCalendarSpace(current, viewingDisplay.id, (space) => ({ ...space, view: next })));
+      const prev = displayViewRef.current;
+      if (next === "workweek" && prev !== "workweek") {
+        setFocus((current) => focusEnteringWorkweek(current, weekStartsOn));
+      }
+      if (next !== prev) setDisplayView(next);
       return;
     }
+    const prev = viewRef.current;
+    if (next === "workweek" && prev !== "workweek") {
+      setFocus((current) => focusEnteringWorkweek(current, weekStartsOn));
+    }
     setView(next);
-  }, [viewingDisplay]);
+  }, [viewingDisplay, weekStartsOn]);
+
+  useEffect(() => {
+    const previous = lastOpenDisplayIdRef.current;
+    lastOpenDisplayIdRef.current = openDisplayId;
+    if (previous && previous !== openDisplayId) {
+      persistDisplayView(previous, displayViewRef.current);
+    }
+    if (!openDisplayId) return;
+    const space = calendarSpaces.find((entry) => entry.id === openDisplayId);
+    if (space) setDisplayView(space.view);
+  }, [openDisplayId, persistDisplayView]);
 
   const period = periodStart(focus, shownView, weekStartsOn);
   const displayKey = viewingDisplay?.id ?? "main";
@@ -1117,7 +1155,11 @@ export function CalendarApp({
     const onStage = section === "calendar" || viewingDisplay != null;
     if (!onStage || section !== last.section) return "none";
     if (displayKey !== last.spaceId) return "none";
-    if (shownView !== last.view) return VIEW_DEPTH[shownView] > VIEW_DEPTH[last.view] ? "in" : "out";
+    if (shownView !== last.view) {
+      if (viewsShareTimedWeek(shownView, last.view)) return "none";
+      if (period === last.period) return "none";
+      return VIEW_DEPTH[shownView] > VIEW_DEPTH[last.view] ? "in" : "out";
+    }
     if (period === last.period) return "none";
     return period > last.period ? "next" : "prev";
   }, [period, shownView, section, displayKey, viewingDisplay]);
@@ -1125,9 +1167,9 @@ export function CalendarApp({
     lastPeriodRef.current = { period, view: shownView, section, spaceId: displayKey };
   }, [period, shownView, section, displayKey]);
   const stageKey = viewingDisplay
-    ? `${viewingDisplay.id}:${shownView}:${period}`
+    ? `${viewingDisplay.id}:${stageViewKey(shownView)}:${period}`
     : section === "calendar"
-      ? `main:${shownView}:${period}`
+      ? `main:${stageViewKey(shownView)}:${period}`
       : section;
   useEffect(() => {
     if (viewingDisplay) setDraft(null);
@@ -2545,6 +2587,7 @@ export function CalendarApp({
     setChatOpen((value) => !value);
   });
   const closeQuickDisplay = useStableCallback(() => {
+    if (openDisplayId) persistDisplayView(openDisplayId, displayViewRef.current);
     setOpenDisplayId(null);
   });
   const sideFocus = useStableCallback((date: Date) => {

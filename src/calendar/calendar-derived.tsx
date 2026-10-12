@@ -370,6 +370,22 @@ function recolorOnlyConfigChange(previous: DerivedConfig, config: DerivedConfig)
   return previous.colors !== config.colors || previous.colorOverrides !== config.colorOverrides;
 }
 
+function calendarSpaceViewOnlyChange(previous: DerivedConfig, config: DerivedConfig): boolean {
+  const a = previous.calendarSpaces;
+  const b = config.calendarSpaces;
+  if (a === b) return false;
+  if (a.length !== b.length) return false;
+  let viewMoved = false;
+  for (let i = 0; i < a.length; i++) {
+    const left = a[i];
+    const right = b[i];
+    if (left.id !== right.id) return false;
+    if (left.view !== right.view) viewMoved = true;
+    if (JSON.stringify({ ...left, view: "" }) !== JSON.stringify({ ...right, view: "" })) return false;
+  }
+  return viewMoved;
+}
+
 function paintOnlyConfig(previous: DerivedConfig, config: DerivedConfig): boolean {
   if (
     previous.pendingChanges !== config.pendingChanges
@@ -746,6 +762,8 @@ export function DerivedProvider({
     configRef.current = config;
     const live = liveConfig();
     if (live === config && recolorOnlyConfigChange(previous, config)) {
+      shown = slices;
+    } else if (live === config && calendarSpaceViewOnlyChange(previous, config)) {
       shown = slices;
     } else if (live === config && paintOnlyConfig(previous, config)) {
       const snapshot = live;
