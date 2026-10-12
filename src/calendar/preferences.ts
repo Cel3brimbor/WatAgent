@@ -261,6 +261,89 @@ export function calendarSwatchColor(
   return colors.event;
 }
 
+/**css variable for a calendar swatch. chips reference it so a recolor skips the grid*/
+export function calendarColorVar(calendarId: string): string {
+  let token = "";
+  for (let index = 0; index < calendarId.length; index += 1) {
+    const code = calendarId.charCodeAt(index);
+    const safe = (code >= 48 && code <= 57)
+      || (code >= 65 && code <= 90)
+      || (code >= 97 && code <= 122)
+      || code === 45
+      || code === 95;
+    token += safe ? calendarId[index] : `_${code.toString(16)}`;
+  }
+  return `--cal-${token || "x"}`;
+}
+
+/**inline color that follows calendarColorVar. a hex fallback covers a calendar not in the rule yet*/
+export function calendarPaint(calendarId: string, fallback?: string): string {
+  const name = calendarColorVar(calendarId);
+  return fallback && HEX_COLOR.test(fallback) ? `var(${name}, ${fallback})` : `var(${name})`;
+}
+
+/**:root rule for resolved swatches. values that are not hex are dropped*/
+export function calendarColorRule(colorsById: Record<string, string>): string {
+  let body = "";
+  for (const [id, color] of Object.entries(colorsById)) {
+    if (!id || !HEX_COLOR.test(color)) continue;
+    body += `${calendarColorVar(id)}:${color.toLowerCase()};`;
+  }
+  return body ? `:root{${body}}` : "";
+}
+
+/**builtin kind aliases on :root and .app-frame without a react style pass on the shell*/
+export function syncCalendarKindVars(colors: CalendarColors): void {
+  if (typeof document === "undefined") return;
+  const root = document.documentElement;
+  const frame = document.querySelector<HTMLElement>(".app-frame");
+  const event = colors.event.toLowerCase();
+  const task = colors.task.toLowerCase();
+  const google = colors.google.toLowerCase();
+  root.style.setProperty("--event-color", event);
+  root.style.setProperty("--task-color", task);
+  root.style.setProperty("--gcal-color", google);
+  frame?.style.setProperty("--event-color", event);
+  frame?.style.setProperty("--task-color", task);
+  frame?.style.setProperty("--gcal-color", google);
+}
+
+/**paint before react commits so grid chips and swatches do not wait on the tree*/
+export function paintCalendarSwatchLive(calendarId: string, color: string): void {
+  if (typeof document === "undefined" || !HEX_COLOR.test(color)) return;
+  const hex = color.toLowerCase();
+  const root = document.documentElement;
+  root.style.setProperty(calendarColorVar(calendarId), hex);
+  if (calendarId === "events") {
+    const frame = document.querySelector<HTMLElement>(".app-frame");
+    frame?.style.setProperty("--event-color", hex);
+    root.style.setProperty("--event-color", hex);
+  } else if (calendarId === "tasks") {
+    const frame = document.querySelector<HTMLElement>(".app-frame");
+    frame?.style.setProperty("--task-color", hex);
+    root.style.setProperty("--task-color", hex);
+  }
+}
+
+export const CALENDAR_COLOR_STYLE_ID = "watagent-calendar-color-vars";
+
+/**baseline :root vars when calendars are added; per-click tweaks use paintCalendarSwatchLive*/
+export function installCalendarColorStyles(resolved: Record<string, string>): void {
+  if (typeof document === "undefined") return;
+  const css = calendarColorRule(resolved);
+  let el = document.getElementById(CALENDAR_COLOR_STYLE_ID) as HTMLStyleElement | null;
+  if (!css) {
+    if (el) el.textContent = "";
+    return;
+  }
+  if (!el) {
+    el = document.createElement("style");
+    el.id = CALENDAR_COLOR_STYLE_ID;
+    document.head.appendChild(el);
+  }
+  if (el.textContent !== css) el.textContent = css;
+}
+
 const OVERRIDES_KEY = "watagent.calendar.colorOverrides.v1";
 
 export function readColorOverrides(): Record<string, string> {

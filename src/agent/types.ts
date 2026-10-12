@@ -39,6 +39,7 @@ export type ChatSession = {
   createdAt: number;
   updatedAt: number;
   open: boolean;
+  pinned: boolean;
 };
 
 export type LiveActivity = {

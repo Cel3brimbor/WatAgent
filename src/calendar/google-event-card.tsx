@@ -8,6 +8,14 @@ import { usePresence } from "@/shared/use-presence";
 
 //matches the card's exit transition so the node unmounts as the fade ends
 const PEEK_EXIT_MS = 140;
+const PEEK_HEX = /^#[0-9a-fA-F]{6}$/;
+
+//a css var follows a recolor while the card is open. hex is the google fallback
+function peekColor(color: string | undefined): string | null {
+  if (!color) return null;
+  if (color.startsWith("var(") || PEEK_HEX.test(color)) return color;
+  return null;
+}
 
 export type EventPeekHandle = {
   open: (item: TimelineItem, anchor?: DOMRect) => void;
@@ -125,16 +133,9 @@ export function GoogleEventCard({ item, anchor, open = true, onClose, onEdit, on
   const location = (details?.location ?? item.location)?.trim() || "";
   const description = (details?.description ?? item.description)?.trim() || "";
   const calendarName = details?.calendarName?.trim() || calendarLabel?.trim() || "Agent Main";
-  const googleColor = details?.calendarColor;
-  const ownColor = item.calendarColor;
-  const color =
-    googleColor && /^#[0-9a-fA-F]{6}$/.test(googleColor)
-      ? googleColor
-      : ownColor && /^#[0-9a-fA-F]{6}$/.test(ownColor)
-        ? ownColor
-        : details
-          ? "var(--gcal-color)"
-          : "var(--event-color)";
+  const color = peekColor(item.calendarColor)
+    ?? peekColor(details?.calendarColor)
+    ?? (details ? "var(--gcal-color)" : "var(--event-color)");
   const htmlLink = safeHttps(details?.htmlLink, ["google.com"]);
   const meetLink = safeHttps(details?.meetLink, ["meet.google.com"]);
   const locationHref = location

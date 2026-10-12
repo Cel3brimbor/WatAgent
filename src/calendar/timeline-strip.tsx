@@ -30,7 +30,7 @@ const HEX = /^#[0-9a-fA-F]{6}$/;
 const VERB_LABEL = { add: "Added", delete: "Removed", edit: "Updated" } as const;
 
 function stripColorStyle(color: string | undefined): CSSProperties | undefined {
-  if (!color || !HEX.test(color)) return undefined;
+  if (!color || (!HEX.test(color) && !color.startsWith("var("))) return undefined;
   return { "--strip-color": color } as CSSProperties;
 }
 
@@ -45,7 +45,7 @@ function tagPaint(item: TimelineItem, calendarColor: string | undefined): { clas
     className: ` is-tag-${cover}`,
     style: {
       "--tag-color": tag.color,
-      ...(calendarColor && HEX.test(calendarColor) ? { "--strip-color": calendarColor } : {}),
+      ...stripColorStyle(calendarColor),
     } as CSSProperties,
   };
 }

@@ -23,7 +23,7 @@ import {
   type ContextMenuState,
 } from "@/shared/context-menu";
 import { ConfirmDialog } from "@/shared/confirm-dialog";
-import { CloseIcon, PlusIcon } from "@/shared/icons";
+import { CloseIcon, PinIcon, PlusIcon } from "@/shared/icons";
 import { usePresence } from "@/shared/use-presence";
 
 export type ChatTabSession = {
@@ -32,6 +32,7 @@ export type ChatTabSession = {
   open: boolean;
   createdAt?: number;
   updatedAt?: number;
+  pinned?: boolean;
 };
 
 type Props = {
@@ -43,6 +44,7 @@ type Props = {
   onDeleteChat: (chatId: string) => void;
   onCloseTab: (chatId: string) => void;
   onReopenChat: (chatId: string) => void;
+  onPinChat: (chatId: string, pinned: boolean) => void;
   onReorderChats: (orderedIds: string[]) => void;
   onStop: () => void;
   restricted?: boolean;
@@ -57,6 +59,7 @@ export function ChatTabStrip({
   onDeleteChat,
   onCloseTab,
   onReopenChat,
+  onPinChat,
   onReorderChats,
   onStop,
   restricted = false,
@@ -121,6 +124,11 @@ export function ChatTabStrip({
     const chat = chats.find((item) => item.id === chatId);
     if (!chat) return [];
     return [
+      {
+        id: "pin",
+        label: chat.pinned ? "Unpin" : "Pin",
+        onSelect: () => onPinChat(chat.id, !chat.pinned),
+      },
       { id: "rename", label: "Rename", onSelect: () => startRename(chat) },
       {
         id: "delete",
@@ -294,7 +302,7 @@ function SortableChatTab({
     <div
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={`chat-tab${active ? " is-active" : ""}${isDragging ? " is-dragging" : ""}`}
+      className={`chat-tab${active ? " is-active" : ""}${chat.pinned ? " is-pinned" : ""}${isDragging ? " is-dragging" : ""}`}
       onContextMenu={onContextMenu}
       {...attributes}
       {...listeners}
@@ -316,7 +324,15 @@ function SortableChatTab({
           onPointerDown={(event) => event.stopPropagation()}
         />
       ) : (
-        <button type="button" role="tab" aria-selected={active} title={chat.title} onClick={onSelect}>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={active}
+          aria-label={chat.pinned ? `${chat.title}, pinned` : undefined}
+          title={chat.title}
+          onClick={onSelect}
+        >
+          {chat.pinned ? <PinIcon className="chat-pin-icon" /> : null}
           <span className="chat-tab-label">{chat.title}</span>
         </button>
       )}

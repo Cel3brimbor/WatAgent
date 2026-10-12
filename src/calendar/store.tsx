@@ -18,7 +18,7 @@ import { syncGoogleCalendar } from "@/calendar/google-calendar-client";
 import type { CalendarChange } from "@/agent/stream";
 import type { ChatMessage, ChatSession } from "@/agent/types";
 import { createSaveQueue } from "@/agent/chat-save-queue";
-import { deleteChatSession, loadChatSessions, saveChatSession } from "@/agent/snapshots-client";
+import { deleteChatSession, loadChatSessions, saveChatPin, saveChatSession } from "@/agent/snapshots-client";
 import {
   approvePending,
   getCalendarSettings,
@@ -80,6 +80,7 @@ type ChatActions = {
   reopenChat: (chatId: string) => void;
   deleteChat: (chatId: string) => void;
   reorderChats: (orderedIds: string[]) => void;
+  setChatPinned: (chatId: string, pinned: boolean) => void;
   applyAutoTitle: (chatId: string, title: string) => void;
   setChatMessages: (messages: ChatMessage[]) => void;
   persistActiveChat: () => void;
@@ -116,7 +117,30 @@ function emptyChat(): ChatSession {
     createdAt: now,
     updatedAt: now,
     open: true,
+    pinned: false,
   };
+}
+
+//pinned open tabs stay on the left. closed chats keep their order.
+function preferOpenPinned(chats: ChatSession[]): ChatSession[] {
+  const openPinned: ChatSession[] = [];
+  const openRest: ChatSession[] = [];
+  const closed: ChatSession[] = [];
+  for (const chat of chats) {
+    if (!chat.open) closed.push(chat);
+    else if (chat.pinned) openPinned.push(chat);
+    else openRest.push(chat);
+  }
+  return [...openPinned, ...openRest, ...closed];
+}
+
+function chatIsStored(chat: ChatSession): boolean {
+  return chat.messages.some(
+    (message) =>
+      message.content.trim().length > 0 ||
+      (message.calendarIds?.length ?? 0) > 0 ||
+      (message.activity?.length ?? 0) > 0,
+  );
 }
 
 function pickActive(state: ChatState): ChatSession | null {
@@ -150,7 +174,12 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
   const pendingChangesRef = useRef(pendingChanges);
   pendingChangesRef.current = pendingChanges;
   const chatStateRef = useRef(chatState);
-  const enqueueSave = useRef(createSaveQueue<ChatSession>((_chatId, snapshot) => saveChatSession(snapshot)));
+  const enqueueSave = useRef(
+    createSaveQueue<ChatSession>((chatId, snapshot) => {
+      const pinned = chatStateRef.current.chats.find((chat) => chat.id === chatId)?.pinned ?? snapshot.pinned;
+      return saveChatSession({ ...snapshot, pinned });
+    }),
+  );
   const noticeListeners = useRef(new Set<NoticeListener>());
 
   const raiseNotice = useCallback((message: string) => {
@@ -234,8 +263,17 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
       try {
         const chats = await loadChatSessions();
         if (cancelled) return;
-        const opened = chats.map((chat, index) => ({ ...chat, open: index === 0 }));
-        updateChats(() => ({ chats: opened, activeChatId: opened[0]?.id ?? null }));
+        //the list comes back pins first. open the chat that was actually touched last.
+        let recentId: string | null = null;
+        let recentAt = -1;
+        for (const chat of chats) {
+          if (chat.updatedAt >= recentAt) {
+            recentAt = chat.updatedAt;
+            recentId = chat.id;
+          }
+        }
+        const opened = preferOpenPinned(chats.map((chat) => ({ ...chat, open: chat.id === recentId })));
+        updateChats(() => ({ chats: opened, activeChatId: recentId }));
       } catch {
         logFailure("chat load")();
       } finally {
@@ -530,7 +568,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
   const reopenChat = useCallback(
     (chatId: string) => {
       updateChats((state) => ({
-        chats: state.chats.map((chat) => (chat.id === chatId ? { ...chat, open: true } : chat)),
+        chats: preferOpenPinned(state.chats.map((chat) => (chat.id === chatId ? { ...chat, open: true } : chat))),
         activeChatId: chatId,
       }));
     },
@@ -558,10 +596,44 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
         const byId = new Map(state.chats.map((chat) => [chat.id, chat]));
         const ordered = orderedIds.map((id) => byId.get(id)).filter((chat): chat is ChatSession => Boolean(chat));
         const rest = state.chats.filter((chat) => !orderedIds.includes(chat.id));
-        return { ...state, chats: [...ordered, ...rest] };
+        return { ...state, chats: preferOpenPinned([...ordered, ...rest]) };
       });
     },
     [updateChats],
+  );
+
+  const setChatPinned = useCallback(
+    (chatId: string, pinned: boolean) => {
+      const previous = chatStateRef.current.chats.find((chat) => chat.id === chatId);
+      if (!previous || previous.pinned === pinned) return;
+      updateChats((state) => ({
+        ...state,
+        chats: preferOpenPinned(state.chats.map((chat) => (chat.id === chatId ? { ...chat, pinned } : chat))),
+      }));
+      //a brand new chat is not a row yet. the next message save carries the flag.
+      if (!chatIsStored(previous)) return;
+      void enqueueSave.current
+        .after(chatId, async () => {
+          const live = chatStateRef.current.chats.find((chat) => chat.id === chatId);
+          if (!live || live.pinned !== pinned) return;
+          try {
+            await saveChatPin(chatId, pinned);
+          } catch {
+            const current = chatStateRef.current.chats.find((chat) => chat.id === chatId);
+            if (current?.pinned === pinned) {
+              updateChats((state) => ({
+                ...state,
+                chats: preferOpenPinned(
+                  state.chats.map((chat) => (chat.id === chatId ? { ...chat, pinned: !pinned } : chat)),
+                ),
+              }));
+              raiseNotice(pinned ? "Couldn't pin that chat." : "Couldn't unpin that chat.");
+            }
+          }
+        })
+        .catch(logFailure("chat pin"));
+    },
+    [raiseNotice, updateChats],
   );
 
   const applyAutoTitle = useCallback(
@@ -680,6 +752,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
       reopenChat,
       deleteChat,
       reorderChats,
+      setChatPinned,
       applyAutoTitle,
       setChatMessages,
       persistActiveChat,
@@ -694,6 +767,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
       reopenChat,
       deleteChat,
       reorderChats,
+      setChatPinned,
       applyAutoTitle,
       setChatMessages,
       persistActiveChat,

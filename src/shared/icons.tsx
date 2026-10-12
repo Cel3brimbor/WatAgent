@@ -239,6 +239,15 @@ export function ShieldCheckIcon(props: IconProps) {
   );
 }
 
+export function PinIcon(props: IconProps) {
+  return (
+    <Glyph {...props} strokeWidth={1.6}>
+      <path d="M6.15 2.7h3.7l-.6 2.85 1.75 1.2H5l1.75-1.2z" />
+      <path d="M8 6.75v6.55" />
+    </Glyph>
+  );
+}
+
 export function RouteIcon(props: IconProps) {
   return (
     <Glyph {...props} strokeWidth={1.6}>
