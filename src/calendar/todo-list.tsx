@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { memo, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import type { KeywordTask } from "@/calendar/keyword-tasks";
 import type { SmartTagHit } from "@/calendar/smart-tags";
 import type { CalendarItemDoc } from "@/calendar/types";
@@ -8,6 +8,7 @@ import { addDays, startOfLocalDay } from "@/calendar/date-utils";
 import { ChevronIcon } from "@/calendar/sidebar-icons";
 import { Disclosure } from "@/shared/disclosure";
 import { CheckIcon, PlusIcon } from "@/shared/icons";
+import { afterPaint } from "@/shared/after-paint";
 import { useFlip } from "@/shared/use-flip";
 
 type Props = {
@@ -21,7 +22,7 @@ type Props = {
   onKeywordOpen?: (task: KeywordTask) => void;
   /**color a calendar task when a task smart tag matches it*/
   tagForItem?: (item: CalendarItemDoc) => SmartTagHit | null;
-  /** The keyword rules panel, shown below the list. */
+  /**the keyword rules panel, shown below the list*/
   rules?: ReactNode;
 };
 
@@ -33,14 +34,15 @@ type Row =
   | { kind: "own"; id: string; title: string; dueUTC: number; allDay: boolean; done: boolean; item: CalendarItemDoc }
   | { kind: "keyword"; id: string; title: string; dueUTC: number; allDay: boolean; done: boolean; task: KeywordTask };
 
-type GroupId = "overdue" | "today" | "week" | "later" | "done";
+type ScheduleGroup = "overdue" | "today" | "week" | "later";
+type GroupId = ScheduleGroup | "done";
+type FilterId = "all" | "today" | "upcoming" | "completed";
 
-const GROUP_TITLES: Record<GroupId, string> = {
+const GROUP_TITLES: Record<ScheduleGroup, string> = {
   overdue: "Overdue",
   today: "Today",
   week: "Next 7 days",
   later: "Later",
-  done: "Done",
 };
 
 //nearby days read as words, the rest of the week as a weekday, everything else as a date
@@ -57,23 +59,74 @@ function whenLabel(dueUTC: number, allDay: boolean, today: Date): string {
   return `${day}, ${due.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}`;
 }
 
-function groupOf(row: Row, now: number, today: Date): GroupId {
-  if (row.done) return "done";
-  //an all-day task stays on time through its whole day
+function isPastDay(dueUTC: number, today: Date): boolean {
+  return startOfLocalDay(new Date(dueUTC)).getTime() < today.getTime();
+}
+
+//an all-day task stays on time through its whole day. a timed task is late once its time passes
+function scheduleGroup(row: { dueUTC: number; allDay: boolean }, now: number, today: Date): ScheduleGroup {
   if (row.dueUTC < (row.allDay ? today.getTime() : now)) return "overdue";
   if (row.dueUTC < addDays(today, 1).getTime()) return "today";
   if (row.dueUTC < addDays(today, 7).getTime()) return "week";
   return "later";
 }
 
+//finished work from a previous day leaves the list. today and anything ahead stay put, crossed out
+export function groupOf(row: { dueUTC: number; allDay: boolean; done: boolean }, now: number, today: Date, holdPast = false): GroupId {
+  //holdPast keeps a just-checked previous day on screen long enough to strike it through
+  if (row.done && isPastDay(row.dueUTC, today) && !holdPast) return "done";
+  return scheduleGroup(row, now, today);
+}
+
+function sourceDone(id: string, items: CalendarItemDoc[], tasks: KeywordTask[]): boolean | undefined {
+  if (id.startsWith("ktask:")) {
+    return tasks.find((task) => task.key === id.slice("ktask:".length))?.done;
+  }
+  const item = items.find((entry) => entry.id === id);
+  return item && item.calendar.kind === "task" ? Boolean(item.calendar.completed) : undefined;
+}
+
 export const TodoList = memo(function TodoList({ items, onOpen, onComplete, onCreate, keywordTasks = [], calendarName, onKeywordComplete, onKeywordOpen, tagForItem, rules }: Props) {
   const listRef = useRef<HTMLDivElement>(null);
+  const writeGen = useRef(new Map<string, number>());
+  const sentGen = useRef(new Map<string, number>());
+  const onCompleteRef = useRef(onComplete);
+  const onKeywordCompleteRef = useRef(onKeywordComplete);
+  const itemsRef = useRef(items);
+  const tasksRef = useRef(keywordTasks);
+  const itemsChanged = itemsRef.current !== items;
+  const tasksChanged = tasksRef.current !== keywordTasks;
+  itemsRef.current = items;
+  tasksRef.current = keywordTasks;
+  onCompleteRef.current = onComplete;
+  onKeywordCompleteRef.current = onKeywordComplete;
+  const [pending, setPending] = useState<Map<string, boolean>>(() => new Map());
+  const [struck, setStruck] = useState<Set<string>>(() => new Set());
   const [showOlder, setShowOlder] = useState(false);
-  const [doneOpen, setDoneOpen] = useState(false);
-  const [filter, setFilter] = useState<"all" | "today" | "upcoming" | "completed">("all");
+  const [overdueOpen, setOverdueOpen] = useState(true);
+  const [filter, setFilter] = useState<FilterId>("all");
   const now = Date.now();
   const today = startOfLocalDay(new Date(now));
   const recentFrom = today.getTime() - RECENT_DAYS * DAY_MS;
+
+  //once the write is out, the next snapshot for that list is the truth, including a rollback
+  useEffect(() => {
+    setPending((current) => {
+      if (current.size === 0) return current;
+      let next: Map<string, boolean> | null = null;
+      for (const id of current.keys()) {
+        const keyword = id.startsWith("ktask:");
+        if (keyword ? !tasksChanged : !itemsChanged) continue;
+        if (sentGen.current.get(id) !== writeGen.current.get(id)) continue;
+        if (sourceDone(id, items, keywordTasks) === undefined) continue;
+        sentGen.current.delete(id);
+        next ??= new Map(current);
+        next.delete(id);
+      }
+      return next ?? current;
+    });
+  }, [items, keywordTasks, itemsChanged, tasksChanged]);
+
   const olderCount = keywordTasks.filter((task) => !task.done && task.dueUTC < recentFrom).length;
   const rows: Row[] = [
     ...items
@@ -84,37 +137,86 @@ export const TodoList = memo(function TodoList({ items, onOpen, onComplete, onCr
         title: item.title,
         dueUTC: item.calendar.startUTC,
         allDay: item.calendar.allDay,
-        done: Boolean(item.calendar.completed),
+        done: pending.get(item.id) ?? Boolean(item.calendar.completed),
         item,
       })),
     ...keywordTasks
       .filter((task) => task.done || showOlder || task.dueUTC >= recentFrom)
-      .map((task): Row => ({ kind: "keyword", id: `ktask:${task.key}`, title: task.title, dueUTC: task.dueUTC, allDay: task.allDay, done: task.done, task })),
+      .map((task): Row => {
+        const id = `ktask:${task.key}`;
+        return { kind: "keyword", id, title: task.title, dueUTC: task.dueUTC, allDay: task.allDay, done: pending.get(id) ?? task.done, task };
+      }),
   ].sort((a, b) => a.dueUTC - b.dueUTC);
   const groups = new Map<GroupId, Row[]>();
   for (const row of rows) {
-    const id = groupOf(row, now, today);
+    const id = groupOf(row, now, today, struck.has(row.id));
     groups.set(id, [...(groups.get(id) ?? []), row]);
   }
-  const done = groups.get("done") ?? [];
-  const openCount = rows.length - done.length;
+  const finished = rows.filter((row) => row.done);
+  const hiddenOlder = showOlder ? 0 : olderCount;
+  const openCount = rows.length - finished.length + hiddenOlder;
+  const incomplete = (id: ScheduleGroup) => (groups.get(id) ?? []).reduce((count, row) => count + (row.done ? 0 : 1), 0);
   const filters = [
-    { id: "all", label: "All", count: openCount },
-    { id: "today", label: "Today", count: (groups.get("overdue")?.length ?? 0) + (groups.get("today")?.length ?? 0) },
-    { id: "upcoming", label: "Upcoming", count: (groups.get("week")?.length ?? 0) + (groups.get("later")?.length ?? 0) },
-    { id: "completed", label: "Completed", count: done.length },
+    { id: "all", label: "All", count: incomplete("overdue") + incomplete("today") + incomplete("week") + incomplete("later") + hiddenOlder },
+    { id: "today", label: "Today", count: incomplete("overdue") + incomplete("today") + hiddenOlder },
+    { id: "upcoming", label: "Upcoming", count: incomplete("week") + incomplete("later") },
+    { id: "completed", label: "Completed", count: finished.length },
   ] as const;
-  const visibleGroups = (["overdue", "today", "week", "later"] as const).filter((id) =>
-    filter !== "completed" && (filter === "all" || (filter === "today" ? id === "overdue" || id === "today" : id === "week" || id === "later")));
-  const visibleCount = filters.find((entry) => entry.id === filter)!.count;
-  //completing a task slides the rest up instead of teleporting
-  useFlip(listRef, rows.map((row) => `${row.id}:${row.done}`).join("|"));
+  const showSchedule = filter !== "completed";
+  const restGroups = (["today", "week", "later"] as const).filter((id) =>
+    showSchedule && (filter === "all" || (filter === "today" ? id === "today" : id === "week" || id === "later")));
+  const overdue = showSchedule && (filter === "all" || filter === "today") ? (groups.get("overdue") ?? []) : [];
+  const showOverdue = overdue.length > 0 || ((filter === "all" || filter === "today") && olderCount > 0);
+  const overdueBadge = overdue.length + (showOlder ? 0 : (filter === "all" || filter === "today" ? olderCount : 0));
+  const listedCount = filter === "completed"
+    ? finished.length
+    : overdue.length + restGroups.reduce((count, id) => count + (groups.get(id)?.length ?? 0), 0);
+  const shown = filter === "completed"
+    ? finished
+    : [...(showOverdue ? overdue : []), ...restGroups.flatMap((id) => groups.get(id) ?? [])];
+  //only a row that leaves or joins the list should glide. a strikethrough stays put
+  useFlip(listRef, shown.map((row) => row.id).join("|"));
+
+  function toggleRow(row: Row) {
+    const next = !row.done;
+    const past = isPastDay(row.dueUTC, today);
+    const gen = (writeGen.current.get(row.id) ?? 0) + 1;
+    writeGen.current.set(row.id, gen);
+    setPending((current) => {
+      const map = new Map(current);
+      map.set(row.id, next);
+      return map;
+    });
+    if (next && past) {
+      setStruck((current) => {
+        const nextSet = new Set(current);
+        nextSet.add(row.id);
+        return nextSet;
+      });
+    }
+    //paint the check first. the calendar rebuild follows, same as closing the editor before a new event lands
+    afterPaint(() => {
+      if (writeGen.current.get(row.id) !== gen) return;
+      if (past) {
+        setStruck((current) => {
+          if (!current.has(row.id)) return current;
+          const nextSet = new Set(current);
+          nextSet.delete(row.id);
+          return nextSet;
+        });
+      }
+      sentGen.current.set(row.id, gen);
+      if (row.kind === "own") onCompleteRef.current(row.id, next);
+      else onKeywordCompleteRef.current?.(row.task.key, next);
+    });
+  }
 
   function renderRow(row: Row) {
     const draft = row.kind === "own" && row.item.editorDraft;
     const tag = row.kind === "keyword" ? row.task.tag : tagForItem?.(row.item);
     const cover = tag?.cover === "half" || tag?.cover === "quarter" ? tag.cover : "full";
     const className = [row.done ? "is-done" : "", draft ? "is-editor-draft" : "", tag ? `is-tagged is-tag-${cover}` : ""].filter(Boolean).join(" ");
+    const late = scheduleGroup(row, now, today) === "overdue";
     return (
       <li
         key={row.id}
@@ -128,10 +230,7 @@ export const TodoList = memo(function TodoList({ items, onOpen, onComplete, onCr
           role="checkbox"
           aria-checked={row.done}
           aria-label={row.done ? `Mark ${row.title} open` : `Complete ${row.title}`}
-          onClick={() => {
-            if (row.kind === "own") onComplete(row.id, !row.done);
-            else onKeywordComplete?.(row.task.key, !row.done);
-          }}
+          onClick={() => toggleRow(row)}
         >
           <span className="todo-check-circle"><CheckIcon /></span>
         </button>
@@ -146,7 +245,7 @@ export const TodoList = memo(function TodoList({ items, onOpen, onComplete, onCr
         >
           <span className="todo-title">{row.title}</span>
           <small>
-            <time className={groupOf(row, now, today) === "overdue" ? "is-overdue" : undefined} dateTime={new Date(row.dueUTC).toISOString()}>{whenLabel(row.dueUTC, row.allDay, today)}</time>
+            <time className={late ? "is-overdue" : undefined} dateTime={new Date(row.dueUTC).toISOString()}>{whenLabel(row.dueUTC, row.allDay, today)}</time>
             {row.kind === "keyword" && calendarName ? (
               <span className="todo-origin">{calendarName(row.task.source.mergedCalendarId ?? row.task.calendarId)}</span>
             ) : null}
@@ -177,18 +276,42 @@ export const TodoList = memo(function TodoList({ items, onOpen, onComplete, onCr
           </button>
         ))}
       </div>
-      {visibleCount === 0 ? (
+      {listedCount === 0 && !showOverdue ? (
         <div className="todo-empty" role="status">
           <CheckIcon />
           <h3>{filter === "completed" ? "No completed tasks yet" : filter === "today" ? "All clear for today" : filter === "upcoming" ? "A little room ahead" : "You’re all caught up"}</h3>
           <p>{filter === "completed" ? "Tasks you finish will appear here. Uncheck one to reopen it." : filter === "upcoming" ? "Future tasks will appear here." : "Add a task when something comes to mind."}</p>
         </div>
       ) : null}
-      {rows.length > 0 ? (
+      {listedCount > 0 || showOverdue ? (
         <div ref={listRef} className="todo-groups">
-          {visibleGroups.map((id) => {
+          {showOverdue ? (
+            <section className="todo-group is-overdue" aria-labelledby="todo-group-overdue">
+              <button
+                type="button"
+                id="todo-group-overdue"
+                className="todo-group-title todo-group-toggle"
+                aria-expanded={overdueOpen}
+                aria-controls="todo-overdue-panel"
+                onClick={() => setOverdueOpen((open) => !open)}
+              >
+                {GROUP_TITLES.overdue}
+                <span className="todo-group-count">{overdueBadge}</span>
+                <ChevronIcon open={overdueOpen} />
+              </button>
+              <Disclosure id="todo-overdue-panel" open={overdueOpen}>
+                {overdue.length > 0 ? <ul>{overdue.map(renderRow)}</ul> : null}
+                {olderCount > 0 ? (
+                  <button type="button" className="smart-tag-link todo-older" onClick={() => setShowOlder((current) => !current)}>
+                    {showOlder ? "Hide older calendar tasks" : `Show ${olderCount} older calendar task${olderCount === 1 ? "" : "s"}`}
+                  </button>
+                ) : null}
+              </Disclosure>
+            </section>
+          ) : null}
+          {restGroups.map((id) => {
             const list = groups.get(id);
-            if (!list) return null;
+            if (!list?.length) return null;
             return (
               <section key={id} className={`todo-group is-${id}`} aria-labelledby={`todo-group-${id}`}>
                 <h3 id={`todo-group-${id}`} className="todo-group-title">
@@ -199,30 +322,13 @@ export const TodoList = memo(function TodoList({ items, onOpen, onComplete, onCr
               </section>
             );
           })}
-          {filter === "completed" && done.length > 0 ? (
+          {filter === "completed" && finished.length > 0 ? (
             <section className="todo-group is-done-group" aria-labelledby="todo-completed-heading">
-              <h3 id="todo-completed-heading" className="todo-group-title">Completed<span className="todo-group-count">{done.length}</span></h3>
-              <ul>{done.map(renderRow)}</ul>
-            </section>
-          ) : null}
-          {filter === "all" && done.length > 0 ? (
-            <section className="todo-group is-done-group">
-              <button type="button" className="todo-group-title todo-group-toggle" aria-expanded={doneOpen} onClick={() => setDoneOpen((open) => !open)}>
-                {GROUP_TITLES.done}
-                <span className="todo-group-count">{done.length}</span>
-                <ChevronIcon open={doneOpen} />
-              </button>
-              <Disclosure open={doneOpen}>
-                <ul>{done.map(renderRow)}</ul>
-              </Disclosure>
+              <h3 id="todo-completed-heading" className="todo-group-title">Completed<span className="todo-group-count">{finished.length}</span></h3>
+              <ul>{finished.map(renderRow)}</ul>
             </section>
           ) : null}
         </div>
-      ) : null}
-      {filter !== "completed" && olderCount > 0 ? (
-        <button type="button" className="smart-tag-link todo-older" onClick={() => setShowOlder((current) => !current)}>
-          {showOlder ? "Hide older calendar tasks" : `Show ${olderCount} older calendar task${olderCount === 1 ? "" : "s"}`}
-        </button>
       ) : null}
       {rules ? <div className="todo-automation">{rules}</div> : null}
     </section>
