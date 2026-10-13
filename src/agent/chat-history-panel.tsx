@@ -2,7 +2,7 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
-import { DotsVerticalIcon } from "@/shared/icons";
+import { DotsVerticalIcon, PinIcon } from "@/shared/icons";
 import { ContextMenu, menuStateFromElement, type ContextMenuItem, type ContextMenuState } from "@/shared/context-menu";
 import { usePresence } from "@/shared/use-presence";
 import { startOfLocalDay } from "@/calendar/date-utils";
@@ -14,6 +14,7 @@ type HistoryChatRow = {
   title: string;
   createdAt?: number;
   updatedAt?: number;
+  pinned?: boolean;
 };
 
 type DateBucket = "today" | "yesterday" | "previous7" | "older";
@@ -95,9 +96,11 @@ export function ChatHistoryPanel({
     () => [...presence.value ?? []].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0)),
     [presence.value],
   );
+  const pinnedChats = useMemo(() => sortedChats.filter((chat) => chat.pinned), [sortedChats]);
+  const unpinnedChats = useMemo(() => sortedChats.filter((chat) => !chat.pinned), [sortedChats]);
 
-  const visibleChats = sortedChats.slice(0, visibleCount);
-  const hasMore = sortedChats.length > visibleCount;
+  const visibleChats = unpinnedChats.slice(0, visibleCount);
+  const hasMore = unpinnedChats.length > visibleCount;
 
   const sections = useMemo(() => {
     const grouped = new Map<DateBucket, HistoryChatRow[]>();
@@ -133,7 +136,7 @@ export function ChatHistoryPanel({
     panel.style.left = `${left}px`;
     panel.style.width = `${width}px`;
     panel.style.transformOrigin = `${rect.right - left}px 0px`;
-  }, [open, anchorRef, chats.length, renamingId, visibleCount]);
+  }, [open, anchorRef, chats.length, pinnedChats.length, renamingId, visibleCount]);
 
   useEffect(() => {
     if (!open) return;
@@ -155,6 +158,58 @@ export function ChatHistoryPanel({
     };
   }, [open, onClose, anchorRef]);
 
+  function rowOf(chat: HistoryChatRow) {
+    const renaming = renamingId === chat.id;
+    const createdAt = chat.createdAt ?? chat.updatedAt ?? Date.now();
+    const bucket = bucketOf(createdAt);
+    return (
+      <li key={chat.id} className={`chat-history-row${chat.pinned ? " is-pinned" : ""}`}>
+        {renaming ? (
+          <input
+            className="chat-history-rename"
+            value={renameDraft}
+            maxLength={200}
+            autoFocus
+            aria-label="Chat name"
+            onChange={(event) => onRenameDraft(event.target.value)}
+            onBlur={() => onCommitRename(chat.id)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") event.currentTarget.blur();
+              if (event.key === "Escape") onCancelRename();
+            }}
+          />
+        ) : (
+          <button
+            type="button"
+            className="chat-history-open"
+            title={chat.title}
+            aria-label={chat.pinned ? `${chat.title}, pinned` : undefined}
+            onClick={() => onReopen(chat.id)}
+          >
+            <span className="chat-history-title">
+              {chat.pinned ? <PinIcon className="chat-pin-icon" /> : null}
+              <span className="chat-history-title-text">{chat.title}</span>
+            </span>
+            <span className="chat-history-meta">{createdMeta(createdAt, bucket)}</span>
+          </button>
+        )}
+        <button
+          type="button"
+          className="chat-history-more"
+          aria-label={`${chat.title} options`}
+          aria-expanded={rowMenu?.chatId === chat.id}
+          aria-haspopup="menu"
+          onClick={(event) => {
+            event.stopPropagation();
+            onRowMenu({ ...menuStateFromElement(event.currentTarget), chatId: chat.id });
+          }}
+        >
+          <DotsVerticalIcon />
+        </button>
+      </li>
+    );
+  }
+
   if (typeof document === "undefined") return null;
   if (!open && !rowMenu) return null;
 
@@ -174,58 +229,18 @@ export function ChatHistoryPanel({
             <p className="chat-history-empty">No closed chats</p>
           ) : (
             <div className="chat-history-scroll">
+              {pinnedChats.length > 0 ? (
+                <section className="chat-history-section" aria-label="Pinned">
+                  <p className="chat-history-section-label">Pinned</p>
+                  <ul className="chat-history-list">
+                    {pinnedChats.map((chat) => rowOf(chat))}
+                  </ul>
+                </section>
+              ) : null}
               {sections.map((section) => (
                 <section key={section.bucket} className="chat-history-section" aria-label={section.label}>
                   <p className="chat-history-section-label">{section.label}</p>
-                  <ul className="chat-history-list">
-                    {section.chats.map((chat) => {
-                      const renaming = renamingId === chat.id;
-                      const createdAt = chat.createdAt ?? chat.updatedAt ?? Date.now();
-                      const bucket = bucketOf(createdAt);
-                      return (
-                        <li key={chat.id} className="chat-history-row">
-                          {renaming ? (
-                            <input
-                              className="chat-history-rename"
-                              value={renameDraft}
-                              maxLength={200}
-                              autoFocus
-                              aria-label="Chat name"
-                              onChange={(event) => onRenameDraft(event.target.value)}
-                              onBlur={() => onCommitRename(chat.id)}
-                              onKeyDown={(event) => {
-                                if (event.key === "Enter") event.currentTarget.blur();
-                                if (event.key === "Escape") onCancelRename();
-                              }}
-                            />
-                          ) : (
-                            <button
-                              type="button"
-                              className="chat-history-open"
-                              title={chat.title}
-                              onClick={() => onReopen(chat.id)}
-                            >
-                              <span className="chat-history-title">{chat.title}</span>
-                              <span className="chat-history-meta">{createdMeta(createdAt, bucket)}</span>
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            className="chat-history-more"
-                            aria-label={`${chat.title} options`}
-                            aria-expanded={rowMenu?.chatId === chat.id}
-                            aria-haspopup="menu"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              onRowMenu({ ...menuStateFromElement(event.currentTarget), chatId: chat.id });
-                            }}
-                          >
-                            <DotsVerticalIcon />
-                          </button>
-                        </li>
-                      );
-                    })}
-                  </ul>
+                  <ul className="chat-history-list">{section.chats.map((chat) => rowOf(chat))}</ul>
                 </section>
               ))}
               {hasMore ? (

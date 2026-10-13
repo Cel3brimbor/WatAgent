@@ -27,10 +27,13 @@ import {
   localDayBounds,
   localeWeekStartsOn,
   shiftFocus,
+  focusEnteringWorkweek,
+  stageViewKey,
   startOfLocalDay,
   startOfWeek,
   startOfWorkWeek,
   viewForToday,
+  viewsShareTimedWeek,
 } from "@/calendar/date-utils";
 import { removeImportedCalendar } from "@/calendar/client";
 import { externalCalendarId } from "@/calendar/external-calendars";
@@ -51,6 +54,11 @@ import {
   withNewCalendar,
   readColorOverrides,
   CALENDAR_PALETTE,
+  HEX_COLOR,
+  calendarSwatchColor,
+  installCalendarColorStyles,
+  paintCalendarSwatchLive,
+  syncCalendarKindVars,
   readSidePanelSections,
   readSourceFilter,
   isCalendarReadOnly,
@@ -130,6 +138,7 @@ import {
   type CampusEvent,
 } from "@/campus/campus-events";
 import {
+  campusColorKey,
   campusSubscriptionsMatch,
   colorOverridesWithCampusSubscriptions,
   withCampusFeedColor,
@@ -299,6 +308,81 @@ function googleRange(focus: Date, view: CalendarView, weekStartsOn: 0 | 1): Rang
   return { rangeStartUTC: start.getTime(), rangeEndUTC: end.getTime() };
 }
 
+type GridSwatch = { id: string; googleColor?: string; campusCategoryId?: string };
+
+//resolved hex per calendar id. display tints win, then a campus color that survives a new feed id
+function resolvedGridSwatches(
+  colors: CalendarColors,
+  colorOverrides: Record<string, string>,
+  displayOverrides: Record<string, string> | undefined,
+  calendars: readonly GridSwatch[],
+): Record<string, string> {
+  const resolved: Record<string, string> = {};
+  for (const calendar of calendars) {
+    if (!calendar.id || resolved[calendar.id]) continue;
+    let color = displayOverrides?.[calendar.id];
+    if (!color && calendar.campusCategoryId) color = colorOverrides[campusColorKey(calendar.campusCategoryId)];
+    if (!color) color = colorOverrides[calendar.id];
+    if (!color && calendar.googleColor) color = calendar.googleColor;
+    if (!color) color = calendarSwatchColor(calendar.id, colors, colorOverrides);
+    if (color && HEX_COLOR.test(color)) resolved[calendar.id] = color;
+  }
+  return resolved;
+}
+
+function buildGridSwatchList(
+  shownCalendars: LocalCalendar[],
+  mergedCalendars: MergedCalendar[],
+  feedsForMerge: ImportedCalendar[],
+  campusCategoryByFeedId: ReadonlyMap<string, string>,
+  googleCalendars: GoogleCalendarRef[],
+  colors: CalendarColors,
+  colorOverrides: Record<string, string>,
+): GridSwatch[] {
+  const list: GridSwatch[] = [{ id: "events" }, { id: "tasks" }];
+  for (const calendar of shownCalendars) list.push({ id: calendar.id });
+  for (const calendar of mergedCalendars) list.push({ id: calendar.id });
+  for (const feed of feedsForMerge) {
+    list.push({ id: externalCalendarId(feed.id), campusCategoryId: campusCategoryByFeedId.get(feed.id) });
+  }
+  for (const calendar of googleCalendars) {
+    list.push({ id: calendar.id, googleColor: calendar.color || colors.google });
+  }
+  for (const id of Object.keys(colorOverrides)) {
+    if (!id.startsWith("campus:")) list.push({ id });
+  }
+  return list;
+}
+
+function gridSwatchIdSignature(
+  shownCalendars: LocalCalendar[],
+  mergedCalendars: MergedCalendar[],
+  feedsForMerge: ImportedCalendar[],
+  googleCalendars: GoogleCalendarRef[],
+  overrideKeys: string,
+): string {
+  const ids = new Set<string>(["events", "tasks"]);
+  for (const calendar of shownCalendars) ids.add(calendar.id);
+  for (const calendar of mergedCalendars) ids.add(calendar.id);
+  for (const feed of feedsForMerge) ids.add(externalCalendarId(feed.id));
+  for (const calendar of googleCalendars) ids.add(calendar.id);
+  for (const id of overrideKeys.split("\0")) if (id) ids.add(id);
+  return [...ids].sort().join("\0");
+}
+
+function smartTagKey(tags: SmartTag[]): string {
+  return tags.map((tag) => [
+    tag.id,
+    tag.name,
+    tag.color,
+    tag.enabled ? 1 : 0,
+    tag.match,
+    tag.cover,
+    tag.exemptCalendarIds.join(","),
+    tag.rules.map((rule) => `${rule.field}:${rule.operator}:${rule.value}`).join(","),
+  ].join("\0")).join("\n");
+}
+
 function rowSignature(rows: unknown[][]): string {
   return JSON.stringify(rows);
 }
@@ -393,7 +477,8 @@ const CalendarChatDock = memo(function CalendarChatDock({
   ruleNames?: Record<string, string>;
 }) {
   const { chats, activeChat } = useChatState();
-  const { createChat, deleteChat, renameChat, closeChat, reopenChat, selectChat, reorderChats } = useChatActions();
+  const { createChat, deleteChat, renameChat, closeChat, reopenChat, selectChat, reorderChats, setChatPinned } =
+    useChatActions();
   useEffect(() => {
     if (open && !restriction && chats.length === 0) createChat();
   }, [open, restriction, chats.length, createChat]);
@@ -425,6 +510,7 @@ const CalendarChatDock = memo(function CalendarChatDock({
       onRenameChat={renameChat}
       onCloseChat={closeChat}
       onReopenChat={reopenChat}
+      onPinChat={setChatPinned}
       onSelectChat={selectChat}
       onReorderChats={reorderChats}
       onResizingChange={onResizingChange}
@@ -659,14 +745,16 @@ function SidePanelFromStore({
   sources: CalendarSourceFilter;
   onSources: (next: CalendarSourceFilter) => void;
   colors: CalendarColors;
-  onColors: (next: CalendarColors) => void;
+  onColors: (next: CalendarColors | ((current: CalendarColors) => CalendarColors)) => void;
   onRenameExternal: (id: string, name: string) => void;
   onRefreshCalendars: () => Promise<void>;
   onSyncGoogle: () => Promise<number | null>;
   onNotice: (message: string) => void;
   onRemoveExternal: (source: ImportedCalendarSource) => Promise<void>;
   colorOverrides: Record<string, string>;
-  onColorOverrides: (next: Record<string, string>) => void;
+  onColorOverrides: (
+    next: Record<string, string> | ((current: Record<string, string>) => Record<string, string>),
+  ) => void;
   smartTags: SmartTag[];
   taskSmartTags: SmartTag[];
   onSmartTags: (next: SmartTag[]) => void;
@@ -817,6 +905,12 @@ export function CalendarApp({
   const [calendarSpaces, setCalendarSpaces] = useState<CalendarSpace[]>(() => readCalendarSpaces().spaces);
   const [activeCalendarSpaceId, setActiveCalendarSpaceId] = useState(() => readCalendarSpaces().activeId);
   const [openDisplayId, setOpenDisplayId] = useState<string | null>(null);
+  const [displayView, setDisplayView] = useState<CalendarView>(() => readCalendarView());
+  const displayViewRef = useRef(displayView);
+  displayViewRef.current = displayView;
+  const viewRef = useRef(view);
+  viewRef.current = view;
+  const lastOpenDisplayIdRef = useRef<string | null>(null);
   const [importedCalendars, setImportedCalendars] = useState<ImportedCalendar[]>(() => splitCampusCalendars(readImportedCalendars(), readCampusCalendars()).imported);
   const [campusCalendarFeeds, setCampusCalendarFeeds] = useState<ImportedCalendar[]>(() => splitCampusCalendars(readImportedCalendars(), readCampusCalendars()).campus);
   const [mergedCalendars, setMergedCalendars] = useState<MergedCalendar[]>(() => readMergedCalendars([...readImportedCalendars(), ...readCampusCalendars()]));
@@ -920,8 +1014,42 @@ export function CalendarApp({
     setSourcesState(resolved);
     store.noteVisibility();
   }, [store]);
-  const [colors, setColors] = useState<CalendarColors>(() => readCalendarColors());
-  const [colorOverrides, setColorOverrides] = useState<Record<string, string>>(() => readColorOverrides());
+  const [colors, setColorsState] = useState<CalendarColors>(() => readCalendarColors());
+  const [colorOverrides, setColorOverridesState] = useState<Record<string, string>>(() => readColorOverrides());
+  const colorsRef = useRef(colors);
+  const colorOverridesRef = useRef(colorOverrides);
+  colorsRef.current = colors;
+  colorOverridesRef.current = colorOverrides;
+  const paintCommitRef = useRef(0);
+  const paintDirtyRef = useRef({ colors: false, overrides: false });
+  const flushPaintState = useCallback(() => {
+    paintCommitRef.current = 0;
+    const dirty = paintDirtyRef.current;
+    paintDirtyRef.current = { colors: false, overrides: false };
+    if (dirty.colors) {
+      syncCalendarKindVars(colorsRef.current);
+      setColorsState(colorsRef.current);
+    }
+    if (dirty.overrides) setColorOverridesState(colorOverridesRef.current);
+  }, []);
+  const schedulePaintStateCommit = useCallback(() => {
+    if (paintCommitRef.current) return;
+    paintCommitRef.current = requestAnimationFrame(flushPaintState);
+  }, [flushPaintState]);
+  const setColors = useCallback((
+    next: CalendarColors | ((current: CalendarColors) => CalendarColors),
+  ) => {
+    colorsRef.current = typeof next === "function" ? next(colorsRef.current) : next;
+    paintDirtyRef.current.colors = true;
+    schedulePaintStateCommit();
+  }, [schedulePaintStateCommit]);
+  const setColorOverrides = useCallback((
+    next: Record<string, string> | ((current: Record<string, string>) => Record<string, string>),
+  ) => {
+    colorOverridesRef.current = typeof next === "function" ? next(colorOverridesRef.current) : next;
+    paintDirtyRef.current.overrides = true;
+    schedulePaintStateCommit();
+  }, [schedulePaintStateCommit]);
   const [localCalendars, setLocalCalendars] = useState<LocalCalendar[]>(() => readLocalCalendars());
   const [smartTags, setSmartTags] = useState<SmartTag[]>(() => readSmartTags());
   const [taskSmartTags, setTaskSmartTags] = useState<SmartTag[]>(() => readTaskSmartTags());
@@ -970,14 +1098,54 @@ export function CalendarApp({
     if (section !== "displays" || !openDisplayId) return null;
     return calendarSpaces.find((space) => space.id === openDisplayId) ?? null;
   }, [section, openDisplayId, calendarSpaces]);
-  const shownView = viewingDisplay?.view ?? view;
+  //colors and tags on a shortcut are not part of which events show, so they leave the grid callback alone
+  const displayFilterKey = viewingDisplay
+    ? [
+        viewingDisplay.id,
+        viewingDisplay.includedCalendarIds.join("\0"),
+        viewingDisplay.mutedIds.join("\0"),
+        viewingDisplay.importedCalendars.map((feed) => feed.id).join("\0"),
+      ].join("\n")
+    : "";
+  const displayForGrid = useContentStable(viewingDisplay, displayFilterKey);
+  const displayForTags = useContentStable(viewingDisplay, viewingDisplay ? `on\n${smartTagKey(viewingDisplay.smartTags)}` : "off");
+  //like main `view`, kept out of calendarSpaces until the display closes so toggles stay cheap
+  const shownView = viewingDisplay ? displayView : view;
+
+  const persistDisplayView = useCallback((spaceId: string, nextView: CalendarView) => {
+    setCalendarSpaces((current) => {
+      const space = current.find((entry) => entry.id === spaceId);
+      if (!space || space.view === nextView) return current;
+      return mapCalendarSpace(current, spaceId, (entry) => ({ ...entry, view: nextView }));
+    });
+  }, []);
+
   const changeView = useCallback((next: CalendarView) => {
     if (viewingDisplay) {
-      setCalendarSpaces((current) => mapCalendarSpace(current, viewingDisplay.id, (space) => ({ ...space, view: next })));
+      const prev = displayViewRef.current;
+      if (next === "workweek" && prev !== "workweek") {
+        setFocus((current) => focusEnteringWorkweek(current, weekStartsOn));
+      }
+      if (next !== prev) setDisplayView(next);
       return;
     }
+    const prev = viewRef.current;
+    if (next === "workweek" && prev !== "workweek") {
+      setFocus((current) => focusEnteringWorkweek(current, weekStartsOn));
+    }
     setView(next);
-  }, [viewingDisplay]);
+  }, [viewingDisplay, weekStartsOn]);
+
+  useEffect(() => {
+    const previous = lastOpenDisplayIdRef.current;
+    lastOpenDisplayIdRef.current = openDisplayId;
+    if (previous && previous !== openDisplayId) {
+      persistDisplayView(previous, displayViewRef.current);
+    }
+    if (!openDisplayId) return;
+    const space = calendarSpaces.find((entry) => entry.id === openDisplayId);
+    if (space) setDisplayView(space.view);
+  }, [openDisplayId, persistDisplayView]);
 
   const period = periodStart(focus, shownView, weekStartsOn);
   const displayKey = viewingDisplay?.id ?? "main";
@@ -987,7 +1155,11 @@ export function CalendarApp({
     const onStage = section === "calendar" || viewingDisplay != null;
     if (!onStage || section !== last.section) return "none";
     if (displayKey !== last.spaceId) return "none";
-    if (shownView !== last.view) return VIEW_DEPTH[shownView] > VIEW_DEPTH[last.view] ? "in" : "out";
+    if (shownView !== last.view) {
+      if (viewsShareTimedWeek(shownView, last.view)) return "none";
+      if (period === last.period) return "none";
+      return VIEW_DEPTH[shownView] > VIEW_DEPTH[last.view] ? "in" : "out";
+    }
     if (period === last.period) return "none";
     return period > last.period ? "next" : "prev";
   }, [period, shownView, section, displayKey, viewingDisplay]);
@@ -995,9 +1167,9 @@ export function CalendarApp({
     lastPeriodRef.current = { period, view: shownView, section, spaceId: displayKey };
   }, [period, shownView, section, displayKey]);
   const stageKey = viewingDisplay
-    ? `${viewingDisplay.id}:${shownView}:${period}`
+    ? `${viewingDisplay.id}:${stageViewKey(shownView)}:${period}`
     : section === "calendar"
-      ? `main:${shownView}:${period}`
+      ? `main:${stageViewKey(shownView)}:${period}`
       : section;
   useEffect(() => {
     if (viewingDisplay) setDraft(null);
@@ -1052,6 +1224,9 @@ export function CalendarApp({
   //item lists live in DerivedProvider, so an edit does not re-run this component
   //checking a calendar does not change read-only, so this stays put and the derive does not run
   const derivedSources = useContentStable(sources, sources.readOnlyCalendarIds.join("\0"));
+  //defer each paint field on its own — never useDeferredValue({ colors, colorOverrides }) or config churns every render
+  const deferredColors = useDeferredValue(colors);
+  const deferredColorOverrides = useDeferredValue(colorOverrides);
   const derivedConfig = useMemo<DerivedConfig>(() => ({
     pendingChanges: status.pendingChanges,
     googleCalendars,
@@ -1062,8 +1237,8 @@ export function CalendarApp({
     calendarSpaces,
     spaceOnlyFeeds,
     shownCalendars,
-    colors,
-    colorOverrides,
+    colors: deferredColors,
+    colorOverrides: deferredColorOverrides,
     sources: derivedSources,
     agentHiddenCalendarIds,
     googleConnected,
@@ -1079,8 +1254,8 @@ export function CalendarApp({
     calendarSpaces,
     spaceOnlyFeeds,
     shownCalendars,
-    colors,
-    colorOverrides,
+    deferredColors,
+    deferredColorOverrides,
     derivedSources,
     agentHiddenCalendarIds,
     googleConnected,
@@ -1518,15 +1693,35 @@ export function CalendarApp({
     };
   }, [googleVersion]);
 
-  const colorVars = useMemo(
-    () =>
-      ({
-        "--event-color": colors.event,
-        "--task-color": colors.task,
-        "--gcal-color": colors.google,
-      }) as CSSProperties,
-    [colors],
+  const colorOverrideKeys = useMemo(
+    () => Object.keys(colorOverrides).filter((id) => !id.startsWith("campus:")).sort().join("\0"),
+    [colorOverrides],
   );
+  const gridColorStructureKey = useMemo(
+    () => gridSwatchIdSignature(shownCalendars, mergedCalendars, feedsForMerge, googleCalendars, colorOverrideKeys),
+    [shownCalendars, mergedCalendars, feedsForMerge, googleCalendars, colorOverrideKeys],
+  );
+  useLayoutEffect(() => {
+    if (!calendar.hydrated || !preferencesLoaded) return;
+    const list = buildGridSwatchList(
+      shownCalendars,
+      mergedCalendars,
+      feedsForMerge,
+      campusCategoryByFeedId,
+      googleCalendars,
+      colorsRef.current,
+      colorOverridesRef.current,
+    );
+    installCalendarColorStyles(
+      resolvedGridSwatches(
+        colorsRef.current,
+        colorOverridesRef.current,
+        viewingDisplay?.colorOverrides,
+        list,
+      ),
+    );
+    syncCalendarKindVars(colorsRef.current);
+  }, [calendar.hydrated, preferencesLoaded, gridColorStructureKey, viewingDisplay, shownCalendars, mergedCalendars, feedsForMerge, campusCategoryByFeedId, googleCalendars]);
 
 
   useEffect(() => {
@@ -1538,11 +1733,11 @@ export function CalendarApp({
   }, []);
 
   const displayTagMatcherNow = useMemo(() => {
-    if (!viewingDisplay) return smartTagMatcher;
+    if (!displayForTags) return smartTagMatcher;
     //shortcut tags paint this view only. the calendar's own tags stay underneath
-    const local = compileSmartTags(viewingDisplay.smartTags);
+    const local = compileSmartTags(displayForTags.smartTags);
     return (target: SmartTagTarget) => local(target) ?? smartTagMatcher(target);
-  }, [viewingDisplay, smartTagMatcher]);
+  }, [displayForTags, smartTagMatcher]);
   //typing a tag or keyword rule stays urgent; visible days re-tag at low priority
   const displayTagMatcher = useDeferredValue(displayTagMatcherNow);
 
@@ -1550,10 +1745,7 @@ export function CalendarApp({
     mergedCalendars,
     feedsForMerge,
     campusSources,
-    campusCategoryByFeedId,
-    colorOverrides,
-    colors,
-    viewingDisplay,
+    viewingDisplay: displayForGrid,
     spaceOnlyFeeds,
     displayTagMatcher,
     taskDueById: EMPTY_TASK_DUES,
@@ -1562,10 +1754,7 @@ export function CalendarApp({
     mergedCalendars,
     feedsForMerge,
     campusSources,
-    campusCategoryByFeedId,
-    colorOverrides,
-    colors,
-    viewingDisplay,
+    displayForGrid,
     spaceOnlyFeeds,
     displayTagMatcher,
     overlayCoversBusy,
@@ -1927,9 +2116,15 @@ export function CalendarApp({
     const used = new Set(Object.values(colorOverrides));
     const color = CALENDAR_PALETTE.find((option) => !used.has(option) && option !== colors.event && option !== colors.task)
       ?? CALENDAR_PALETTE[localCalendars.length % CALENDAR_PALETTE.length];
+    const nextSources = withNewCalendar(sourcesRef.current, created.id, newCalendarsShown);
+    //nothing is on this calendar yet, so the visible days do not need to refilter
+    if (nextSources !== sourcesRef.current) {
+      sourcesRef.current = nextSources;
+      setSourcesState(nextSources);
+    }
+    paintCalendarSwatchLive(created.id, color);
     setColorOverrides((overrides) => ({ ...overrides, [created.id]: color }));
     setLocalCalendars((list) => [...list, created]);
-    setSources((current) => withNewCalendar(current, created.id, newCalendarsShown));
     setNotice(newCalendarsShown ? `Created ${created.name}.` : `Created ${created.name}. It starts hidden; show it from the side panel or Configuration.`);
   }
 
@@ -2392,6 +2587,7 @@ export function CalendarApp({
     setChatOpen((value) => !value);
   });
   const closeQuickDisplay = useStableCallback(() => {
+    if (openDisplayId) persistDisplayView(openDisplayId, displayViewRef.current);
     setOpenDisplayId(null);
   });
   const sideFocus = useStableCallback((date: Date) => {
@@ -2504,7 +2700,6 @@ export function CalendarApp({
     <LeadHourSync days={leadDays} itemsForDay={itemsForDay} configRef={derivedConfigRef} filterRef={sourcesRef} onHour={setLeadHour} />
     <div
       className={`app-frame${navCollapsed ? " is-nav-collapsed" : ""}${chatResizing ? " is-resizing-chat" : ""}`}
-      style={colorVars}
     >
       <SideNav
         section={section}

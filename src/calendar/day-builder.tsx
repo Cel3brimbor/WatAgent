@@ -1,7 +1,6 @@
 "use client";
 
 import { createContext, useCallback, useContext, useRef, useSyncExternalStore, type ReactNode } from "react";
-import { campusColorKey } from "@/campus/campus-subscription-prefs";
 import { allDayItems } from "@/calendar/all-day-bar";
 import { mergeTimeline, pinBottomDeadlines, pinListedDues } from "@/calendar/calendar-merge";
 import { itemInCalendarSpace, itemOnMainCalendar, overlayInCalendarSpace, type CalendarSpace } from "@/calendar/calendar-spaces";
@@ -11,9 +10,8 @@ import { useOptionalEventStore, type DayBucket } from "@/calendar/event-store";
 import { mergePendingIntoItems } from "@/calendar/merge-pending";
 import {
   calendarGroupsOf,
-  calendarSwatchColor,
+  calendarPaint,
   isSidebarHidden,
-  type CalendarColors,
   type CalendarSourceFilter,
 } from "@/calendar/preferences";
 import type { SmartTagMatcher, SmartTagTarget } from "@/calendar/smart-tags";
@@ -33,9 +31,6 @@ export type DayBuildConfig = {
   mergedCalendars: MergedCalendar[];
   feedsForMerge: ImportedCalendar[];
   campusSources: ReadonlySet<string>;
-  campusCategoryByFeedId: ReadonlyMap<string, string>;
-  colorOverrides: Record<string, string>;
-  colors: CalendarColors;
   viewingDisplay: CalendarSpace | null;
   spaceOnlyFeeds: ReadonlySet<string>;
   displayTagMatcher: SmartTagMatcher;
@@ -124,37 +119,20 @@ export function buildDayTimeline(date: Date, bucket: DayBucket, config: DayBuild
     date,
   ).map((item) => {
     if (item.kind === "gcal_busy") return item;
+    //the hex lives on :root. this string stays put when the swatch changes
     if (item.kind === "gcal_event") {
       const id = item.google?.calendarId;
-      const override = id ? config.viewingDisplay?.colorOverrides[id] || config.colorOverrides[id] : undefined;
-      const calendarColor = override || item.google?.calendarColor || config.colors.google;
-      if (item.calendarColor === calendarColor && item.google?.calendarColor === calendarColor) return item;
-      return {
-        ...item,
-        calendarColor,
-        google: item.google ? { ...item.google, calendarColor } : item.google,
-      };
+      if (!id) return item;
+      const calendarColor = calendarPaint(id, item.google?.calendarColor);
+      if (item.calendarColor === calendarColor) return item;
+      return { ...item, calendarColor };
     }
-    const swatch = (calendarId: string, importSource?: string) => {
-      const shortcut = config.viewingDisplay?.colorOverrides[calendarId];
-      if (shortcut) return shortcut;
-      if (importSource) {
-        const categoryId = config.campusCategoryByFeedId.get(importSource);
-        if (categoryId) {
-          const stable = config.colorOverrides[campusColorKey(categoryId)];
-          if (stable) return stable;
-        }
-      }
-      return calendarSwatchColor(calendarId, config.colors, config.colorOverrides);
-    };
-    return {
-      ...item,
-      calendarColor: item.importSource
-        ? swatch(item.mergedCalendarId ?? externalCalendarId(item.importSource), item.importSource)
-        : item.calendarId
-          ? swatch(item.calendarId)
-          : config.colors.event,
-    };
+    const calendarId = item.importSource
+      ? (item.mergedCalendarId ?? externalCalendarId(item.importSource))
+      : (item.calendarId ?? "events");
+    const calendarColor = calendarPaint(calendarId);
+    if (item.calendarColor === calendarColor) return item;
+    return { ...item, calendarColor };
   });
   return applySmartTags(painted, config.displayTagMatcher);
 }

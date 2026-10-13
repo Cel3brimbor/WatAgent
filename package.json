@@ -10,7 +10,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "tauri": "node scripts/tauri.mjs",
-    "test:regressions": "tsx src/calendar/agent-permissions.check.ts && tsx src/calendar/slot-drag.check.ts && tsx src/shared/motion.check.ts && tsx src/calendar/event-store.check.ts && tsx src/calendar/xss.check.ts"
+    "test:regressions": "tsx src/calendar/agent-permissions.check.ts && tsx src/calendar/slot-drag.check.ts && tsx src/shared/motion.check.ts && tsx src/calendar/event-store.check.ts && tsx src/calendar/xss.check.ts && tsx src/calendar/calendar-colors.check.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

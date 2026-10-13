@@ -672,13 +672,20 @@ select {
 .context-menu-item,
 .composer-effort,
 .side-cal-menu > button,
-.calendar-strip,
 .todo-main,
 .calendar-week-day-head,
 .calendar-year-day,
 .calendar-month-cell {
   transition:
     background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out),
+    opacity var(--dur-fast) var(--ease-out),
+    transform var(--dur-spring) var(--ease-spring);
+}
+
+/*event strips tint via background + color-mix, not background-color — keep hover motion without animating the fill*/
+.calendar-strip {
+  transition:
     color var(--dur-fast) var(--ease-out),
     opacity var(--dur-fast) var(--ease-out),
     transform var(--dur-spring) var(--ease-spring);
@@ -3682,6 +3689,11 @@ button.qd-cal-swatch:active {
   border-color: transparent;
   border-left-color: var(--strip-color);
   background: color-mix(in srgb, var(--strip-color) 22%, transparent);
+  /*tint follows --strip-color instantly; the global strip transition only animates background-color*/
+  transition:
+    color var(--dur-fast) var(--ease-out),
+    opacity var(--dur-fast) var(--ease-out),
+    transform var(--dur-spring) var(--ease-spring);
 }
 
 .calendar-strip:is(.is-event, .is-gcal-event, .is-task) .calendar-strip-title {
@@ -5846,12 +5858,26 @@ button.qd-cal-swatch:active {
 }
 
 .chat-tab > button[role="tab"] {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
   min-width: 0;
   padding: 0.25rem 0.1rem 0.25rem 0.65rem;
   border: 0;
   background: transparent;
   font-size: 0.78rem;
   font-weight: 600;
+}
+
+.chat-pin-icon {
+  width: 0.72rem;
+  height: 0.72rem;
+  flex: 0 0 auto;
+  color: var(--accent);
+}
+
+.chat-tab.is-pinned + .chat-tab:not(.is-pinned) {
+  margin-left: 0.2rem;
 }
 
 .chat-tab-label {
@@ -6069,7 +6095,15 @@ button.qd-cal-swatch:active {
 }
 
 .chat-history-title {
+  display: flex;
+  align-items: center;
+  gap: 0.28rem;
   max-width: 100%;
+  min-width: 0;
+}
+
+.chat-history-title-text {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -6866,9 +6900,25 @@ button.qd-cal-swatch:active {
 }
 
 .mention-field .cal-badge-wrap {
-  vertical-align: text-bottom;
-  margin: 0 0.12rem;
+  vertical-align: middle;
+  margin: 0 0.1rem;
   user-select: none;
+}
+
+.mention-field .cal-badge {
+  height: 1.2rem;
+  padding: 0 0.38rem 0 0.34rem;
+  font-size: 0.72rem;
+}
+
+.mention-field .cal-badge-dot {
+  width: 0.4rem;
+  height: 0.4rem;
+}
+
+.mention-field .cal-badge-remove {
+  width: 1.05rem;
+  height: 1.05rem;
 }
 
 .mention-menu.is-floating {

@@ -116,6 +116,7 @@ function sessionOf(raw: unknown): ChatSession | null {
     createdAt: Number(rec.createdAt) || Date.now(),
     updatedAt: Number(rec.updatedAt) || Date.now(),
     open: false,
+    pinned: rec.pinned === true,
   };
 }
 
@@ -183,7 +184,15 @@ export async function saveChatSession(chat: ChatSession): Promise<void> {
       titleSource: chat.titleSource,
       messages,
       createdAt: chat.createdAt,
+      pinned: chat.pinned === true,
     }),
+  });
+}
+
+export async function saveChatPin(id: string, pinned: boolean): Promise<void> {
+  await apiJson("/api/calendar/chats", {
+    method: "PATCH",
+    body: JSON.stringify({ id, pinned }),
   });
 }
 

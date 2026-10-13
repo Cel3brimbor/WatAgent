@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { daysInView, formatFocusLabel, shiftFocus, startOfWorkWeek, viewForToday } from "./date-utils";
+import { daysInView, focusEnteringWorkweek, formatFocusLabel, shiftFocus, startOfWorkWeek, viewForToday } from "./date-utils";
 
 const day = (y: number, m: number, d: number) => new Date(y, m - 1, d);
 const ymd = (date: Date) => [date.getFullYear(), date.getMonth() + 1, date.getDate()].join("-");
@@ -18,6 +18,9 @@ assert.equal(ymd(daysInView(day(2026, 10, 10), "week", 1)[0]), "2026-10-5", "sat
 assert.equal(viewForToday("workweek", day(2026, 10, 10)), "week", "today on saturday leaves the 5-day view");
 assert.equal(viewForToday("workweek", day(2026, 10, 11)), "week", "today on sunday leaves the 5-day view");
 assert.equal(viewForToday("workweek", day(2026, 10, 9)), "workweek", "a weekday stays on the 5-day view");
+assert.equal(ymd(focusEnteringWorkweek(day(2026, 10, 11), 1)), "2026-10-5", "sunday in week view keeps that week's monday for 5-day");
+assert.equal(ymd(focusEnteringWorkweek(day(2026, 10, 10), 1)), "2026-10-5", "saturday in week view keeps that week's monday for 5-day");
+assert.equal(ymd(focusEnteringWorkweek(day(2026, 10, 8), 1)), "2026-10-8", "weekday focus is unchanged");
 assert.equal(viewForToday("day", day(2026, 10, 10)), "day");
 assert.equal(viewForToday("month", day(2026, 10, 10)), "month");
 assert.equal(ymd(shiftFocus(day(2026, 10, 7), "workweek", 1)), "2026-10-14", "next moves a whole week");

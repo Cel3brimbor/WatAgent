@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useEffect, useId, useLayoutEffect, useRef, useState, type RefObject } from "react";
+import { memo, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { ConfirmDialog } from "@/shared/confirm-dialog";
 import { RenameCalendarDialog } from "@/calendar/imported-calendars-panel";
 import { formatFeedSyncSummary, syncImportedFeed } from "@/calendar/calendar-sync";
@@ -13,6 +13,7 @@ import { isExcludedGoogleCalendarName } from "@/calendar/calendar-lists";
 import {
   CALENDAR_PALETTE,
   calendarSwatchColor,
+  paintCalendarSwatchLive,
   calendarGroupsOf,
   isCalendarReadOnly,
   setCalendarReadOnly,
@@ -54,7 +55,7 @@ type Props = {
   sources: CalendarSourceFilter;
   onSources: (next: CalendarSourceFilter) => void;
   colors: CalendarColors;
-  onColors: (next: CalendarColors) => void;
+  onColors: (next: CalendarColors | ((current: CalendarColors) => CalendarColors)) => void;
   externalCalendars: SideExternalCalendar[];
   /** UWaterloo Events rows. Separate from external calendars, including while one is being added or removed. */
   campusCalendars: SideExternalCalendar[];
@@ -66,7 +67,9 @@ type Props = {
   onNotice: (message: string) => void;
   googleCalendars: GoogleCalendarRef[];
   colorOverrides: Record<string, string>;
-  onColorOverrides: (next: Record<string, string>) => void;
+  onColorOverrides: (
+    next: Record<string, string> | ((current: Record<string, string>) => Record<string, string>),
+  ) => void;
   smartTags: SmartTag[];
   onSmartTags: (next: SmartTag[]) => void;
   smartTagSamples: SmartTagTarget[];
@@ -138,6 +141,28 @@ export const CalendarSidePanel = memo(function CalendarSidePanel({
   const shownMenu = menuPresence.value;
   const menuRef = useRef<HTMLDivElement | null>(null);
   const headingId = useId();
+  //sidebar rows read pending swatches until parent props catch up; no extra effect pass
+  const [pendingPaint, setPendingPaint] = useState<Record<string, string>>({});
+  const paintColors = useMemo(() => {
+    const next = { ...colors };
+    const pendingEvent = pendingPaint.events;
+    const pendingTask = pendingPaint.tasks;
+    if (pendingEvent && pendingEvent !== colors.event) next.event = pendingEvent;
+    if (pendingTask && pendingTask !== colors.task) next.task = pendingTask;
+    return next;
+  }, [colors, pendingPaint]);
+  const paintOverrides = useMemo(() => {
+    const next = { ...colorOverrides };
+    for (const [key, color] of Object.entries(pendingPaint)) {
+      const settled = key === "events"
+        ? colors.event === color
+        : key === "tasks"
+          ? colors.task === color
+          : colorOverrides[key] === color;
+      if (!settled) next[key] = color;
+    }
+    return next;
+  }, [colorOverrides, colors, pendingPaint]);
 
   useEffect(() => {
     setCursor(startOfLocalDay(focus));
@@ -172,7 +197,7 @@ export const CalendarSidePanel = memo(function CalendarSidePanel({
   const localRows: Row[] = localCalendars.map((calendar) => ({
     id: calendar.id,
     name: calendar.name,
-    color: calendarSwatchColor(calendar.id, colors, colorOverrides),
+    color: calendarSwatchColor(calendar.id, paintColors, paintOverrides),
     checked: calendar.id === "events" ? sources.events : !sources.mutedGoogleIds.includes(calendar.id),
   }));
   const localById = (id: string) => localCalendars.find((calendar) => calendar.id === id);
@@ -184,7 +209,7 @@ export const CalendarSidePanel = memo(function CalendarSidePanel({
     .map((calendar) => ({
       id: calendar.id,
       name: calendar.name,
-      color: colorOverrides[calendar.id] || calendar.color || colors.google,
+      color: paintOverrides[calendar.id] || calendar.color || paintColors.google,
       checked: googleChecked(sources, calendar.id),
       google: true,
     }));
@@ -192,11 +217,11 @@ export const CalendarSidePanel = memo(function CalendarSidePanel({
     if (isCampusSideCalendar(calendar)) {
       const categories = campusFeedCategories(calendar.feeds[0]?.url ?? "");
       if (categories?.length === 1) {
-        const stable = colorOverrides[campusColorKey(categories[0])];
+        const stable = paintOverrides[campusColorKey(categories[0])];
         if (stable) return stable;
       }
     }
-    return calendarSwatchColor(id, colors, colorOverrides);
+    return calendarSwatchColor(id, paintColors, paintOverrides);
   };
   const rowOf = (calendar: SideExternalCalendar): Row => ({
     id: calendar.id,
@@ -310,17 +335,36 @@ export const CalendarSidePanel = memo(function CalendarSidePanel({
 
   function paint(id: string, color: string) {
     const next = color.toLowerCase();
-    if (id === "events") onColors({ ...colors, event: next });
-    else if (id === "tasks") onColors({ ...colors, task: next });
-    else {
-      const calendar = externalById(id);
-      const nextOverrides = { ...colorOverrides, [id]: next };
-      if (calendar && isCampusSideCalendar(calendar)) {
-        const categories = campusFeedCategories(calendar.feeds[0]?.url ?? "");
-        if (categories?.length === 1) nextOverrides[campusColorKey(categories[0])] = next;
-      }
-      onColorOverrides(nextOverrides);
+    const current = id === "events"
+      ? paintColors.event
+      : id === "tasks"
+        ? paintColors.task
+        : paintOverrides[id];
+    if (current?.toLowerCase() === next) {
+      setMenu((menuNow) => (menuNow && menuNow.id === id ? { ...menuNow, color: next } : menuNow));
+      return;
     }
+    const pending: Record<string, string> = { [id]: next };
+    paintCalendarSwatchLive(id, next);
+    if (id === "events") onColors((current) => ({ ...current, event: next }));
+    else if (id === "tasks") onColors((current) => ({ ...current, task: next }));
+    else {
+      onColorOverrides((overrides) => {
+        const nextOverrides = { ...overrides, [id]: next };
+        const calendar = externalById(id);
+        if (calendar && isCampusSideCalendar(calendar)) {
+          const categories = campusFeedCategories(calendar.feeds[0]?.url ?? "");
+          if (categories?.length === 1) {
+            const stable = campusColorKey(categories[0]);
+            nextOverrides[stable] = next;
+            pending[stable] = next;
+            paintCalendarSwatchLive(stable, next);
+          }
+        }
+        return nextOverrides;
+      });
+    }
+    setPendingPaint((current) => ({ ...current, ...pending }));
     setMenu((current) => (current && current.id === id ? { ...current, color: next } : current));
   }
 

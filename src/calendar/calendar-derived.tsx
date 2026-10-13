@@ -283,6 +283,130 @@ function patchCampusRows(rows: SideExternalCalendar[], feeds: readonly ImportedC
   return changed ? kept : rows;
 }
 
+function isWatAgentMentionId(id: string): boolean {
+  return id === "events" || id === "tasks" || id.startsWith("cal-");
+}
+
+function reuseList<T>(prev: readonly T[], next: T[], same: (a: T, b: T) => boolean): T[] {
+  if (prev.length !== next.length) return next;
+  for (let index = 0; index < prev.length; index += 1) {
+    if (!same(prev[index], next[index])) return next;
+  }
+  return prev as T[];
+}
+
+function sameMention(a: MentionCalendar, b: MentionCalendar): boolean {
+  if (a === b) return true;
+  if (a.id !== b.id || a.name !== b.name || a.kind !== b.kind || a.color !== b.color || a.readOnly !== b.readOnly) return false;
+  const left = a.memberIds ?? [];
+  const right = b.memberIds ?? [];
+  if (left.length !== right.length) return false;
+  for (let index = 0; index < left.length; index += 1) if (left[index] !== right[index]) return false;
+  return true;
+}
+
+//a recolor or a new calendar only retints rows. event lists stay as they are
+function repaintCalendarSurfaces(prev: Surfaces, config: DerivedConfig): Surfaces {
+  const swatch = (id: string) => calendarSwatchColor(id, config.colors, config.colorOverrides);
+  const shownIds = new Set(config.shownCalendars.map((calendar) => calendar.id));
+  const localMentions: MentionCalendar[] = [];
+  for (const calendar of config.shownCalendars) {
+    if (isAgentCalendarHidden(config.agentHiddenCalendarIds, calendar.id)) continue;
+    localMentions.push({
+      id: calendar.id,
+      name: calendar.name,
+      kind: calendar.kind,
+      color: swatch(calendar.id),
+      readOnly: isCalendarReadOnly(config.sources, calendar.id),
+    });
+  }
+  const otherMentions: MentionCalendar[] = [];
+  for (const mention of prev.chat.mentions) {
+    if (shownIds.has(mention.id) || isWatAgentMentionId(mention.id)) continue;
+    const color = mention.id === "google" ? config.colors.google : swatch(mention.id);
+    otherMentions.push(mention.color === color ? mention : { ...mention, color });
+  }
+  const mentions = reuseList(prev.chat.mentions, [...localMentions, ...otherMentions], sameMention);
+
+  const localChoices: SpaceCalendarChoice[] = config.shownCalendars.map((entry) => ({
+    id: entry.id,
+    name: entry.name,
+    color: swatch(entry.id),
+    group: "WatAgent",
+  }));
+  const otherChoices: SpaceCalendarChoice[] = [];
+  for (const choice of prev.displays.choices) {
+    if (choice.group === "WatAgent") continue;
+    const color = choice.group === "Google"
+      ? (config.colorOverrides[choice.id] || prev.side.googleCalendars.find((calendar) => calendar.id === choice.id)?.color || config.colors.google)
+      : swatch(choice.id);
+    otherChoices.push(choice.color === color ? choice : { ...choice, color });
+  }
+  const choices = reuseList(
+    prev.displays.choices,
+    [...localChoices, ...otherChoices],
+    (a, b) => a.id === b.id && a.name === b.name && a.color === b.color && a.group === b.group,
+  );
+
+  const localTaskCalendars: KeywordTaskCalendarOption[] = config.shownCalendars
+    .filter((calendar) => calendar.kind === "event")
+    .map((calendar) => ({ id: calendar.id, name: calendar.name, group: "WatAgent" }));
+  const taskCalendars = reuseList(
+    prev.tasks.calendars,
+    [...prev.tasks.calendars.filter((calendar) => calendar.group !== "WatAgent"), ...localTaskCalendars],
+    (a, b) => a.id === b.id && a.name === b.name && a.group === b.group,
+  );
+
+  const chat = mentions === prev.chat.mentions ? prev.chat : { ...prev.chat, mentions };
+  const displays = choices === prev.displays.choices ? prev.displays : { ...prev.displays, choices };
+  const tasks = taskCalendars === prev.tasks.calendars ? prev.tasks : { ...prev.tasks, calendars: taskCalendars };
+  if (chat === prev.chat && displays === prev.displays && tasks === prev.tasks) return prev;
+  return { ...prev, chat, displays, tasks };
+}
+
+/**grid chips already track :root vars; skip slice work when only hex values moved*/
+function recolorOnlyConfigChange(previous: DerivedConfig, config: DerivedConfig): boolean {
+  if (previous.shownCalendars !== config.shownCalendars) return false;
+  return previous.colors !== config.colors || previous.colorOverrides !== config.colorOverrides;
+}
+
+function calendarSpaceViewOnlyChange(previous: DerivedConfig, config: DerivedConfig): boolean {
+  const a = previous.calendarSpaces;
+  const b = config.calendarSpaces;
+  if (a === b) return false;
+  if (a.length !== b.length) return false;
+  let viewMoved = false;
+  for (let i = 0; i < a.length; i++) {
+    const left = a[i];
+    const right = b[i];
+    if (left.id !== right.id) return false;
+    if (left.view !== right.view) viewMoved = true;
+    if (JSON.stringify({ ...left, view: "" }) !== JSON.stringify({ ...right, view: "" })) return false;
+  }
+  return viewMoved;
+}
+
+function paintOnlyConfig(previous: DerivedConfig, config: DerivedConfig): boolean {
+  if (
+    previous.pendingChanges !== config.pendingChanges
+    || previous.googleCalendars !== config.googleCalendars
+    || previous.importedCalendars !== config.importedCalendars
+    || previous.campusCalendarFeeds !== config.campusCalendarFeeds
+    || previous.mergedCalendars !== config.mergedCalendars
+    || previous.feedsForMerge !== config.feedsForMerge
+    || previous.calendarSpaces !== config.calendarSpaces
+    || previous.spaceOnlyFeeds !== config.spaceOnlyFeeds
+    || previous.sources !== config.sources
+    || previous.agentHiddenCalendarIds !== config.agentHiddenCalendarIds
+    || previous.googleConnected !== config.googleConnected
+    || previous.keywordTasks !== config.keywordTasks
+    || previous.taskSmartTags !== config.taskSmartTags
+  ) return false;
+  return previous.colors !== config.colors
+    || previous.colorOverrides !== config.colorOverrides
+    || previous.shownCalendars !== config.shownCalendars;
+}
+
 function configWithCampusFeeds(config: DerivedConfig, feeds: ImportedCalendar[] | undefined): DerivedConfig {
   if (!feeds || feeds === config.campusCalendarFeeds) return config;
   return { ...config, campusCalendarFeeds: feeds, feedsForMerge: [...config.importedCalendars, ...feeds] };
@@ -637,37 +761,51 @@ export function DerivedProvider({
     const previous = configRef.current;
     configRef.current = config;
     const live = liveConfig();
-    const onlyCampusFeeds = previous.campusCalendarFeeds !== config.campusCalendarFeeds
-      && previous.importedCalendars === config.importedCalendars
-      && previous.mergedCalendars === config.mergedCalendars
-      && previous.sources === config.sources
-      && previous.colorOverrides === config.colorOverrides
-      && previous.colors === config.colors
-      && previous.pendingChanges === config.pendingChanges
-      && previous.googleCalendars === config.googleCalendars
-      && previous.shownCalendars === config.shownCalendars
-      && previous.keywordTasks === config.keywordTasks
-      && previous.taskSmartTags === config.taskSmartTags
-      && previous.calendarSpaces === config.calendarSpaces
-      && previous.agentHiddenCalendarIds === config.agentHiddenCalendarIds
-      && previous.googleConnected === config.googleConnected;
-    //a subscription toggle only adds or removes a campus row. patch that now; the full surfaces follow the switch spring
-    if (onlyCampusFeeds) {
-      const campusCalendars = patchCampusRows(slices.side.campusCalendars, live.campusCalendarFeeds);
-      if (campusCalendars !== slices.side.campusCalendars) {
-        shown = { ...slices, side: { ...slices.side, campusCalendars } };
-        setSlices(shown);
-      }
-      afterMotion(() => {
-        startTransition(() => {
-          setSlices((current) => stabilize(current, deriveCalendarSurfaces(store.getAllItems(), store.getAllGoogle(), liveConfig())));
+    if (live === config && recolorOnlyConfigChange(previous, config)) {
+      shown = slices;
+    } else if (live === config && calendarSpaceViewOnlyChange(previous, config)) {
+      shown = slices;
+    } else if (live === config && paintOnlyConfig(previous, config)) {
+      const snapshot = live;
+      startTransition(() => {
+        setSlices((current) => {
+          const next = stabilize(current, repaintCalendarSurfaces(current, snapshot));
+          return next === current ? current : next;
         });
       });
     } else {
-      const next = stabilize(slices, deriveCalendarSurfaces(store.getAllItems(), store.getAllGoogle(), live));
-      if (next !== slices) {
-        shown = next;
-        setSlices(next);
+      const onlyCampusFeeds = previous.campusCalendarFeeds !== config.campusCalendarFeeds
+        && previous.importedCalendars === config.importedCalendars
+        && previous.mergedCalendars === config.mergedCalendars
+        && previous.sources === config.sources
+        && previous.colorOverrides === config.colorOverrides
+        && previous.colors === config.colors
+        && previous.pendingChanges === config.pendingChanges
+        && previous.googleCalendars === config.googleCalendars
+        && previous.shownCalendars === config.shownCalendars
+        && previous.keywordTasks === config.keywordTasks
+        && previous.taskSmartTags === config.taskSmartTags
+        && previous.calendarSpaces === config.calendarSpaces
+        && previous.agentHiddenCalendarIds === config.agentHiddenCalendarIds
+        && previous.googleConnected === config.googleConnected;
+      //a subscription toggle only adds or removes a campus row. patch that now; the full surfaces follow the switch spring
+      if (onlyCampusFeeds) {
+        const campusCalendars = patchCampusRows(slices.side.campusCalendars, live.campusCalendarFeeds);
+        if (campusCalendars !== slices.side.campusCalendars) {
+          shown = { ...slices, side: { ...slices.side, campusCalendars } };
+          setSlices(shown);
+        }
+        afterMotion(() => {
+          startTransition(() => {
+            setSlices((current) => stabilize(current, deriveCalendarSurfaces(store.getAllItems(), store.getAllGoogle(), liveConfig())));
+          });
+        });
+      } else {
+        const next = stabilize(slices, deriveCalendarSurfaces(store.getAllItems(), store.getAllGoogle(), live));
+        if (next !== slices) {
+          shown = next;
+          setSlices(next);
+        }
       }
     }
   }
