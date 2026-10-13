@@ -20,6 +20,11 @@ export type ActivityPart =
   | { kind: "thought"; thought: ThoughtSegment }
   | { kind: "tools"; events: ToolEventRecord[] };
 
+export type ChatImage = {
+  mediaType: "image/jpeg" | "image/png" | "image/webp" | "image/gif";
+  data: string;
+};
+
 export type ChatMessage = {
   id: string;
   role: "user" | "assistant";
@@ -27,6 +32,9 @@ export type ChatMessage = {
   createdAt?: number;
   /**watagent calendars attached with @ on this user message*/
   calendarIds?: string[];
+  images?: ChatImage[];
+  /**text read from images in the browser. this is what the prompt guard and the model see*/
+  imageText?: string;
   activity?: ActivityPart[];
   toolEvents?: ToolEventRecord[];
 };

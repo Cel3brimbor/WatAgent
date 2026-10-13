@@ -239,6 +239,14 @@ export function ShieldCheckIcon(props: IconProps) {
   );
 }
 
+export function PaperclipIcon(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <path d="M9.15 3.15v7.35a2.05 2.05 0 0 1-4.1 0V4.55a1.2 1.2 0 0 1 2.4 0v5.35" />
+    </Glyph>
+  );
+}
+
 export function PinIcon(props: IconProps) {
   return (
     <Glyph {...props} strokeWidth={1.6}>
