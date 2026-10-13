@@ -16,3 +16,4 @@ src-tauri/plugins/*/permissions/schemas/
 .DS_Store
 *.log
 .vercel
+public/ort/

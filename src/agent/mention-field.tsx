@@ -11,7 +11,7 @@ import {
   useState,
   type CSSProperties,
   type ClipboardEvent,
-  type FocusEvent,
+  type DragEvent,
   type InputEvent,
   type KeyboardEvent,
   type PointerEvent,
@@ -27,6 +27,7 @@ import {
   matchCalendars,
   type MentionCalendar,
 } from "@/agent/calendar-mention";
+import { filesFromClipboard } from "@/agent/chat-image";
 import { HEX_COLOR } from "@/calendar/preferences";
 import type { CalendarItemDoc } from "@/calendar/types";
 
@@ -59,6 +60,7 @@ type Props = {
   enterSends?: boolean;
   onEnter?: () => void;
   onEscape?: () => void;
+  onPasteFiles?: (files: File[]) => void;
   attachRequest?: { id: string; nonce: number } | null;
   ariaLabel?: string;
 };
@@ -79,6 +81,7 @@ export const MentionField = forwardRef<MentionFieldHandle, Props>(function Menti
     enterSends = false,
     onEnter,
     onEscape,
+    onPasteFiles,
     attachRequest,
     ariaLabel = "Message",
   },
@@ -98,6 +101,7 @@ export const MentionField = forwardRef<MentionFieldHandle, Props>(function Menti
     onInput: () => undefined,
     onKeyDown: () => undefined,
     onPaste: () => undefined,
+    onDrop: () => undefined,
     onPointerDown: () => undefined,
     onClick: () => undefined,
     onFocus: () => undefined,
@@ -290,16 +294,36 @@ export const MentionField = forwardRef<MentionFieldHandle, Props>(function Menti
   }
 
   function onPaste(event: ClipboardEvent<HTMLDivElement>) {
-    event.preventDefault();
+    if (disabled) return;
+    const files = filesFromClipboard(event.clipboardData);
     const text = event.clipboardData.getData("text/plain").replace(/\r\n/g, "\n");
-    if (!text || disabled) return;
+    if (files.length > 0) {
+      event.preventDefault();
+      event.stopPropagation();
+      onPasteFiles?.(files);
+      if (!text) return;
+      document.execCommand("insertText", false, text);
+      publish();
+      return;
+    }
+    event.preventDefault();
+    if (!text) return;
     document.execCommand("insertText", false, text);
     publish();
   }
 
+  function onDrop(event: DragEvent<HTMLDivElement>) {
+    const files = [...(event.dataTransfer?.files ?? [])];
+    if (files.length === 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (disabled) return;
+    onPasteFiles?.(files);
+  }
+
   function onBeforeInput(event: InputEvent<HTMLDivElement>) {
     if (disabled || event.nativeEvent.isComposing) return;
-    if (event.inputType !== "deleteContentForward") return;
+    if (event.nativeEvent.inputType !== "deleteContentForward") return;
     const root = editorRef.current;
     if (!root) return;
     syncChipTails(root);
@@ -360,6 +384,7 @@ export const MentionField = forwardRef<MentionFieldHandle, Props>(function Menti
     onInput: publish,
     onKeyDown,
     onPaste,
+    onDrop,
     onPointerDown,
     onClick: onEditorClick,
     onFocus,
@@ -567,6 +592,7 @@ type EditorBind = {
   onInput: () => void;
   onKeyDown: (event: KeyboardEvent<HTMLDivElement>) => void;
   onPaste: (event: ClipboardEvent<HTMLDivElement>) => void;
+  onDrop: (event: DragEvent<HTMLDivElement>) => void;
   onPointerDown: (event: PointerEvent<HTMLDivElement>) => void;
   onClick: () => void;
   onFocus: () => void;
@@ -604,6 +630,10 @@ const EditorSurface = memo(function EditorSurface({
       onInput={() => bind.current?.onInput()}
       onKeyDown={(event) => bind.current?.onKeyDown(event)}
       onPaste={(event) => bind.current?.onPaste(event)}
+      onDragOver={(event) => {
+        if ([...event.dataTransfer.types].includes("Files")) event.preventDefault();
+      }}
+      onDrop={(event) => bind.current?.onDrop(event)}
       onPointerDown={(event) => bind.current?.onPointerDown(event)}
       onClick={() => bind.current?.onClick()}
       onFocus={() => bind.current?.onFocus()}

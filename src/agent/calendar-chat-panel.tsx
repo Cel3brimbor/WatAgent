@@ -11,7 +11,8 @@ import { ChatComposer } from "@/agent/chat-composer";
 import { MentionField, type MentionFieldHandle } from "@/agent/mention-field";
 import { ChatTabStrip } from "@/agent/chat-tab-strip";
 import { MessageContent } from "@/agent/message-content";
-import type { ChatMessage, ChatSession } from "@/agent/types";
+import { chatImageSrc } from "@/agent/chat-image";
+import type { ChatImage, ChatMessage, ChatSession } from "@/agent/types";
 import { CHAT_WIDTH_MAX, CHAT_WIDTH_MIN, useChatResize } from "@/agent/use-chat-resize";
 import { useSheetDismiss } from "@/agent/use-sheet-dismiss";
 import { AiApprovalPanel } from "@/calendar/ai-approval-panel";
@@ -84,6 +85,8 @@ type SendPayload = {
   text: string;
   effort: AgentEffort;
   calendarIds?: string[];
+  images?: ChatImage[];
+  imageText?: string;
   branch?: { kind: "edit"; messageId: string } | { kind: "regenerate"; messageId: string };
 };
 
@@ -215,10 +218,12 @@ export const CalendarChatPanel = memo(function CalendarChatPanel({
     const payload = editRef.current?.read();
     const next = payload?.text.trim() ?? "";
     const calendarIds = payload?.calendarIds ?? [];
-    if (busy || (!next && calendarIds.length === 0)) return;
+    const prior = messages.find((message) => message.id === messageId);
+    const images = prior?.images;
+    if (busy || (!next && calendarIds.length === 0 && !(images?.length))) return;
     setEditingId(null);
     setOpenBadge(null);
-    send({ text: next, calendarIds, branch: { kind: "edit", messageId } });
+    send({ text: next, calendarIds, images, imageText: prior?.imageText, branch: { kind: "edit", messageId } });
   }
 
   return (
@@ -309,6 +314,7 @@ export const CalendarChatPanel = memo(function CalendarChatPanel({
                         />
                         {editing ? (
                           <>
+                            <MessageImages images={m.images} />
                             <MentionField
                               key={m.id}
                               ref={editRef}
@@ -336,6 +342,7 @@ export const CalendarChatPanel = memo(function CalendarChatPanel({
                           <UserMessage
                             content={m.content}
                             calendarIds={m.calendarIds}
+                            images={m.images}
                             calendarOf={calendarOf}
                             items={items}
                             openBadge={openBadge}
@@ -409,9 +416,26 @@ export const CalendarChatPanel = memo(function CalendarChatPanel({
   );
 });
 
+function MessageImages({ images }: { images?: ChatImage[] }) {
+  const sources = (images ?? [])
+    .map((image) => chatImageSrc(image))
+    .filter((src): src is string => Boolean(src));
+  if (sources.length === 0) return null;
+  return (
+    <div className="bubble-images">
+      {sources.map((src, index) => (
+        <div className="bubble-image" key={index}>
+          <img src={src} alt="Attached image" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function UserMessage({
   content,
   calendarIds,
+  images,
   calendarOf,
   items,
   openBadge,
@@ -421,6 +445,7 @@ function UserMessage({
 }: {
   content: string;
   calendarIds?: string[];
+  images?: ChatImage[];
   calendarOf: (id: string) => MentionCalendar;
   items: CalendarItemDoc[];
   openBadge: string | null;
@@ -428,12 +453,21 @@ function UserMessage({
   onOpenBadge: (id: string | null) => void;
   onEditItem?: (item: CalendarItemDoc) => void;
 }) {
+  const pictures = <MessageImages images={images} />;
   const pieces = messagePieces(content, calendarIds).filter((piece) => piece.kind === "calendar" || piece.text.trim());
-  if (pieces.length === 0) return null;
+  if (pieces.length === 0) return pictures;
   const chips = pieces.some((piece) => piece.kind === "calendar");
-  if (!chips) return <MessageContent content={content} />;
+  if (!chips) {
+    return (
+      <>
+        {pictures}
+        <MessageContent content={content} />
+      </>
+    );
+  }
   return (
     <div className="bubble-flow">
+      {pictures}
       {pieces.map((piece, index) =>
         piece.kind === "calendar" ? (
           <CalendarBadge
