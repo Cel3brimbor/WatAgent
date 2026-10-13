@@ -35,6 +35,12 @@ function settledLabel(event: ToolEventRecord): string {
   return event.resultSummary || DONE[event.tool] || event.callLabel || event.tool;
 }
 
+function callVerb(event: ToolEventRecord, pending: boolean): string {
+  if (pending) return "calling";
+  if (event.state === "failed") return "returned";
+  return "called";
+}
+
 function toolSummary(steps: ToolEventRecord[], live: boolean): string {
   const pending = live ? steps.find((event) => event.state === "calling") : undefined;
   if (pending) return progressLabel(pending);
@@ -102,7 +108,7 @@ export function AgentThinkingBlock({
                 </span>
                 <p className="agent-call-line">
                   <span className={pending ? "agent-call-verb agent-activity-live" : "agent-call-verb"}>
-                    {pending ? "calling" : event.state === "failed" ? "failed" : "called"}
+                    {callVerb(event, pending)}
                   </span>
                   <span className="agent-activity-detail">{event.callLabel || event.tool}</span>
                 </p>

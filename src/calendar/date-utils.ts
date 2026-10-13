@@ -85,6 +85,24 @@ export function viewForToday(view: CalendarView, today: Date): CalendarView {
   return view;
 }
 
+/** Week and 5-day share one timed grid; remounting the stage between them is wasted work. */
+export function viewsShareTimedWeek(a: CalendarView, b: CalendarView): boolean {
+  return (a === "week" || a === "workweek") && (b === "week" || b === "workweek");
+}
+
+export function stageViewKey(view: CalendarView): string {
+  if (view === "week" || view === "workweek") return "week";
+  return view;
+}
+
+/** startOfWorkWeek jumps to the coming Monday on weekends; keep the week already on screen when leaving week view. */
+export function focusEnteringWorkweek(focus: Date, weekStartsOn: 0 | 1): Date {
+  const local = startOfLocalDay(focus);
+  const day = local.getDay();
+  if (day === 0 || day === 6) return startOfWeek(local, weekStartsOn);
+  return local;
+}
+
 export function shiftFocus(focus: Date, view: CalendarView, delta: number): Date {
   if (view === "day") return addDays(focus, delta);
   if (view === "week" || view === "workweek") return addDays(focus, delta * 7);

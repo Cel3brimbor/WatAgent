@@ -12,6 +12,7 @@ import {
   type CSSProperties,
   type ClipboardEvent,
   type DragEvent,
+  type InputEvent,
   type KeyboardEvent,
   type PointerEvent,
   type RefObject,
@@ -103,6 +104,9 @@ export const MentionField = forwardRef<MentionFieldHandle, Props>(function Menti
     onDrop: () => undefined,
     onPointerDown: () => undefined,
     onClick: () => undefined,
+    onFocus: () => undefined,
+    onBlur: () => undefined,
+    onBeforeInput: () => undefined,
   });
   const ariaRef = useRef({ expanded: false, listId: "", active: "" });
   const listId = useId();
@@ -123,7 +127,8 @@ export const MentionField = forwardRef<MentionFieldHandle, Props>(function Menti
       return;
     }
     lastGood.current = root.innerHTML;
-    const blank = !root.textContent?.replace(/\u00a0/g, " ").trim() && !root.querySelector("[data-calendar-id]");
+    const blank =
+      !root.textContent?.replace(/\u00a0/g, " ").trim() && !root.querySelector("[data-calendar-id]");
     emptyRef.current = blank;
     root.dataset.empty = blank ? "true" : "false";
     const found = mentionIn(root);
@@ -158,7 +163,8 @@ export const MentionField = forwardRef<MentionFieldHandle, Props>(function Menti
     filled.current = true;
     fillEditor(root, initialText, initialCalendarIds, calendarsRef.current);
     lastGood.current = root.innerHTML;
-    const blank = !root.textContent?.replace(/\u00a0/g, " ").trim() && !root.querySelector("[data-calendar-id]");
+    const blank =
+      !root.textContent?.replace(/\u00a0/g, " ").trim() && !root.querySelector("[data-calendar-id]");
     emptyRef.current = blank;
     root.dataset.empty = blank ? "true" : "false";
     onChange?.(readEditor(root));
@@ -194,7 +200,7 @@ export const MentionField = forwardRef<MentionFieldHandle, Props>(function Menti
   useLayoutEffect(() => {
     const root = editorRef.current;
     if (!root) return;
-    if (lastGood.current && root.innerHTML !== lastGood.current) root.innerHTML = lastGood.current;
+    if (editorDomWasWiped(root, lastGood.current)) root.innerHTML = lastGood.current;
     root.dataset.empty = emptyRef.current ? "true" : "false";
     if (placeholder) root.dataset.placeholder = placeholder;
     root.setAttribute("aria-expanded", ariaRef.current.expanded ? "true" : "false");
@@ -268,6 +274,14 @@ export const MentionField = forwardRef<MentionFieldHandle, Props>(function Menti
       event.preventDefault();
       onEscape?.();
     }
+    if (event.key === "Backspace" && !event.nativeEvent.isComposing) {
+      const root = editorRef.current;
+      if (root && handleChipBackspace(root)) {
+        event.preventDefault();
+        publish();
+        return;
+      }
+    }
     if (event.key === "Enter" && !event.nativeEvent.isComposing) {
       event.preventDefault();
       if ((event.metaKey || event.ctrlKey) || (!event.shiftKey && enterSends)) {
@@ -307,6 +321,43 @@ export const MentionField = forwardRef<MentionFieldHandle, Props>(function Menti
     onPasteFiles?.(files);
   }
 
+  function onBeforeInput(event: InputEvent<HTMLDivElement>) {
+    if (disabled || event.nativeEvent.isComposing) return;
+    if (event.nativeEvent.inputType !== "deleteContentForward") return;
+    const root = editorRef.current;
+    if (!root) return;
+    syncChipTails(root);
+    const wrap = chipAfterCaret(root);
+    if (!wrap) return;
+    event.preventDefault();
+    removeChipWrap(wrap);
+    publish();
+  }
+
+  function onEditorClick() {
+    const root = editorRef.current;
+    publish();
+    if (!root) return;
+    requestAnimationFrame(() => repairCaretNearChips(root));
+  }
+
+  function onFocus() {
+    const root = editorRef.current;
+    if (!root || disabled) return;
+    syncChipTails(root);
+    lastGood.current = root.innerHTML;
+    requestAnimationFrame(() => {
+      repairCaretNearChips(root);
+    });
+  }
+
+  function onBlur() {
+    const root = editorRef.current;
+    if (!root) return;
+    syncChipTails(root);
+    lastGood.current = root.innerHTML;
+  }
+
   function onPointerDown(event: PointerEvent<HTMLDivElement>) {
     const target = event.target;
     if (!(target instanceof Element)) return;
@@ -335,7 +386,10 @@ export const MentionField = forwardRef<MentionFieldHandle, Props>(function Menti
     onPaste,
     onDrop,
     onPointerDown,
-    onClick: publish,
+    onClick: onEditorClick,
+    onFocus,
+    onBlur,
+    onBeforeInput,
   };
 
   const menu = mention ? (
@@ -488,17 +542,21 @@ function insertChip(root: HTMLElement, calendar: MentionCalendar, mention: { sta
   if (text && mention) {
     const token = `@${mention.query}`;
     const at = text.data.slice(mention.start, mention.start + token.length) === token ? mention.start : text.data.lastIndexOf(token);
-    const before = text.data.slice(0, Math.max(0, at));
+    let before = text.data.slice(0, Math.max(0, at));
     const after = text.data.slice(Math.max(0, at) + token.length);
+    if (before && !/\s$/.test(before)) before = `${before} `;
     text.data = before;
-    const rest = document.createTextNode(after.startsWith(" ") ? after : ` ${after}`);
+    const visible = after.startsWith(" ") ? after : ` ${after}`;
+    const rest = document.createTextNode(visible);
     text.after(chip, rest);
-    placeCaret(rest, 1);
+    placeCaret(rest, visible.length);
+    syncChipTails(root);
     return true;
   }
   const rest = document.createTextNode(" ");
   root.append(chip, rest);
   placeCaret(rest, 1);
+  syncChipTails(root);
   return true;
 }
 
@@ -537,6 +595,9 @@ type EditorBind = {
   onDrop: (event: DragEvent<HTMLDivElement>) => void;
   onPointerDown: (event: PointerEvent<HTMLDivElement>) => void;
   onClick: () => void;
+  onFocus: () => void;
+  onBlur: () => void;
+  onBeforeInput: (event: InputEvent<HTMLDivElement>) => void;
 };
 
 const EditorSurface = memo(function EditorSurface({
@@ -575,6 +636,9 @@ const EditorSurface = memo(function EditorSurface({
       onDrop={(event) => bind.current?.onDrop(event)}
       onPointerDown={(event) => bind.current?.onPointerDown(event)}
       onClick={() => bind.current?.onClick()}
+      onFocus={() => bind.current?.onFocus()}
+      onBlur={() => bind.current?.onBlur()}
+      onBeforeInput={(event) => bind.current?.onBeforeInput(event)}
     />
   );
 }, (prev, next) => prev.className === next.className && prev.disabled === next.disabled && prev.ariaLabel === next.ariaLabel);
@@ -601,6 +665,172 @@ function placeCaretEnd(root: HTMLElement) {
   if (!last) return;
   if (last.nodeType === Node.TEXT_NODE) placeCaret(last, last.textContent?.length ?? 0);
   else placeCaret(root, root.childNodes.length);
+}
+
+function editorDomWasWiped(root: HTMLElement, snapshot: string): boolean {
+  if (!snapshot) return false;
+  if (root.childNodes.length === 0) return true;
+  if (!snapshot.includes("data-calendar-id")) return false;
+  return !root.querySelector("[data-calendar-id]");
+}
+
+function syncChipTails(root: HTMLElement): boolean {
+  let changed = false;
+  root.querySelectorAll<HTMLElement>("[data-calendar-id]").forEach((wrap) => {
+    let next = wrap.nextSibling;
+    if (!next || next.nodeType !== Node.TEXT_NODE) {
+      const gap = next instanceof HTMLElement && next.dataset.calendarId ? " " : " ";
+      wrap.after(document.createTextNode(gap));
+      changed = true;
+      return;
+    }
+    const text = next as Text;
+    while (text.nextSibling?.nodeType === Node.TEXT_NODE) {
+      text.data += (text.nextSibling as Text).data;
+      text.nextSibling.remove();
+      changed = true;
+    }
+    const cleaned = text.data.replace(/\u200B/g, "");
+    if (text.data !== cleaned) {
+      text.data = cleaned;
+      changed = true;
+    }
+  });
+  return changed;
+}
+
+function placeCaretInChipTail(chip: HTMLElement) {
+  const tail = chip.nextSibling;
+  if (tail?.nodeType !== Node.TEXT_NODE) return;
+  const text = tail as Text;
+  placeCaret(text, text.data.length);
+}
+
+function handleChipBackspace(root: HTMLElement): boolean {
+  syncChipTails(root);
+  const action = chipDeleteOnBackspace(root);
+  if (action?.kind === "remove-chip") {
+    removeChipWrap(action.wrap);
+    return true;
+  }
+  if (action?.kind === "remove-tail-space") {
+    applyRemoveTailSpace(action.text);
+    return true;
+  }
+  return false;
+}
+
+function repairCaretNearChips(root: HTMLElement) {
+  const sel = window.getSelection();
+  if (!sel?.isCollapsed || !sel.anchorNode || !root.contains(sel.anchorNode)) return;
+  const { anchorNode, anchorOffset } = sel;
+
+  const onChip = chipWrapContaining(root, anchorNode);
+  if (onChip) {
+    placeCaretInChipTail(onChip);
+    return;
+  }
+
+  if (anchorNode === root) {
+    const at = calendarChip(root.childNodes[anchorOffset] ?? null);
+    if (at) {
+      placeCaretInChipTail(at);
+      return;
+    }
+    if (anchorOffset > 0) {
+      const prev = calendarChip(root.childNodes[anchorOffset - 1] ?? null);
+      if (prev) placeCaretInChipTail(prev);
+    }
+  }
+}
+
+type ChipDeleteAction =
+  | { kind: "remove-chip"; wrap: HTMLElement }
+  | { kind: "remove-tail-space"; text: Text };
+
+function chipDeleteOnBackspace(root: HTMLElement): ChipDeleteAction | null {
+  const sel = window.getSelection();
+  if (!sel?.isCollapsed || !sel.anchorNode || !root.contains(sel.anchorNode)) return null;
+  const { anchorNode, anchorOffset } = sel;
+
+  const onChip = chipWrapContaining(root, anchorNode);
+  if (onChip) return { kind: "remove-chip", wrap: onChip };
+
+  if (anchorNode.nodeType === Node.TEXT_NODE) {
+    return chipDeleteInTail(anchorNode as Text, anchorOffset);
+  }
+
+  if (anchorNode === root && anchorOffset > 0) {
+    const chip = calendarChip(root.childNodes[anchorOffset - 1] ?? null);
+    if (!chip) return null;
+    const tail = chip.nextSibling;
+    if (tail?.nodeType !== Node.TEXT_NODE) return { kind: "remove-chip", wrap: chip };
+    return chipDeleteInTail(tail as Text, 0);
+  }
+
+  return null;
+}
+
+function chipDeleteInTail(text: Text, anchorOffset: number): ChipDeleteAction | null {
+  const chip = calendarChip(text.previousSibling);
+  if (!chip) return null;
+  const data = text.data;
+  if (anchorOffset === 0) {
+    if (data === "") return { kind: "remove-chip", wrap: chip };
+    if (data[0] === " ") return { kind: "remove-tail-space", text };
+    return null;
+  }
+  if (anchorOffset === 1 && data === " ") return { kind: "remove-tail-space", text };
+  return null;
+}
+
+function applyRemoveTailSpace(text: Text) {
+  if (!text.data.startsWith(" ")) return;
+  text.data = text.data.slice(1);
+  placeCaret(text, 0);
+}
+
+function calendarChip(node: Node | null): HTMLElement | null {
+  return node instanceof HTMLElement && node.dataset.calendarId ? node : null;
+}
+
+function chipWrapContaining(root: HTMLElement, node: Node): HTMLElement | null {
+  const element = node instanceof HTMLElement ? node : node.parentElement;
+  const wrap = element?.closest<HTMLElement>("[data-calendar-id]");
+  return wrap && root.contains(wrap) ? wrap : null;
+}
+
+function chipAfterCaret(root: HTMLElement | null): HTMLElement | null {
+  const sel = window.getSelection();
+  if (!root || !sel?.isCollapsed || !sel.anchorNode || !root.contains(sel.anchorNode)) return null;
+  const { anchorNode, anchorOffset } = sel;
+  if (anchorNode.nodeType === Node.TEXT_NODE) {
+    const text = anchorNode as Text;
+    if (anchorOffset !== text.data.length) return null;
+    return calendarChip(text.nextSibling);
+  }
+  if (anchorNode === root) return calendarChip(root.childNodes[anchorOffset] ?? null);
+  return null;
+}
+
+function removeChipWrap(wrap: HTMLElement) {
+  const root = wrap.parentElement;
+  const prev = wrap.previousSibling;
+  const next = wrap.nextSibling;
+  wrap.remove();
+  if (next?.nodeType === Node.TEXT_NODE) {
+    const text = next as Text;
+    if (text.data) {
+      if (root) placeCaret(text, 0);
+      return;
+    }
+    text.remove();
+  }
+  if (prev?.nodeType === Node.TEXT_NODE) {
+    if (root) placeCaret(prev, prev.textContent?.length ?? 0);
+    return;
+  }
+  if (root) placeCaretEnd(root);
 }
 
 function highlightName(name: string, query: string) {

@@ -56,6 +56,11 @@ export type CalendarPreferencesState = {
   activeCalendarSpaceId: string;
 };
 
+function writePaintCache(doc: UserCalendarPreferencesV1): void {
+  writeCalendarColors(doc.colors);
+  writeColorOverrides(doc.colorOverrides);
+}
+
 function writeLocalCache(doc: UserCalendarPreferencesV1): void {
   writeCalendarView(doc.view);
   writeImportedCalendars(doc.importedCalendars);
@@ -196,11 +201,67 @@ export function useCalendarPreferencesSync(
   }, [ready]);
 
   const { view, importedCalendars, campusCalendars, mergedCalendars, agentHiddenCalendarIds, newCalendarsShown, localCalendars, sources, colors, colorOverrides, smartTags, taskSmartTags, keywordTasks, navCollapsed, sidePanelSections, calendarSpaces, activeCalendarSpaceId } = state;
+  const cacheDepsRef = useRef({
+    view,
+    importedCalendars,
+    campusCalendars,
+    mergedCalendars,
+    agentHiddenCalendarIds,
+    newCalendarsShown,
+    localCalendars,
+    sources,
+    colors,
+    colorOverrides,
+    smartTags,
+    taskSmartTags,
+    keywordTasks,
+    navCollapsed,
+    sidePanelSections,
+    calendarSpaces,
+    activeCalendarSpaceId,
+  });
 
   useEffect(() => {
     if (!ready || skipSaveRef.current) return;
     const doc = toDoc({ view, importedCalendars, campusCalendars, mergedCalendars, agentHiddenCalendarIds, newCalendarsShown, localCalendars, sources, colors, colorOverrides, smartTags, taskSmartTags, keywordTasks, navCollapsed, sidePanelSections, calendarSpaces, activeCalendarSpaceId });
-    writeLocalCache(doc);
+    const prev = cacheDepsRef.current;
+    const onlyPaint = prev.view === view
+      && prev.importedCalendars === importedCalendars
+      && prev.campusCalendars === campusCalendars
+      && prev.mergedCalendars === mergedCalendars
+      && prev.agentHiddenCalendarIds === agentHiddenCalendarIds
+      && prev.newCalendarsShown === newCalendarsShown
+      && prev.localCalendars === localCalendars
+      && prev.sources === sources
+      && prev.smartTags === smartTags
+      && prev.taskSmartTags === taskSmartTags
+      && prev.keywordTasks === keywordTasks
+      && prev.navCollapsed === navCollapsed
+      && prev.sidePanelSections === sidePanelSections
+      && prev.calendarSpaces === calendarSpaces
+      && prev.activeCalendarSpaceId === activeCalendarSpaceId
+      && (prev.colors !== colors || prev.colorOverrides !== colorOverrides);
+    cacheDepsRef.current = {
+      view,
+      importedCalendars,
+      campusCalendars,
+      mergedCalendars,
+      agentHiddenCalendarIds,
+      newCalendarsShown,
+      localCalendars,
+      sources,
+      colors,
+      colorOverrides,
+      smartTags,
+      taskSmartTags,
+      keywordTasks,
+      navCollapsed,
+      sidePanelSections,
+      calendarSpaces,
+      activeCalendarSpaceId,
+    };
+    if (onlyPaint) writePaintCache(doc);
+    else writeLocalCache(doc);
     pendingSaveRef.current = doc;
     window.clearTimeout(saveTimerRef.current);
     saveTimerRef.current = window.setTimeout(() => {

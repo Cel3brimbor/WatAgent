@@ -109,6 +109,7 @@ type Props = {
   onRenameChat: (chatId: string, title: string) => void;
   onCloseChat: (chatId: string) => void;
   onReopenChat: (chatId: string) => void;
+  onPinChat: (chatId: string, pinned: boolean) => void;
   onSelectChat: (chatId: string) => void;
   onReorderChats: (orderedIds: string[]) => void;
   onResizingChange: (resizing: boolean) => void;
@@ -146,6 +147,7 @@ export const CalendarChatPanel = memo(function CalendarChatPanel({
   onRenameChat,
   onCloseChat,
   onReopenChat,
+  onPinChat,
   onSelectChat,
   onReorderChats,
   onResizingChange,
@@ -263,6 +265,7 @@ export const CalendarChatPanel = memo(function CalendarChatPanel({
             onDeleteChat={onDeleteChat}
             onCloseTab={onCloseChat}
             onReopenChat={onReopenChat}
+            onPinChat={onPinChat}
             onStop={onStop}
             onReorderChats={onReorderChats}
             restricted={Boolean(restriction)}
