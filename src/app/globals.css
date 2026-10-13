@@ -5029,7 +5029,8 @@ button.qd-cal-swatch:active {
 .todo-list li.is-done .todo-main span {
   color: var(--ink-soft);
   text-decoration: line-through;
-  text-decoration-color: color-mix(in srgb, var(--ink-soft) 60%, transparent);
+  text-decoration-thickness: 2.5px;
+  text-decoration-color: currentColor;
 }
 
 .todo-list li.is-editor-draft {
@@ -5219,7 +5220,7 @@ button.qd-cal-swatch:active {
 }
 
 .todo-older {
-  margin-top: 1rem;
+  margin-top: 0.65rem;
 }
 
 /*keyword task rules: a one-line summary that opens into the editor*/
@@ -7187,7 +7188,8 @@ button.qd-cal-swatch:active {
   align-items: center;
   max-width: 100%;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--cal, var(--accent)) 14%, transparent);
+  background: var(--cal-chip-bg, color-mix(in srgb, var(--cal, var(--accent)) 22%, var(--paper)));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--cal-chip-fg, var(--ink)) 12%, transparent);
 }
 
 .cal-badge {
@@ -7201,14 +7203,14 @@ button.qd-cal-swatch:active {
   border: 0;
   border-radius: 999px;
   background: transparent;
-  color: var(--ink);
+  color: var(--cal-chip-fg, var(--ink));
   font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: -0.01em;
 }
 
 .cal-badge-read-only {
-  color: var(--ink-soft);
+  color: var(--cal-chip-fg-soft, var(--ink-soft));
   font-weight: 400;
 }
 
@@ -7223,7 +7225,14 @@ button.qd-cal-swatch:active {
   height: 0.45rem;
   flex: 0 0 auto;
   border-radius: 999px;
+  background: var(--cal-chip-fg, var(--cal, var(--accent)));
+  opacity: 0.92;
+}
+
+.mention-option .cal-badge-dot,
+.cal-pop-title .cal-badge-dot {
   background: var(--cal, var(--accent));
+  opacity: 1;
 }
 
 .cal-badge:active,
@@ -7237,7 +7246,7 @@ button.qd-cal-swatch:active {
 
 .cal-badge.is-open,
 .cal-badge:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--cal, var(--accent)) 55%, transparent);
+  outline: 2px solid color-mix(in srgb, var(--cal-chip-fg, var(--cal, var(--accent))) 45%, transparent);
   outline-offset: 1px;
 }
 
@@ -7251,7 +7260,7 @@ button.qd-cal-swatch:active {
   border: 0;
   border-radius: 999px;
   background: transparent;
-  color: var(--ink-soft);
+  color: var(--cal-chip-fg-soft, var(--ink-soft));
 }
 
 .cal-badge-remove .glyph {

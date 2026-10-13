@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, type CSSProperties, type KeyboardEvent, type RefObject } from "react";
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import {
   addDays,
@@ -14,8 +14,8 @@ import {
   startOfWeek,
 } from "@/calendar/date-utils";
 import { localCalendarIdOf } from "@/calendar/local-calendars";
-import { HEX_COLOR } from "@/calendar/preferences";
 import type { CalendarItemDoc, CalendarView } from "@/calendar/types";
+import { calendarBadgeStyle, calendarSwatchStyle } from "@/agent/calendar-badge-style";
 import { ChevronLeftIcon, ChevronRightIcon, CloseIcon } from "@/shared/icons";
 import type { MentionCalendar } from "@/agent/calendar-mention";
 
@@ -35,10 +35,6 @@ type Props = {
   onRemove?: () => void;
   onEditItem?: (item: CalendarItemDoc) => void;
 };
-
-function badgeStyle(color: string): CSSProperties | undefined {
-  return HEX_COLOR.test(color) ? ({ "--cal": color } as CSSProperties) : undefined;
-}
 
 function rangeOf(focus: Date, view: PopView): { start: number; end: number } {
   if (view === "day") {
@@ -99,7 +95,7 @@ export function CalendarBadge({ calendar, items, open, onOpenChange, onRemove, o
   const label = `${calendar.name} calendar`;
 
   return (
-    <span className="cal-badge-wrap" style={badgeStyle(calendar.color)}>
+    <span className="cal-badge-wrap" style={calendarBadgeStyle(calendar.color)}>
       <button
         ref={buttonRef}
         type="button"
@@ -276,7 +272,7 @@ export function CalendarBadgePopover({
     >
       <div className="cal-pop-head">
         <p id={titleId} className="cal-pop-title">
-          <span className="cal-badge-dot" style={badgeStyle(calendar.color)} aria-hidden="true" />
+          <span className="cal-badge-dot" style={calendarSwatchStyle(calendar.color)} aria-hidden="true" />
           {calendar.name}
         </p>
         <div className="cal-pop-nav">

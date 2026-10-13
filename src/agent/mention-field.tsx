@@ -9,7 +9,6 @@ import {
   useLayoutEffect,
   useRef,
   useState,
-  type CSSProperties,
   type ClipboardEvent,
   type DragEvent,
   type InputEvent,
@@ -19,6 +18,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { CalendarBadgePopover } from "@/agent/calendar-badge";
+import { calendarBadgeStyle, calendarSwatchStyle } from "@/agent/calendar-badge-style";
 import {
   calendarToken,
   isAttachableCalendarId,
@@ -28,7 +28,6 @@ import {
   type MentionCalendar,
 } from "@/agent/calendar-mention";
 import { filesFromClipboard } from "@/agent/chat-image";
-import { HEX_COLOR } from "@/calendar/preferences";
 import type { CalendarItemDoc } from "@/calendar/types";
 
 const MAX_CHARS = 20_000;
@@ -411,11 +410,7 @@ export const MentionField = forwardRef<MentionFieldHandle, Props>(function Menti
                 onMouseEnter={() => setMention((current) => (current ? { ...current, index } : current))}
                 onClick={() => accept(calendar)}
               >
-                <span
-                  className="cal-badge-dot"
-                  style={HEX_COLOR.test(calendar.color) ? ({ "--cal": calendar.color } as CSSProperties) : undefined}
-                  aria-hidden="true"
-                />
+                <span className="cal-badge-dot" style={calendarSwatchStyle(calendar.color)} aria-hidden="true" />
                 <span>
                   {calendar.readOnly ? (
                     <>
@@ -504,7 +499,10 @@ function chipNode(calendar: MentionCalendar): HTMLSpanElement {
   wrap.className = "cal-badge-wrap";
   wrap.dataset.calendarId = calendar.id;
   wrap.contentEditable = "false";
-  if (HEX_COLOR.test(calendar.color)) wrap.style.setProperty("--cal", calendar.color);
+  const chipStyle = calendarBadgeStyle(calendar.color);
+  for (const [key, value] of Object.entries(chipStyle)) {
+    if (typeof value === "string") wrap.style.setProperty(key, value);
+  }
   const button = document.createElement("button");
   button.type = "button";
   button.className = "cal-badge";
