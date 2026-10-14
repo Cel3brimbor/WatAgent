@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { ProductLabProvider } from "./product-lab-context";
 import { ProductStage } from "./preview";
 import styles from "./product.module.css";
 
@@ -24,11 +25,12 @@ export default function ProductPage() {
           <div className={styles.actions}><Link className={styles.primary} href="/">Start your day with WatAgent <span aria-hidden="true">↗</span></Link><a className={styles.secondary} href="#preview">Explore the calendar <span aria-hidden="true">↓</span></a></div>
           <div className={styles.heroNote}>YOUR WEEK, WITH A LITTLE BREATHING ROOM.</div>
         </section>
+        <ProductLabProvider>
         <section id="preview" className={styles.previewSection} aria-label="Interactive product preview">
           <div className={styles.previewCaption}><span>YOUR CALENDAR, WITH AN ASSISTANT</span><span>↓ Explore WatAgent</span></div>
           <ProductStage />
-
         </section>
+        </ProductLabProvider>
         <section id="features" className={styles.features}>
           <div className={styles.sectionIntro}><span className={styles.label}>LESS JUGGLING, MORE LIVING</span><h2>A calendar that sees<br />the <em>whole picture.</em></h2><p>Classes, deadlines, coffee with a friend.<br />It all belongs in the same conversation.</p></div>
           <div className={styles.featureGrid}>

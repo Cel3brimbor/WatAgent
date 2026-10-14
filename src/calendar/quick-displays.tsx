@@ -16,6 +16,7 @@ import type { SmartTag, SmartTagTarget } from "@/calendar/smart-tags";
 import { CheckIcon, DotsIcon, PlusIcon } from "@/calendar/sidebar-icons";
 import { RenameCalendarDialog } from "@/calendar/imported-calendars-panel";
 import { ConfirmDialog } from "@/shared/confirm-dialog";
+import { Expandable } from "@/shared/expandable";
 import { useDialog } from "@/shared/use-dialog";
 import { usePresence } from "@/shared/use-presence";
 
@@ -488,21 +489,23 @@ function CalendarChecklist({
                         <span className="qd-mark" aria-hidden="true">{on ? <CheckIcon /> : null}</span>
                       </button>
                     </div>
-                    {painting && onColor ? (
-                      <div className="qd-palette" role="listbox" aria-label={`${choice.name} color`}>
-                        {SWATCHES.map((swatch) => (
-                          <button
-                            key={swatch}
-                            type="button"
-                            role="option"
-                            className={`space-color${swatch === color ? " is-on" : ""}`}
-                            style={{ background: swatch }}
-                            aria-selected={swatch === color}
-                            aria-label={swatch}
-                            onClick={() => onColor(choice.id, swatch)}
-                          />
-                        ))}
-                      </div>
+                    {onColor ? (
+                      <Expandable open={painting}>
+                        <div className="qd-palette" role="listbox" aria-label={`${choice.name} color`}>
+                          {SWATCHES.map((swatch) => (
+                            <button
+                              key={swatch}
+                              type="button"
+                              role="option"
+                              className={`space-color${swatch === color ? " is-on" : ""}`}
+                              style={{ background: swatch }}
+                              aria-selected={swatch === color}
+                              aria-label={swatch}
+                              onClick={() => onColor(choice.id, swatch)}
+                            />
+                          ))}
+                        </div>
+                      </Expandable>
                     ) : null}
                   </li>
                 );

@@ -161,6 +161,7 @@ import { settleCallingTools } from "@/agent/settle-tools";
 import type { ActivityPart, ChatImage, ChatMessage, ThoughtSegment, ToolEventRecord } from "@/agent/types";
 import { afterMotion, afterPaint } from "@/shared/after-paint";
 import { ApiError, apiFetch, apiJson, errorFromResponse } from "@/shared/api-base";
+import { LockdownBanner } from "@/shared/lockdown-banner";
 import { uid } from "@/shared/ids";
 import { ChevronLeftIcon, ChevronRightIcon, CloseIcon } from "@/shared/icons";
 import { SegmentedControl, type SegmentOption } from "@/shared/segmented-control";
@@ -2819,6 +2820,7 @@ export function CalendarApp({
         onToggleAgent={toggleChat}
       />
 
+      <LockdownBanner />
       {banner.value ? (
         <div className="calendar-notice" role="status" data-state={banner.open ? "open" : "closed"}>
           <div className="calendar-notice-inner">

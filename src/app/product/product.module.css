@@ -33,9 +33,10 @@
 .previewSection { max-width: 1376px; margin: auto; padding: 0 48px; }
 .previewCaption { display: flex; justify-content: space-between; margin-bottom: 15px; font-size: 9px; letter-spacing: 1.1px; color: var(--ink-soft); }
 .previewCaption > span:last-child { font-family: var(--font-display); font-style: italic; font-size: 14px; letter-spacing: 0; }
-.productDemo { border: 1px solid var(--line-strong); border-radius: 10px; background: var(--paper); box-shadow: var(--shadow); overflow: hidden; }
-.demoFrame { display: grid; grid-template-columns: 205px minmax(0, 1fr); }
-.demoSidebar { padding: 18px 10px; background: var(--nav-bg); border-right: 1px solid var(--line); }
+.productDemo { position: relative; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--paper); box-shadow: var(--shadow); overflow: hidden; }
+.productDemo[data-tags="true"] { overflow: visible; }
+.demoFrame { display: grid; grid-template-columns: 16rem minmax(0, 1fr); }
+.demoSidebar { max-height: 680px; overflow: auto; padding: 18px 10px; background: var(--nav-bg); border-right: 1px solid var(--line); }
 .demoWordmark { font: 600 23px var(--font-display); padding: 0 10px 22px; letter-spacing: -.7px; }
 .demoSidebar nav { display: grid; gap: 5px; }
 .demoSidebar nav button { width: 100%; min-height: 35px; padding-left: 14px; text-align: left; }
@@ -88,7 +89,7 @@
 .footer > span, .footer > a:last-child { font-size: 10px; color: var(--ink-soft); }
 .footer .brand { font-size: 22px; }
 @media (max-width: 1100px) {
-  .demoFrame { grid-template-columns: 165px minmax(0, 1fr); }
+  .demoFrame { grid-template-columns: 14.5rem minmax(0, 1fr); }
   .demoToolbar { padding: 14px; }
   .demoToolbar :global(.calendar-toolbar-left) { flex-basis: 100%; }
   .demoToolbar :global(.calendar-toolbar-right) { width: 100%; justify-content: space-between; }
@@ -113,6 +114,22 @@
   .previewCaption > span:last-child { display: none; }
   .demoFrame { grid-template-columns: minmax(0, 1fr); }
   .demoSidebar { display: none; }
+  .productDemo[data-tags="true"] .demoSidebar {
+    display: block;
+    position: fixed;
+    z-index: 40;
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+    width: auto;
+    max-height: min(440px, 70vh);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+  }
+  .productDemo[data-tags="true"] .demoWordmark,
+  .productDemo[data-tags="true"] .demoSidebar nav,
+  .productDemo[data-tags="true"] .sourceList { display: none; }
   .page .productDemo .demoToolbar { display: flex; flex-wrap: wrap; padding: 14px; gap: 10px; }
   .demoToolbar :global(.calendar-toolbar-right) { gap: 8px; flex-wrap: wrap; }
   .demoToolbar :global(.segmented) { width: auto; }
@@ -140,41 +157,19 @@
 .demoToolbar { flex-wrap: wrap; height: auto; }
 .demoToolbar :global(.segmented-option) { min-width: 0; padding-inline: 0.62rem; }
 .tagBlock { margin-top: 18px; }
-.tagHeading, .tagRow > button, .expand > button, .menuToggle, .chatAgent, .ask, .reelStep, .dialogStay {
+.expand > button, .menuToggle, .chatAgent, .ask, .reelStep, .dialogStay {
   border: 0;
   background: transparent;
   color: inherit;
   text-align: left;
 }
-.tagHeading, .tagRow > button, .expand > button, .menuToggle, .chatAgent, .ask, .dialogStay, .dialogGo, .detail header button {
+.expand > button, .menuToggle, .chatAgent, .ask, .dialogStay, .dialogGo, .detail header button {
   transition: transform 100ms ease-out;
 }
-.tagHeading:active, .tagRow > button:active, .expand > button:active, .menuToggle:active, .chatAgent:active, .ask:active, .dialogStay:active, .dialogGo:active, .detail header button:active, .reelStep:active, .reelDot:active {
+.expand > button:active, .menuToggle:active, .chatAgent:active, .ask:active, .dialogStay:active, .dialogGo:active, .detail header button:active, .reelStep:active, .reelDot:active {
   transform: scale(0.98);
 }
-.tagHeading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  margin: 0 0 8px;
-  padding: 0;
-  font-size: 9px;
-  letter-spacing: 1px;
-  color: var(--ink-soft);
-}
-.tagHeading i, .expand i, .menuToggle i { font-style: normal; color: var(--accent); }
-.tagRow { margin: 8px 0 0; }
-.tagRow > button {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  width: 100%;
-  padding: 0;
-  font-size: 12px;
-}
-.tagRow i { width: 11px; height: 11px; border-radius: 3px; }
-.tagRow p { margin: 6px 0 0 20px; color: var(--ink-soft); font-size: 11px; line-height: 1.6; }
+.expand i, .menuToggle i { font-style: normal; color: var(--accent); }
 .previewNotice {
   margin: 0;
   padding: 8px 16px;

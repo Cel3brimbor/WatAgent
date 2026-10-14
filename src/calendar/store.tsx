@@ -14,6 +14,25 @@ import {
 import { newId } from "@/shared/ids";
 import { parseCalendarMeta, type CalendarItemDoc, type CalendarItemMeta } from "@/calendar/types";
 import { deleteCalendarItem, listCalendarItems, upsertCalendarItem } from "@/calendar/client";
+import {
+  ackChatDelete,
+  ackItemOp,
+  ackLocalChat,
+  deletedChatIds,
+  dirtyChats,
+  hasLocalPending,
+  localChats,
+  localItems,
+  mergeServerChats,
+  mergeServerItems,
+  noteLocalChat,
+  noteLocalChatDelete,
+  noteLocalItemDelete,
+  noteLocalItemUpsert,
+  pendingItemOps,
+} from "@/calendar/local-journal";
+import { isLockdownError } from "@/shared/api-base";
+import { noteLockdown, readApiHealth, subscribeLockdown } from "@/shared/lockdown";
 import { syncGoogleCalendar } from "@/calendar/google-calendar-client";
 import type { CalendarChange } from "@/agent/stream";
 import type { ChatMessage, ChatSession } from "@/agent/types";
@@ -161,7 +180,7 @@ function useRequiredContext<T>(context: Context<T | null>): T {
   return value;
 }
 
-export function CalendarProvider({ children }: { children: ReactNode }) {
+export function CalendarProvider({ userId, children }: { userId: string; children: ReactNode }) {
   const storeRef = useRef<EventStore | null>(null);
   if (!storeRef.current) storeRef.current = createEventStore();
   const store = storeRef.current;
@@ -177,7 +196,16 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
   const enqueueSave = useRef(
     createSaveQueue<ChatSession>((chatId, snapshot) => {
       const pinned = chatStateRef.current.chats.find((chat) => chat.id === chatId)?.pinned ?? snapshot.pinned;
-      return saveChatSession({ ...snapshot, pinned });
+      const chat = { ...snapshot, pinned };
+      return saveChatSession(chat).then(
+        () => {
+          ackLocalChat(userId, chatId);
+        },
+        (err: unknown) => {
+          if (!isLockdownError(err) || !noteLocalChat(userId, chat)) throw err;
+          noteLockdown(true);
+        },
+      );
     }),
   );
   const noticeListeners = useRef(new Set<NoticeListener>());
@@ -211,12 +239,19 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
   const refresh = useCallback(async () => {
     try {
       const loaded = await listCalendarItems();
-      store.reconcileAll(loaded);
+      store.reconcileAll(mergeServerItems(userId, loaded));
       setLoadError(null);
-    } catch {
+    } catch (err: unknown) {
+      if (isLockdownError(err)) {
+        noteLockdown(true);
+        const local = localItems(userId);
+        if (local) store.reconcileAll(local);
+        setLoadError(null);
+        return;
+      }
       setLoadError("Unable to load your calendar.");
     }
-  }, [store]);
+  }, [store, userId]);
 
   const hideImport = useCallback(
     (source: string) => {
@@ -261,7 +296,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     void (async () => {
       await Promise.all([refresh(), refreshPending(), refreshSettings()]);
       try {
-        const chats = await loadChatSessions();
+        const chats = mergeServerChats(userId, await loadChatSessions());
         if (cancelled) return;
         //the list comes back pins first. open the chat that was actually touched last.
         let recentId: string | null = null;
@@ -274,8 +309,23 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
         }
         const opened = preferOpenPinned(chats.map((chat) => ({ ...chat, open: chat.id === recentId })));
         updateChats(() => ({ chats: opened, activeChatId: recentId }));
-      } catch {
-        logFailure("chat load")();
+      } catch (err: unknown) {
+        if (isLockdownError(err)) {
+          noteLockdown(true);
+          const local = localChats(userId);
+          if (!cancelled && local && local.length > 0) {
+            let recentId: string | null = null;
+            let recentAt = -1;
+            for (const chat of local) {
+              if (chat.updatedAt >= recentAt) {
+                recentAt = chat.updatedAt;
+                recentId = chat.id;
+              }
+            }
+            const opened = preferOpenPinned(local.map((chat) => ({ ...chat, open: chat.id === recentId })));
+            updateChats(() => ({ chats: opened, activeChatId: recentId }));
+          }
+        } else logFailure("chat load")();
       } finally {
         if (!cancelled) setHydrated(true);
       }
@@ -283,7 +333,100 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [refresh, refreshPending, refreshSettings, updateChats]);
+  }, [refresh, refreshPending, refreshSettings, updateChats, userId]);
+
+  const flushing = useRef(false);
+  const flushLocal = useCallback(async () => {
+    if (flushing.current || !hasLocalPending(userId)) return;
+    flushing.current = true;
+    try {
+      for (const op of pendingItemOps(userId)) {
+        const id = op.kind === "delete" ? op.id : op.item.id;
+        try {
+          if (op.kind === "delete") await deleteCalendarItem(id);
+          else {
+            await upsertCalendarItem({
+              id: op.item.id,
+              title: op.item.title,
+              calendar: op.item.calendar,
+              createdAt: op.item.createdAt,
+            });
+          }
+          ackItemOp(userId, id);
+        } catch (err: unknown) {
+          if (isLockdownError(err)) {
+            noteLockdown(true);
+            return;
+          }
+          raiseNotice("Some calendar changes saved on this device could not sync yet.");
+          return;
+        }
+      }
+      for (const id of deletedChatIds(userId)) {
+        try {
+          await deleteChatSession(id);
+          ackChatDelete(userId, id);
+        } catch (err: unknown) {
+          if (isLockdownError(err)) {
+            noteLockdown(true);
+            return;
+          }
+          raiseNotice("Some chats saved on this device could not sync yet.");
+          return;
+        }
+      }
+      for (const chat of dirtyChats(userId)) {
+        try {
+          await saveChatSession(chat);
+          ackLocalChat(userId, chat.id);
+        } catch (err: unknown) {
+          if (isLockdownError(err)) {
+            noteLockdown(true);
+            return;
+          }
+          raiseNotice("Some chats saved on this device could not sync yet.");
+          return;
+        }
+      }
+      await refresh();
+      const remote = await loadChatSessions();
+      const chats = mergeServerChats(userId, remote);
+      updateChats((state) => {
+        const openIds = new Set(state.chats.filter((chat) => chat.open).map((chat) => chat.id));
+        return {
+          ...state,
+          chats: preferOpenPinned(
+            chats.map((chat) => ({ ...chat, open: openIds.has(chat.id) || state.activeChatId === chat.id })),
+          ),
+        };
+      });
+    } catch (err: unknown) {
+      if (isLockdownError(err)) noteLockdown(true);
+      else logFailure("sync local changes")();
+    } finally {
+      flushing.current = false;
+    }
+  }, [raiseNotice, refresh, updateChats, userId]);
+
+  useEffect(() => {
+    let stop = false;
+    const unsub = subscribeLockdown((locked) => {
+      if (!locked && !stop) void flushLocal();
+    });
+    const look = () => {
+      void readApiHealth().then((locked) => {
+        if (stop || locked !== false || !hasLocalPending(userId)) return;
+        void flushLocal();
+      });
+    };
+    look();
+    const timer = window.setInterval(look, 20_000);
+    return () => {
+      stop = true;
+      unsub();
+      window.clearInterval(timer);
+    };
+  }, [flushLocal, userId]);
 
   const syncFromGoogle = useCallback(
     async (range: { rangeStartUTC: number; rangeEndUTC: number }) => {
@@ -349,12 +492,17 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
           wrote();
         })
         .catch((err: unknown) => {
+          if (isLockdownError(err) && noteLocalItemUpsert(userId, doc)) {
+            noteLockdown(true);
+            store.settleWrite(id, seq, doc);
+            return;
+          }
           console.error("[calendar] save failed", err);
           const note = store.rollbackWrite(id, seq);
           if (note) raiseNotice(note);
         });
     },
-    [raiseNotice, store, wrote],
+    [raiseNotice, store, userId, wrote],
   );
 
   const completeTask = useCallback(
@@ -376,12 +524,17 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
           wrote();
         })
         .catch((err: unknown) => {
+          if (isLockdownError(err) && noteLocalItemDelete(userId, id)) {
+            noteLockdown(true);
+            store.settleWrite(id, seq, null);
+            return;
+          }
           console.error("[calendar] delete failed", err);
           const note = store.rollbackWrite(id, seq);
           if (note) raiseNotice(note);
         });
     },
-    [raiseNotice, store, wrote],
+    [raiseNotice, store, userId, wrote],
   );
 
   const removeMany = useCallback(
@@ -403,6 +556,11 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
             await deleteCalendarItem(job.id);
             store.settleWrite(job.id, job.seq, null);
           } catch (err: unknown) {
+            if (isLockdownError(err) && noteLocalItemDelete(userId, job.id)) {
+              noteLockdown(true);
+              store.settleWrite(job.id, job.seq, null);
+              continue;
+            }
             console.error("[calendar] delete failed", err);
             failed += 1;
             const note = store.rollbackWrite(job.id, job.seq);
@@ -416,7 +574,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
       wrote();
       return failed;
     },
-    [raiseNotice, store, wrote],
+    [raiseNotice, store, userId, wrote],
   );
 
   const applyRemoteCalendarChange = useCallback(
@@ -577,7 +735,19 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
 
   const deleteChat = useCallback(
     (chatId: string) => {
-      void deleteChatSession(chatId).catch(logFailure("chat delete"));
+      void deleteChatSession(chatId).then(
+        () => {
+          ackChatDelete(userId, chatId);
+        },
+        (err: unknown) => {
+          if (isLockdownError(err)) {
+            noteLockdown(true);
+            noteLocalChatDelete(userId, chatId);
+            return;
+          }
+          logFailure("chat delete")();
+        },
+      );
       updateChats((state) => {
         const chats = state.chats.filter((chat) => chat.id !== chatId);
         return {
@@ -587,7 +757,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
         };
       });
     },
-    [updateChats],
+    [updateChats, userId],
   );
 
   const reorderChats = useCallback(
@@ -618,7 +788,13 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
           if (!live || live.pinned !== pinned) return;
           try {
             await saveChatPin(chatId, pinned);
-          } catch {
+            ackLocalChat(userId, chatId);
+          } catch (err: unknown) {
+            if (isLockdownError(err)) {
+              noteLockdown(true);
+              const live = chatStateRef.current.chats.find((chat) => chat.id === chatId);
+              if (live && noteLocalChat(userId, live)) return;
+            }
             const current = chatStateRef.current.chats.find((chat) => chat.id === chatId);
             if (current?.pinned === pinned) {
               updateChats((state) => ({
@@ -633,7 +809,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
         })
         .catch(logFailure("chat pin"));
     },
-    [raiseNotice, updateChats],
+    [raiseNotice, updateChats, userId],
   );
 
   const applyAutoTitle = useCallback(

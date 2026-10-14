@@ -8,6 +8,7 @@ import { LoginScreen } from "@/auth/login-screen";
 import type { OnboardingAnswers } from "@/auth/onboarding";
 import { OnboardingScreen } from "@/auth/onboarding-screen";
 import { restoreSession, signIn, signOut } from "@/auth/session";
+import { forgetUser, lockdownActive, readApiHealth, rememberUser, rememberedUser } from "@/shared/lockdown";
 import type { AuthUser } from "@/auth/types";
 import { getCalendarSettings, patchCalendarSettings } from "@/calendar/approval-client";
 import { CalendarApp } from "@/calendar/calendar-app";
@@ -26,10 +27,21 @@ export default function Home() {
   const [auth, setAuth] = useState<AuthState>({ status: "loading" });
   const [sessionExpired, setSessionExpired] = useState(false);
   const [onboarding, setOnboarding] = useState<OnboardingState>({ status: "loading" });
+  const [localMode, setLocalMode] = useState(false);
+  const [lockdownSignIn, setLockdownSignIn] = useState(false);
+  const [hold, setHold] = useState<string | null>(null);
   const userId = auth.status === "signed-in" ? auth.user.id : null;
 
   useEffect(() => {
+    if (auth.status === "signed-in" && !localMode) rememberUser(auth.user);
+  }, [auth, localMode]);
+
+  useEffect(() => {
     if (!userId) return;
+    if (localMode) {
+      setOnboarding({ status: "done", advancedView: null });
+      return;
+    }
     let cancelled = false;
     setOnboarding({ status: "loading" });
     getCalendarSettings()
@@ -46,7 +58,7 @@ export default function Home() {
     return () => {
       cancelled = true;
     };
-  }, [userId]);
+  }, [localMode, userId]);
 
   const finishOnboarding = useCallback(async (answers: OnboardingAnswers | null) => {
     await patchCalendarSettings({ onboarded: true, ...(answers ?? {}) });
@@ -70,7 +82,23 @@ export default function Home() {
     });
     restoreSession()
       .then((user) => {
-        if (!cancelled) setAuth(user ? { status: "signed-in", user } : { status: "signed-out" });
+        if (cancelled) return;
+        if (user) {
+          rememberUser(user);
+          setAuth({ status: "signed-in", user });
+          return;
+        }
+        if (lockdownActive()) {
+          const remembered = rememberedUser();
+          if (remembered) {
+            setLocalMode(true);
+            setOnboarding({ status: "done", advancedView: null });
+            setAuth({ status: "signed-in", user: remembered });
+            return;
+          }
+          setLockdownSignIn(true);
+        }
+        setAuth({ status: "signed-out" });
       })
       .catch((err: unknown) => {
         if (cancelled) return;
@@ -87,17 +115,50 @@ export default function Home() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!localMode && !lockdownSignIn) return;
+    let stop = false;
+    const look = async () => {
+      const locked = await readApiHealth();
+      if (stop || locked !== false) return;
+      const user = await restoreSession();
+      if (stop) return;
+      setHold(null);
+      setLockdownSignIn(false);
+      setLocalMode(false);
+      if (user) {
+        rememberUser(user);
+        setOnboarding({ status: "loading" });
+        setAuth({ status: "signed-in", user });
+      } else {
+        setAuth({ status: "signed-out" });
+      }
+    };
+    const timer = window.setInterval(() => void look(), 15_000);
+    return () => {
+      stop = true;
+      window.clearInterval(timer);
+    };
+  }, [localMode, lockdownSignIn]);
+
   const handleSignIn = useCallback(async () => {
+    if (lockdownActive()) return;
     const user = await signIn();
     if (user) {
       setSessionExpired(false);
+      setLockdownSignIn(false);
       setAuth({ status: "signed-in", user });
     }
   }, []);
 
   const handleSignOut = useCallback(() => {
+    if (lockdownActive() || localMode) {
+      setHold("Sign-out waits until the API is open. Your calendar stays on this device.");
+      return;
+    }
+    forgetUser();
     void signOut().finally(() => setAuth({ status: "signed-out" }));
-  }, []);
+  }, [localMode]);
 
   if (auth.status === "loading" || (auth.status === "signed-in" && onboarding.status === "loading")) {
     return (
@@ -112,7 +173,16 @@ export default function Home() {
   }
 
   if (auth.status === "signed-out") {
-    return <LoginScreen onSignIn={handleSignIn} />;
+    return (
+      <LoginScreen
+        paused={
+          lockdownSignIn
+            ? "The API is in lockdown, so sign-in is paused. A browser that already used WatAgent here keeps its calendar on this device."
+            : null
+        }
+        onSignIn={handleSignIn}
+      />
+    );
   }
 
   if (onboarding.status !== "done") {
@@ -121,6 +191,11 @@ export default function Home() {
 
   return (
     <>
+      {hold ? (
+        <div className="session-expired-banner" role="status">
+          <span>{hold}</span>
+        </div>
+      ) : null}
       {sessionExpired ? (
         <div className="session-expired-banner" role="status">
           <span>Session expired —</span>
@@ -129,7 +204,7 @@ export default function Home() {
           </button>
         </div>
       ) : null}
-      <CalendarProvider key={auth.user.id}>
+      <CalendarProvider key={auth.user.id} userId={auth.user.id}>
         <CalendarApp
           user={auth.user}
           onSignOut={handleSignOut}

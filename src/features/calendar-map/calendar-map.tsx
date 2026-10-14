@@ -15,6 +15,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
+import { Disclosure } from "@/shared/disclosure";
 import { animateSpring, type SpringHandle } from "@/shared/motion";
 import {
   boxesOverlap,
@@ -769,8 +770,8 @@ export function CalendarMap({
           </button>
         </div>
       </div>
-      {settingsOpen ? (
-        <div id={`${markerId}-settings`} className={styles.settings}>
+      <Disclosure open={settingsOpen} id={`${markerId}-settings`}>
+        <div className={styles.settings}>
           <label className={styles.field}>
             Connections
             <select
@@ -799,7 +800,7 @@ export function CalendarMap({
             {preferencesKey ? "View preferences save on this device." : "Preferences apply to this session."}
           </span>
         </div>
-      ) : null}
+      </Disclosure>
       {status ? (
         <div className={styles.status} role="status">
           <span>{status}</span>

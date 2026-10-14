@@ -619,9 +619,14 @@ select {
 .side-cal-arrows button:active,
 .side-cal-day:active,
 .side-cal-more:active,
+.smart-tags-title:active,
 .smart-tags-add:active:not(:disabled),
+.smart-tag-lens:active:not(:disabled),
+.smart-tag-open:active,
+.smart-tag-color:active,
 .smart-tag-icon-btn:active:not(:disabled),
-.smart-tag-cover-option:active,
+.smart-tag-delete:active,
+.smart-tag-done:active,
 .chat-tab-add:active,
 .chat-history:active,
 .chat-tab-close:active,
@@ -656,9 +661,14 @@ select {
 .side-cal-arrows button,
 .side-cal-day,
 .side-cal-more,
+.smart-tags-title,
 .smart-tags-add,
+.smart-tag-lens,
+.smart-tag-open,
+.smart-tag-color,
 .smart-tag-icon-btn,
-.smart-tag-cover-option,
+.smart-tag-delete,
+.smart-tag-done,
 .chat-tab-add,
 .chat-history,
 .chat-tab-close,
@@ -2339,13 +2349,102 @@ button.qd-cal-swatch:active {
   stroke: none;
 }
 
-.smart-tags-head {
-  gap: 0.2rem;
+/*smart tags sit beside calendar lists, so they use a title, a switch, and color lenses instead of checkbox rows*/
+.smart-tags {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  margin-top: 0.15rem;
 }
 
-.smart-tags-head .side-cal-heading {
+.smart-tags-head {
+  gap: 0.35rem;
+  min-height: 1.7rem;
+}
+
+.smart-tags-title {
+  display: flex;
+  align-items: center;
+  gap: 0.28rem;
   flex: 1;
   min-width: 0;
+  padding: 0.1rem 0.15rem;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+}
+
+.smart-tags-title-text {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  min-width: 0;
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 520;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+.smart-tags-heading {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.smart-tags-title:hover {
+  background: var(--hover);
+}
+
+.smart-tags-paused {
+  color: var(--ink-soft);
+  font-family: var(--font-body);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.smart-tags .smart-tags-title svg {
+  width: 0.78rem;
+  height: 0.78rem;
+  flex-shrink: 0;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  color: var(--ink-soft);
+  transform: rotate(-90deg);
+  transition: transform var(--dur-spring) var(--ease-spring);
+}
+
+.smart-tags .smart-tags-title svg.is-open {
+  transform: rotate(0deg);
+}
+
+.smart-tags-head .switch {
+  width: 2rem;
+  height: 1.22rem;
+}
+
+.smart-tags-head .switch-thumb {
+  width: calc(1.22rem - 4px);
+  height: calc(1.22rem - 4px);
+}
+
+.smart-tags-head .switch-input:checked + .switch-track .switch-thumb {
+  transform: translateX(0.78rem);
+}
+
+.smart-tags-head .switch-input:active:not(:disabled) + .switch-track .switch-thumb {
+  width: calc(1.22rem - 1px);
+}
+
+.smart-tags-head .switch-input:checked:active:not(:disabled) + .switch-track .switch-thumb {
+  transform: translateX(calc(0.78rem - 3px));
 }
 
 .smart-tags-add {
@@ -2353,7 +2452,6 @@ button.qd-cal-swatch:active {
   place-items: center;
   width: 1.5rem;
   height: 1.5rem;
-  margin-bottom: 0.2rem;
   flex-shrink: 0;
   padding: 0;
   border: 0;
@@ -2367,14 +2465,18 @@ button.qd-cal-swatch:active {
   color: var(--accent-deep);
 }
 
-.side-nav .smart-tags-add svg {
+.smart-tags .smart-tags-add svg {
   width: 0.9rem;
   height: 0.9rem;
+  fill: none;
+  stroke: currentColor;
   stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .smart-tags-empty {
-  padding: 0.1rem 0.2rem 0.2rem;
+  padding: 0.15rem 0.2rem 0.35rem;
 }
 
 .smart-tags-empty p {
@@ -2384,7 +2486,69 @@ button.qd-cal-swatch:active {
   line-height: 1.4;
 }
 
-.smart-tag-name {
+.smart-tag-list {
+  list-style: none;
+  margin: 0;
+  padding: 0.1rem 0 0.15rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+}
+
+.smart-tag-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2.15rem;
+  padding: 0.12rem 0.2rem;
+  border-radius: 10px;
+}
+
+.smart-tag-row:hover,
+.smart-tag-row:focus-within {
+  background: var(--hover);
+}
+
+.smart-tag.is-editing .smart-tag-row,
+.smart-tag.is-editing .smart-tag-row:hover,
+.smart-tag.is-editing .smart-tag-row:focus-within {
+  background: color-mix(in srgb, var(--tag-color) 14%, transparent);
+}
+
+.smart-tag-lens {
+  position: relative;
+  width: 0.72rem;
+  height: 0.72rem;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--tag-color);
+}
+
+.smart-tag-lens::before {
+  content: "";
+  position: absolute;
+  inset: -0.45rem;
+}
+
+.smart-tag-lens.is-on {
+  background: var(--tag-color);
+  box-shadow: none;
+}
+
+.smart-tag-lens:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.smart-tag-open {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.02rem;
+  min-width: 0;
   padding: 0;
   border: 0;
   background: transparent;
@@ -2392,34 +2556,39 @@ button.qd-cal-swatch:active {
   text-align: left;
 }
 
-.side-cal-row.is-paused .smart-tag-name {
+.smart-tag-name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.84rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.smart-tag-glance {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink-soft);
+  font-size: 0.7rem;
+  font-weight: 450;
+  line-height: 1.25;
+  letter-spacing: 0.005em;
+}
+
+.smart-tag.is-paused .smart-tag-name,
+.smart-tag.is-paused .smart-tag-glance {
   color: var(--ink-soft);
 }
 
-.smart-tag.is-editing > .side-cal-row {
-  background: var(--hover);
-}
-
-.smart-tag.is-editing .side-cal-more {
-  opacity: 1;
-}
-
-.smart-tag-editor {
-  display: flex;
-  flex-direction: column;
-  gap: 0.45rem;
-  margin: 0.2rem 0 0.45rem;
-  padding: 0.55rem;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--panel-solid);
-}
-
-.smart-tag-editor select,
+/*shared with keyword-task rules; the smart-tag editor overrides these below*/
 .smart-tag-input {
   width: 100%;
   min-width: 0;
   min-height: 1.85rem;
+  padding: 0.3rem 0.5rem;
   border: 1px solid var(--line);
   border-radius: 7px;
   background-color: var(--panel-solid);
@@ -2427,18 +2596,7 @@ button.qd-cal-swatch:active {
   font-size: 0.78rem;
 }
 
-.smart-tag-input {
-  padding: 0.3rem 0.5rem;
-}
-
-.smart-tag-editor select {
-  padding: 0.3rem 1.5rem 0.3rem 0.45rem;
-  background-position: right 0.35rem center;
-  background-size: 0.85rem 0.85rem;
-}
-
-.smart-tag-input:focus,
-.smart-tag-editor select:focus {
+.smart-tag-input:focus {
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 2px var(--glow);
@@ -2446,139 +2604,6 @@ button.qd-cal-swatch:active {
 
 .smart-tag-input.is-invalid {
   border-color: var(--danger);
-}
-
-.smart-tag-swatches {
-  margin-top: 0;
-  padding: 0.1rem 0;
-  border-top: 0;
-}
-
-.smart-tag-custom-color {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  color: var(--ink-soft);
-  font-size: 0.74rem;
-  cursor: pointer;
-}
-
-.smart-tag-custom-color input {
-  width: 1.4rem;
-  height: 1.4rem;
-  padding: 0;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: transparent;
-  cursor: pointer;
-}
-
-.smart-tag-cover {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.3rem;
-}
-
-.smart-tag-cover-option {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.22rem;
-  min-width: 0;
-  padding: 0.32rem 0.2rem 0.28rem;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: transparent;
-  color: var(--ink-soft);
-  font-size: 0.68rem;
-  font-weight: 650;
-}
-
-.smart-tag-cover-option:hover {
-  background: var(--hover);
-  color: var(--ink);
-}
-
-.smart-tag-cover-option.is-current {
-  border-color: var(--accent);
-  color: var(--ink);
-  box-shadow: inset 0 0 0 1px var(--accent);
-}
-
-.smart-tag-cover-option:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 2px var(--glow);
-}
-
-.smart-tag-cover-swatch {
-  position: relative;
-  width: 100%;
-  height: 1.45rem;
-  overflow: hidden;
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--ink) 14%, var(--paper));
-}
-
-.smart-tag-cover-swatch::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: var(--tag-color);
-}
-
-/*same cut the event chip uses: left of the diagonal is the tag*/
-.smart-tag-cover-swatch.is-half::before {
-  clip-path: polygon(0 0, 100% 0, 0 100%);
-}
-
-.smart-tag-cover-swatch.is-quarter::before {
-  clip-path: polygon(0 0, 70.71% 0, 0 70.71%);
-}
-
-.smart-tag-section-label {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  padding-top: 0.35rem;
-  border-top: 1px solid var(--line);
-  color: var(--ink-soft);
-  font-size: 0.74rem;
-  font-weight: 650;
-}
-
-.smart-tag-section-label select {
-  width: auto;
-}
-
-.side-cal-list .smart-tag-rules {
-  gap: 0.45rem;
-}
-
-.smart-tag-rule {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.smart-tag-rule + .smart-tag-rule {
-  padding-top: 0.45rem;
-  border-top: 1px dashed var(--line);
-}
-
-.smart-tag-rule-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
-  gap: 0.25rem;
-}
-
-.smart-tag-rule-row.is-value {
-  display: flex;
-}
-
-.smart-tag-error {
-  margin: 0;
-  color: var(--danger);
-  font-size: 0.72rem;
 }
 
 .smart-tag-link {
@@ -2596,13 +2621,200 @@ button.qd-cal-swatch:active {
   text-decoration: underline;
 }
 
+/*editor hangs off the lens color, with no card around it*/
+.smart-tag-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin: 0.05rem 0.1rem 0.5rem 0.48rem;
+  padding: 0.15rem 0 0.15rem 0.7rem;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--tag-color) 72%, transparent);
+}
+
+.smart-tags .smart-tag-editor .smart-tag-input,
+.smart-tags .smart-tag-editor select {
+  width: 100%;
+  min-width: 0;
+  min-height: 1.85rem;
+  border: 0;
+  border-radius: 8px;
+  background-color: color-mix(in srgb, var(--ink) 6%, transparent);
+  color: var(--ink);
+  font-size: 0.78rem;
+}
+
+.smart-tags .smart-tag-editor .smart-tag-input {
+  padding: 0.32rem 0.5rem;
+}
+
+.smart-tags .smart-tag-editor select {
+  padding: 0.32rem 1.45rem 0.32rem 0.45rem;
+  background-position: right 0.3rem center;
+  background-size: 0.85rem 0.85rem;
+}
+
+.smart-tags .smart-tag-editor .smart-tag-input:focus,
+.smart-tags .smart-tag-editor select:focus {
+  outline: none;
+  border-color: transparent;
+  background-color: color-mix(in srgb, var(--ink) 8%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--tag-color) 45%, transparent);
+}
+
+.smart-tags .smart-tag-editor .smart-tag-input.is-invalid,
+.smart-tags .smart-tag-editor .smart-tag-input.is-invalid:focus {
+  box-shadow: 0 0 0 1.5px var(--danger);
+}
+
+.smart-tag-name-input {
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.smart-tag-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.28rem;
+  min-width: 0;
+}
+
+.smart-tag-field > span,
+.smart-tag-joiner {
+  color: var(--ink-soft);
+  font-size: 0.68rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+}
+
+.smart-tag-colors {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.38rem;
+}
+
+.smart-tag-color {
+  width: 0.92rem;
+  height: 0.92rem;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 16%, transparent);
+}
+
+.smart-tag-color.is-current,
+.smart-tag-custom.is-current input {
+  outline: 1.5px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.smart-tag-custom {
+  position: relative;
+  display: inline-flex;
+  width: 0.92rem;
+  height: 0.92rem;
+  cursor: pointer;
+}
+
+.smart-tag-custom input {
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.smart-tag-custom:not(.is-current) input {
+  opacity: 0;
+}
+
+.smart-tag-custom-mark {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--ink) 40%, transparent);
+  background:
+    linear-gradient(var(--ink-soft), var(--ink-soft)) center / 1px 58% no-repeat,
+    linear-gradient(var(--ink-soft), var(--ink-soft)) center / 58% 1px no-repeat;
+  pointer-events: none;
+}
+
+.smart-tag-custom input::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.smart-tag-custom input::-webkit-color-swatch {
+  border: 0;
+  border-radius: 999px;
+}
+
+.smart-tag-custom input::-moz-color-swatch {
+  border: 0;
+  border-radius: 999px;
+}
+
+.smart-tags .segmented {
+  width: 100%;
+}
+
+.smart-tags .segmented-option {
+  min-width: 0;
+  padding: 0.28rem 0.3rem;
+  font-size: 0.7rem;
+}
+
+.smart-tag-rules {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.smart-tag-rule {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.smart-tag-joiner {
+  padding-top: 0.05rem;
+}
+
+.smart-tag-rule-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+  gap: 0.25rem;
+}
+
+.smart-tag-rule-row.is-value {
+  display: flex;
+}
+
+.smart-tag-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 0.72rem;
+}
+
 .smart-tag-skip {
   display: flex;
   flex-direction: column;
   gap: 0.2rem;
 }
 
-.side-cal-list .smart-tag-skip-list {
+.smart-tag-skip-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
   gap: 0;
   max-height: 11rem;
   overflow: auto;
@@ -2613,7 +2825,7 @@ button.qd-cal-swatch:active {
   align-items: center;
   gap: 0.4rem;
   min-height: 1.6rem;
-  padding: 0.05rem 0.2rem;
+  padding: 0.05rem 0.15rem;
   border-radius: 6px;
   font-size: 0.78rem;
   cursor: pointer;
@@ -2625,7 +2837,7 @@ button.qd-cal-swatch:active {
 
 .smart-tag-skip-list input {
   margin: 0;
-  accent-color: var(--accent);
+  accent-color: var(--tag-color, var(--accent));
 }
 
 .smart-tag-skip-list span {
@@ -2645,9 +2857,7 @@ button.qd-cal-swatch:active {
 .smart-tag-actions {
   display: flex;
   align-items: center;
-  gap: 0.25rem;
-  padding-top: 0.4rem;
-  border-top: 1px solid var(--line);
+  gap: 0.1rem;
 }
 
 .smart-tag-icon-btn {
@@ -2657,12 +2867,10 @@ button.qd-cal-swatch:active {
   height: 1.7rem;
   flex-shrink: 0;
   padding: 0;
-  border: 1px solid var(--line);
-  border-radius: 7px;
+  border: 0;
+  border-radius: 999px;
   background: transparent;
   color: var(--ink-soft);
-  font-size: 0.85rem;
-  line-height: 1;
 }
 
 .smart-tag-icon-btn .glyph {
@@ -2678,16 +2886,16 @@ button.qd-cal-swatch:active {
 .smart-tag-delete,
 .smart-tag-done {
   min-height: 1.7rem;
-  padding: 0.2rem 0.6rem;
+  padding: 0.2rem 0.55rem;
+  border: 0;
   border-radius: 999px;
+  background: transparent;
   font-size: 0.76rem;
   font-weight: 650;
 }
 
 .smart-tag-delete {
   margin-left: auto;
-  border: 0;
-  background: transparent;
   color: var(--danger);
 }
 
@@ -2696,14 +2904,11 @@ button.qd-cal-swatch:active {
 }
 
 .smart-tag-done {
-  border: 1px solid var(--accent);
-  background: var(--accent);
-  color: var(--on-accent);
+  color: var(--accent-deep);
 }
 
 .smart-tag-done:hover {
-  background: var(--accent-deep);
-  border-color: var(--accent-deep);
+  background: var(--hover);
 }
 
 .app-frame.is-nav-collapsed .side-nav-extra {
@@ -5051,11 +5256,13 @@ button.qd-cal-swatch:active {
 .todo-list li.is-tag-quarter {
   background-image: linear-gradient(
     to bottom right,
-    color-mix(in srgb, var(--tag-color) 18%, transparent) 50%,
-    transparent 50%
+    color-mix(in srgb, var(--tag-color) 18%, var(--panel-solid)) calc(50% + 1px),
+    transparent calc(50% + 1px)
   );
   background-repeat: no-repeat;
   background-position: top left;
+  background-origin: border-box;
+  background-clip: border-box;
 }
 
 .todo-list li.is-tag-half {
@@ -8229,18 +8436,22 @@ h3 {
   --strip-tint: 22%;
 }
 
-/*tag color stays left of the diagonal; painted on the chip so it can't drift off the edge while scrolling*/
+/*tag color stays left of the diagonal; painted on the chip so it can't drift off the edge while scrolling.
+  the wedge is mixed with paper, not the transparent event tint, so the original color cannot show through it*/
 .calendar-strip.is-tag-half,
 .calendar-strip.is-tag-quarter {
   border-left-color: var(--tag-color);
   background-color: color-mix(in srgb, var(--strip-color) var(--strip-tint, 16%), var(--strip-surface, var(--paper)));
   background-image: linear-gradient(
     to bottom right,
-    color-mix(in srgb, var(--tag-color) var(--strip-tint, 16%), var(--strip-surface, var(--paper))) 50%,
-    transparent 50%
+    color-mix(in srgb, var(--tag-color) var(--strip-tint, 16%), var(--paper)) calc(50% + 1px),
+    transparent calc(50% + 1px)
   );
   background-repeat: no-repeat;
   background-position: top left;
+  /*the 1px transparent border sits outside the padding box; paint the wedge there too*/
+  background-origin: border-box;
+  background-clip: border-box;
 }
 
 .calendar-strip.is-tag-half {
@@ -8982,9 +9193,13 @@ h3 {
 
 .calendars-settings {
   display: flex;
+  margin-left: auto;
+}
+
+.calendars-settings-panel {
+  display: flex;
   flex-wrap: wrap;
   gap: 0.75rem 1.25rem;
-  margin-left: auto;
 }
 
 .calendars-settings-button {
@@ -9009,6 +9224,11 @@ h3 {
 }
 
 .calendars-group {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.calendars-group-body {
   display: grid;
   gap: 0.15rem;
 }
@@ -9440,13 +9660,21 @@ h3 {
   }
 
   .calendars-settings {
-    display: none;
+    display: grid;
+    grid-template-rows: 0fr;
     flex: 1 1 100%;
     margin-left: 0;
+    transition: grid-template-rows 260ms var(--ease-out);
   }
 
   .calendars-settings.is-open {
-    display: flex;
+    grid-template-rows: 1fr;
+    transition: grid-template-rows var(--dur-spring) var(--ease-spring);
+  }
+
+  .calendars-settings-panel {
+    min-height: 0;
+    overflow: hidden;
     flex-direction: column;
     align-items: stretch;
   }

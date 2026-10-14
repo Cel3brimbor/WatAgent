@@ -5,6 +5,7 @@ import { runRulesAfterSync } from "@/agent/rules/rules-client";
 import { importCalendarLink, type CalendarImportProgress } from "@/calendar/client";
 import { defaultImportedName, detectCalendarLink, isCalendarLink, newFeedId } from "@/calendar/imported-calendars";
 import type { ImportedCalendar } from "@/calendar/types";
+import { Disclosure } from "@/shared/disclosure";
 import { ChevronRightIcon, EyeIcon, EyeOffIcon } from "@/shared/icons";
 
 function dateValue(date: Date): string {
@@ -141,18 +142,20 @@ export function CalendarImportPanel({ importedCalendars, onImported }: {
             <span className="calendar-import-range-value">{rangeLabel(from, to)}</span>
             <ChevronRightIcon />
           </button>
-          <div id="ics-range" className="calendar-import-dates" hidden={!showRange}>
-            <label className="calendar-editor-field" htmlFor="ics-from">
-              From
-              <input id="ics-from" className="calendar-editor-input" type="date" required
-                value={from} onChange={(event) => setFrom(event.target.value)} disabled={working} />
-            </label>
-            <label className="calendar-editor-field" htmlFor="ics-to">
-              Through
-              <input id="ics-to" className="calendar-editor-input" type="date" required min={from}
-                value={to} onChange={(event) => setTo(event.target.value)} disabled={working} />
-            </label>
-          </div>
+          <Disclosure id="ics-range" open={showRange}>
+            <div className="calendar-import-dates">
+              <label className="calendar-editor-field" htmlFor="ics-from">
+                From
+                <input id="ics-from" className="calendar-editor-input" type="date" required
+                  value={from} onChange={(event) => setFrom(event.target.value)} disabled={working} />
+              </label>
+              <label className="calendar-editor-field" htmlFor="ics-to">
+                Through
+                <input id="ics-to" className="calendar-editor-input" type="date" required min={from}
+                  value={to} onChange={(event) => setTo(event.target.value)} disabled={working} />
+              </label>
+            </div>
+          </Disclosure>
         </div>
         {working && progress ? (
           <div className="calendar-import-status" role="status">

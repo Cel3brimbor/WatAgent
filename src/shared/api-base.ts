@@ -2,14 +2,20 @@ import { accessErrorFrom, reportAccessError } from "@/auth/access";
 import { reportAuthExpired } from "@/auth/auth-expired";
 import { getAccessToken } from "@/auth/session";
 import { API_BASE_URL } from "@/shared/config";
+import { noteLockdown } from "@/shared/lockdown";
 
 export class ApiError extends Error {
   constructor(
     message: string,
     readonly status: number,
+    readonly code?: string,
   ) {
     super(message);
   }
+}
+
+export function isLockdownError(err: unknown): boolean {
+  return err instanceof ApiError && err.code === "lockdown";
 }
 
 function send(path: string, init: RequestInit, token: string | null): Promise<Response> {
@@ -34,7 +40,7 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
 }
 
 export async function errorFromResponse(res: Response, fallback: string): Promise<Error> {
-  const payload = (await res.json().catch(() => null)) as { error?: unknown } | null;
+  const payload = (await res.json().catch(() => null)) as { error?: unknown; code?: unknown; scope?: unknown } | null;
   const access = accessErrorFrom(payload, res.status);
   if (access) {
     reportAccessError(access);
@@ -44,7 +50,9 @@ export async function errorFromResponse(res: Response, fallback: string): Promis
   if (res.status === 401) reportAuthExpired();
   const message =
     payload && typeof payload.error === "string" && payload.error.length <= 300 ? payload.error : fallback;
-  return new ApiError(message, res.status);
+  const code = payload && typeof payload.code === "string" && payload.code.length <= 40 ? payload.code : undefined;
+  if (code === "lockdown" && payload?.scope !== "route") noteLockdown(true);
+  return new ApiError(message, res.status, code);
 }
 
 export async function apiJson<T>(path: string, init: RequestInit = {}): Promise<T> {

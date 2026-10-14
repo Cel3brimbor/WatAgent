@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CalendarDayView } from "@/calendar/views/day-view";
 import { CalendarMonthView } from "@/calendar/views/month-view";
 import { CalendarWeekView } from "@/calendar/views/week-view";
@@ -8,13 +8,17 @@ import { CalendarYearView } from "@/calendar/views/year-view";
 import { daysInView, formatFocusLabel, shiftFocus, startOfLocalDay, viewForToday } from "@/calendar/date-utils";
 import { leadHourForDays } from "@/calendar/time-scale";
 import { useTimedGridScroll } from "@/calendar/use-time-scale";
+import { SmartTagsPanel } from "@/calendar/smart-tags-panel";
+import type { SmartTag } from "@/calendar/smart-tags";
 import type { CalendarView, TimelineItem } from "@/calendar/types";
 import { SegmentedControl, type SegmentOption } from "@/shared/segmented-control";
 import { ChevronLeftIcon, ChevronRightIcon } from "@/shared/icons";
 import { ExploreDialog } from "./explore-dialog";
 import { AgentReel } from "./agent-reel";
 import { FeatureReel, type FeatureId } from "./feature-reel";
-import { SAMPLE_TAGS, sampleItems } from "./sample-calendar";
+import { paintWithTags, sampleTagTargets } from "./product-lab";
+import { useProductLab } from "./product-lab-context";
+import { sampleItems } from "./sample-calendar";
 import styles from "./product.module.css";
 
 const WEEK_STARTS = 1 as const;
@@ -60,7 +64,7 @@ export function ProductStage() {
         <div className={styles.sectionIntro}>
           <span className={styles.label}>A CLOSER LOOK</span>
           <h2>Turn it, and <em>read a side.</em></h2>
-          <p>Tags, events, tasks, calendars, and rules — with the same chips as the week above.<br />Open a row. Tap a task. Leave real edits for the app.</p>
+          <p>Tags, events, tasks, calendars, and rules.<br />Open a row. Make a tag on the calendar itself.</p>
         </div>
         <FeatureReel active={feature} onActive={setFeature} />
         <AgentReel onAskAgent={() => setAsk(true)} />
@@ -74,15 +78,16 @@ function CalendarPreview({ onFeature, onAskAgent }: { onFeature: (id: FeatureId)
   const scroller = useRef<HTMLDivElement>(null);
   const [focus, setFocus] = useState(() => startOfLocalDay(new Date(2026, 9, 8)));
   const [view, setView] = useState<CalendarView>("week");
-  const [completed, setCompleted] = useState<Record<string, boolean>>({});
   const [selected, setSelected] = useState<TimelineItem | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [openTag, setOpenTag] = useState<string | null>(null);
-  const [tagsOpen, setTagsOpen] = useState(true);
   const [mounted, setMounted] = useState(false);
   const [todayScroll, setTodayScroll] = useState(0);
+  const [tagsOpen, setTagsOpen] = useState(true);
+  const [tagsPop, setTagsPop] = useState(false);
+  const lab = useProductLab();
 
-  const itemsForDay = (date: Date) => sampleItems(date).map((item) => ({ ...item, completed: completed[item.id] ?? false }));
+  const itemsForDay = (date: Date) =>
+    paintWithTags(sampleItems(date), lab.tags).map((item) => ({ ...item, completed: lab.completed[item.id] ?? false }));
   const timedView = view === "day" || view === "week" || view === "workweek";
   const leadHour = leadHourForDays(daysInView(focus, view, WEEK_STARTS), itemsForDay);
   const hourPx = useTimedGridScroll({
@@ -93,6 +98,33 @@ function CalendarPreview({ onFeature, onAskAgent }: { onFeature: (id: FeatureId)
   });
 
   useEffect(() => setMounted(true), []);
+
+  useEffect(() => {
+    if (!selected && !tagsPop) return;
+    function dismiss(event: PointerEvent) {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (target.closest("[data-demo-popup]")) return;
+      if (target.closest("[data-popup-toggle]")) return;
+      if (target.closest("[data-calendar-item]")) {
+        setTagsPop(false);
+        return;
+      }
+      setSelected(null);
+      setTagsPop(false);
+    }
+    function onKey(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      setSelected(null);
+      setTagsPop(false);
+    }
+    document.addEventListener("pointerdown", dismiss, true);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", dismiss, true);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [selected, tagsPop]);
 
   function refuseEdit() {
     setSelected(null);
@@ -120,9 +152,9 @@ function CalendarPreview({ onFeature, onAskAgent }: { onFeature: (id: FeatureId)
   const workDays = view === "workweek" ? daysInView(focus, "workweek", WEEK_STARTS) : undefined;
 
   return (
-    <div className={styles.productDemo}>
+    <div className={styles.productDemo} data-tags={tagsPop ? "true" : undefined}>
       <div className={styles.demoFrame}>
-        <aside className={styles.demoSidebar}>
+        <aside className={styles.demoSidebar} data-demo-popup={tagsPop ? "true" : undefined}>
           <div className={styles.demoWordmark}>WatAgent</div>
           <nav aria-label="Sample sections">
             {SECTIONS.map((section) => (
@@ -145,25 +177,8 @@ function CalendarPreview({ onFeature, onAskAgent }: { onFeature: (id: FeatureId)
             <p><i /> Agent Main</p>
             <h3>EXTERNAL CALENDARS</h3>
             <p><i /> Course schedule</p>
-            <div className={styles.tagBlock}>
-              <button type="button" className={styles.tagHeading} aria-expanded={tagsOpen} onClick={() => setTagsOpen((value) => !value)}>
-                <span>SMART TAGS</span>
-                <i aria-hidden="true">{tagsOpen ? "–" : "+"}</i>
-              </button>
-              {tagsOpen ? SAMPLE_TAGS.map((tag) => {
-                const open = openTag === tag.id;
-                return (
-                  <div key={tag.id} className={styles.tagRow}>
-                    <button type="button" aria-expanded={open} onClick={() => setOpenTag(open ? null : tag.id)}>
-                      <i style={{ background: tag.color }} />
-                      <span>{tag.name}</span>
-                    </button>
-                    {open ? <p>{tag.rule} {tag.note}</p> : null}
-                  </div>
-                );
-              }) : null}
-            </div>
           </div>
+          <DemoTags open={tagsOpen} onOpenChange={setTagsOpen} />
         </aside>
         <div className={styles.demoMain}>
           <header data-section="calendar" className={`calendar-toolbar ${styles.demoToolbar}`}>
@@ -189,6 +204,24 @@ function CalendarPreview({ onFeature, onAskAgent }: { onFeature: (id: FeatureId)
                 options={VIEW_OPTIONS}
                 label="Calendar view"
               />
+              <button
+                type="button"
+                className="ghost-btn calendar-agent-btn"
+                data-popup-toggle="true"
+                aria-expanded={tagsPop || tagsOpen}
+                onClick={() => {
+                  setSelected(null);
+                  const narrow = window.matchMedia("(max-width: 760px)").matches;
+                  if (narrow) {
+                    setTagsPop((open) => !open);
+                    setTagsOpen(true);
+                    return;
+                  }
+                  setTagsOpen((open) => !open);
+                }}
+              >
+                Tags
+              </button>
               <button type="button" className="ghost-btn calendar-agent-btn" aria-haspopup="dialog" onClick={onAskAgent}>
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M12 3a7 7 0 0 0-4 12.7V19a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-3.3A7 7 0 0 0 12 3z" />
@@ -209,7 +242,7 @@ function CalendarPreview({ onFeature, onAskAgent }: { onFeature: (id: FeatureId)
                 onOpen={openItem}
                 onCreateTimed={refuseEdit}
                 onCreateAllDay={refuseEdit}
-                onCompleteTask={(id, done) => setCompleted((previous) => ({ ...previous, [id]: done }))}
+                onCompleteTask={(id, done) => lab.setCompleted((previous) => ({ ...previous, [id]: done }))}
                 hourPx={hourPx}
               />
             ) : null}
@@ -223,7 +256,7 @@ function CalendarPreview({ onFeature, onAskAgent }: { onFeature: (id: FeatureId)
                 onCreateTimed={refuseEdit}
                 onCreateAllDay={refuseEdit}
                 onSelectDay={openDay}
-                onCompleteTask={(id, done) => setCompleted((previous) => ({ ...previous, [id]: done }))}
+                onCompleteTask={(id, done) => lab.setCompleted((previous) => ({ ...previous, [id]: done }))}
                 hourPx={hourPx}
               />
             ) : null}
@@ -235,7 +268,7 @@ function CalendarPreview({ onFeature, onAskAgent }: { onFeature: (id: FeatureId)
                 itemsForDay={itemsForDay}
                 onOpen={openItem}
                 onCreate={refuseEdit}
-                onCompleteTask={(id, done) => setCompleted((previous) => ({ ...previous, [id]: done }))}
+                onCompleteTask={(id, done) => lab.setCompleted((previous) => ({ ...previous, [id]: done }))}
               />
             ) : null}
             {mounted && view === "year" ? (
@@ -243,7 +276,7 @@ function CalendarPreview({ onFeature, onAskAgent }: { onFeature: (id: FeatureId)
             ) : null}
           </div>
           {selected ? (
-            <div className={styles.detail} role="dialog" aria-label={selected.title}>
+            <div className={styles.detail} data-demo-popup="true" role="dialog" aria-label={selected.title}>
               <header>
                 <span>{selected.kind === "task" ? "Task" : "Event"}{selected.smartTag ? ` · ${selected.smartTag.name}` : ""}</span>
                 <button type="button" onClick={() => setSelected(null)}>Close</button>
@@ -257,9 +290,36 @@ function CalendarPreview({ onFeature, onAskAgent }: { onFeature: (id: FeatureId)
         </div>
       </div>
       <div className={styles.demoFootnote}>
-        <span>Sample week · view only</span>
-        <span>Switch views. Open an event to read it.</span>
+        <span>Sample week · a tag you make stays only while you look</span>
+        <span>Smart tags sit in the side list. Click away to close a card.</span>
       </div>
     </div>
+  );
+}
+
+const SAMPLE_CALENDARS = [{ id: "sample", name: "Sample week", google: false }];
+
+function DemoTags({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+  const lab = useProductLab();
+  const samples = useMemo(() => sampleTagTargets(), []);
+
+  function onChange(next: SmartTag[]) {
+    lab.setTags((current) => {
+      if (next.length !== current.length + 1) return next;
+      const added = next.find((tag) => !current.some((item) => item.id === tag.id));
+      return added ? [added, ...next.filter((tag) => tag.id !== added.id)] : next;
+    });
+  }
+
+  return (
+    <SmartTagsPanel
+      tags={lab.tags}
+      onChange={onChange}
+      calendars={SAMPLE_CALENDARS}
+      samples={samples}
+      open={open}
+      onOpenChange={onOpenChange}
+      footnote="Only on this page. Nothing is saved."
+    />
   );
 }
