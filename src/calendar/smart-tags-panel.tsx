@@ -2,7 +2,7 @@
 
 import { CommitTextInput } from "@/shared/responsive-text-input";
 
-import { useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { CALENDAR_PALETTE } from "@/calendar/preferences";
 import {
   SMART_TAG_COVERS,
@@ -15,15 +15,17 @@ import {
   smartTagLabel,
   smartTagPatternError,
   type SmartTag,
-  type SmartTagCover,
   type SmartTagField,
   type SmartTagOperator,
   type SmartTagRule,
   type SmartTagTarget,
 } from "@/calendar/smart-tags";
-import { CheckIcon, ChevronIcon, DotsIcon, GoogleCalendarIcon, PlusIcon } from "@/calendar/sidebar-icons";
+import { ChevronIcon, GoogleCalendarIcon, PlusIcon } from "@/calendar/sidebar-icons";
 import { ArrowDownIcon, ArrowUpIcon, CloseIcon } from "@/shared/icons";
 import { Disclosure } from "@/shared/disclosure";
+import { Expandable } from "@/shared/expandable";
+import { SegmentedControl } from "@/shared/segmented-control";
+import { Switch } from "@/shared/switch";
 import { useFlip } from "@/shared/use-flip";
 
 export type SmartTagCalendarOption = { id: string; name: string; google: boolean };
@@ -42,6 +44,20 @@ type Props = {
   footnote?: string;
   namePlaceholder?: string;
 };
+
+//one line under the name, so a tag is readable without opening the editor
+function ruleGlance(tag: SmartTag): string {
+  const filled = tag.rules.filter((rule) => rule.value.trim());
+  if (filled.length === 0) return "Add a word to match";
+  const first = filled[0];
+  const field = SMART_TAG_FIELDS.find((item) => item.id === first.field)?.label.toLowerCase() ?? "title";
+  const operator = SMART_TAG_OPERATORS.find((item) => item.id === first.operator)?.label ?? "contains";
+  const value = first.value.trim();
+  const shown = value.length > 36 ? `${value.slice(0, 34)}…` : value;
+  const lead = `${field} ${operator} ${shown}`;
+  if (filled.length === 1) return lead;
+  return `${lead}, ${tag.match === "all" ? "and" : "or"} ${filled.length - 1} more`;
+}
 
 export function SmartTagsPanel({
   tags,
@@ -88,29 +104,27 @@ export function SmartTagsPanel({
   }
 
   return (
-    <section className="side-cal-list smart-tags">
+    <section className="smart-tags">
       <div className="smart-tags-head">
-        {onToggleGroup ? (
-          <button
-            type="button"
-            className={`side-cal-check side-cal-group-check${groupOn ? " is-on" : ""}`}
-            style={{ color: "var(--accent)", background: groupOn ? "var(--accent)" : "transparent" }}
-            aria-pressed={groupOn}
-            aria-label={`${groupOn ? "Pause" : "Turn on"} every smart tag`}
-            onClick={() => onToggleGroup(!groupOn)}
-          >
-            {groupOn ? <CheckIcon /> : null}
-          </button>
-        ) : null}
         <button
           type="button"
-          className="side-cal-heading"
+          className="smart-tags-title"
           aria-expanded={open}
           onClick={() => onOpenChange(!open)}
         >
-          <span>{heading}</span>
+          <span className="smart-tags-title-text">
+            <span className="smart-tags-heading">{heading}</span>
+            {onToggleGroup && !groupOn ? <span className="smart-tags-paused">Paused</span> : null}
+          </span>
           <ChevronIcon open={open} />
         </button>
+        {onToggleGroup ? (
+          <Switch
+            checked={groupOn}
+            onChange={onToggleGroup}
+            aria-label={`${groupOn ? "Pause" : "Turn on"} every smart tag`}
+          />
+        ) : null}
         <button
           type="button"
           className="smart-tags-add"
@@ -131,45 +145,42 @@ export function SmartTagsPanel({
             </button>
           </div>
         ) : (
-          <ul ref={listRef}>
+          <ul className="smart-tag-list" ref={listRef}>
             {tags.map((tag, index) => {
               const editing = editingId === tag.id;
               const label = smartTagLabel(tag);
+              const live = groupOn && tag.enabled;
               return (
-                <li key={tag.id} data-flip-id={tag.id} className={`smart-tag${editing ? " is-editing" : ""}`}>
-                  <div className={`side-cal-row${groupOn && tag.enabled ? "" : " is-paused"}`}>
+                <li
+                  key={tag.id}
+                  data-flip-id={tag.id}
+                  className={`smart-tag${editing ? " is-editing" : ""}${live ? "" : " is-paused"}`}
+                  style={{ "--tag-color": tag.color } as CSSProperties}
+                >
+                  <div className="smart-tag-row">
                     <button
                       type="button"
-                      className={`side-cal-check${groupOn && tag.enabled ? " is-on" : ""}`}
-                      style={{ color: tag.color, background: groupOn && tag.enabled ? tag.color : "transparent" }}
-                      aria-pressed={groupOn && tag.enabled}
-                      aria-label={`${groupOn && tag.enabled ? "Pause" : "Turn on"} ${label}`}
-                      onClick={() => {
-                        if (!groupOn) return;
-                        patch(tag.id, { enabled: !tag.enabled });
-                      }}
-                    >
-                      {groupOn && tag.enabled ? <CheckIcon /> : null}
-                    </button>
+                      className={`smart-tag-lens${live ? " is-on" : ""}`}
+                      aria-pressed={live}
+                      aria-label={
+                        groupOn
+                          ? `${tag.enabled ? "Pause" : "Turn on"} ${label}`
+                          : `${label} stays paused until smart tags are on`
+                      }
+                      disabled={!groupOn}
+                      onClick={() => patch(tag.id, { enabled: !tag.enabled })}
+                    />
                     <button
                       type="button"
-                      className="side-cal-name smart-tag-name"
+                      className="smart-tag-open"
                       aria-expanded={editing}
                       onClick={() => setEditingId(editing ? null : tag.id)}
                     >
-                      {label}
-                    </button>
-                    <button
-                      type="button"
-                      className="side-cal-more"
-                      aria-label={`Edit ${label}`}
-                      aria-expanded={editing}
-                      onClick={() => setEditingId(editing ? null : tag.id)}
-                    >
-                      <DotsIcon />
+                      <span className="smart-tag-name">{label}</span>
+                      <span className="smart-tag-glance">{ruleGlance(tag)}</span>
                     </button>
                   </div>
-                  {editing ? (
+                  <Expandable open={editing}>
                     <SmartTagEditor
                       tag={tag}
                       first={index === 0}
@@ -183,7 +194,7 @@ export function SmartTagsPanel({
                       footnote={footnote}
                       namePlaceholder={namePlaceholder}
                     />
-                  ) : null}
+                  </Expandable>
                 </li>
               );
             })}
@@ -191,63 +202,6 @@ export function SmartTagsPanel({
         )}
       </Disclosure>
     </section>
-  );
-}
-
-function CoverPicker({
-  color,
-  value,
-  onChange,
-}: {
-  color: string;
-  value: SmartTagCover;
-  onChange: (cover: SmartTagCover) => void;
-}) {
-  const refs = useRef<Array<HTMLButtonElement | null>>([]);
-  const index = Math.max(
-    0,
-    SMART_TAG_COVERS.findIndex((option) => option.id === value),
-  );
-
-  function onKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
-    const delta =
-      event.key === "ArrowRight" || event.key === "ArrowDown"
-        ? 1
-        : event.key === "ArrowLeft" || event.key === "ArrowUp"
-          ? -1
-          : 0;
-    if (!delta) return;
-    event.preventDefault();
-    const next = (index + delta + SMART_TAG_COVERS.length) % SMART_TAG_COVERS.length;
-    onChange(SMART_TAG_COVERS[next].id);
-    refs.current[next]?.focus();
-  }
-
-  return (
-    <div className="smart-tag-cover" role="radiogroup" aria-label="How much of the event the tag colors">
-      {SMART_TAG_COVERS.map((option, i) => {
-        const checked = option.id === value;
-        return (
-          <button
-            key={option.id}
-            ref={(el) => {
-              refs.current[i] = el;
-            }}
-            type="button"
-            role="radio"
-            aria-checked={checked}
-            tabIndex={checked ? 0 : -1}
-            title={option.hint}
-            className={`smart-tag-cover-option${checked ? " is-current" : ""}`}
-            onClick={() => onChange(option.id)}
-            onKeyDown={onKeyDown}
-          >
-            <span className={`smart-tag-cover-swatch is-${option.id}`} style={{ "--tag-color": color } as CSSProperties} />
-            <span>{option.label}</span>
-          </button>
-        );
-      })}
-    </div>
   );
 }
 
@@ -284,6 +238,7 @@ function SmartTagEditor({
   const hasRuleValue = tag.rules.some((rule) => rule.value.trim());
   const exemptCount = tag.exemptCalendarIds.length;
   const color = tag.color.toLowerCase();
+  const custom = !CALENDAR_PALETTE.some((swatch) => swatch === color);
 
   function patchRule(id: string, next: Partial<SmartTagRule>) {
     onPatch({ rules: tag.rules.map((rule) => (rule.id === id ? { ...rule, ...next } : rule)) });
@@ -294,114 +249,156 @@ function SmartTagEditor({
     onPatch({ exemptCalendarIds: exempt ? [...rest, id] : rest });
   }
 
+  const editorRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    //the editor mounts while the disclosure is still inert, so wait until it can take a caret
+    const root = editorRef.current;
+    if (!root) return;
+    let inner = 0;
+    const outer = requestAnimationFrame(() => {
+      inner = requestAnimationFrame(() => {
+        const input = root.querySelector<HTMLInputElement>("input");
+        if (!input || input.value || root.closest("[inert]")) return;
+        input.focus();
+      });
+    });
+    return () => {
+      cancelAnimationFrame(outer);
+      cancelAnimationFrame(inner);
+    };
+  }, []);
+
   return (
-    <div className="smart-tag-editor">
+    <div className="smart-tag-editor" ref={editorRef}>
       <CommitTextInput
         type="text"
-        className="smart-tag-input"
+        className="smart-tag-input smart-tag-name-input"
         value={tag.name}
         placeholder={namePlaceholder}
         aria-label="Tag name"
         maxLength={SMART_TAG_LIMITS.name}
-        autoFocus={!tag.name}
         onCommit={(name) => onPatch({ name })}
       />
 
-      <div className="side-cal-swatches smart-tag-swatches" role="group" aria-label="Tag color">
-        {CALENDAR_PALETTE.map((swatch) => (
-          <button
-            key={swatch}
-            type="button"
-            className={`side-cal-swatch${color === swatch ? " is-current" : ""}`}
-            style={{ background: swatch }}
-            aria-label={swatch}
-            aria-pressed={color === swatch}
-            onClick={() => onPatch({ color: swatch })}
+      <div className="smart-tag-field">
+        <span>Color</span>
+        <div className="smart-tag-colors" role="group" aria-label="Tag color">
+          {CALENDAR_PALETTE.map((swatch) => (
+            <button
+              key={swatch}
+              type="button"
+              className={`smart-tag-color${color === swatch ? " is-current" : ""}`}
+              style={{ background: swatch }}
+              aria-label={swatch}
+              aria-pressed={color === swatch}
+              onClick={() => onPatch({ color: swatch })}
+            />
+          ))}
+          <label className={`smart-tag-custom${custom ? " is-current" : ""}`} title="Custom color">
+            <input
+              type="color"
+              value={color}
+              aria-label="Custom color"
+              onChange={(event) => onPatch({ color: event.target.value.toLowerCase() })}
+            />
+            {custom ? null : <span className="smart-tag-custom-mark" aria-hidden="true" />}
+          </label>
+        </div>
+      </div>
+
+      <div className="smart-tag-field">
+        <span>Paint</span>
+        <SegmentedControl
+          className="smart-tag-cover"
+          label="How much of the event the tag colors"
+          value={tag.cover ?? "full"}
+          options={SMART_TAG_COVERS.map((option) => ({
+            value: option.id,
+            label: option.label,
+            hint: option.hint,
+          }))}
+          onChange={(cover) => onPatch({ cover })}
+        />
+      </div>
+
+      {tag.rules.length > 1 ? (
+        <div className="smart-tag-field">
+          <span>Match</span>
+          <SegmentedControl
+            label="Match mode"
+            value={tag.match}
+            options={[
+              { value: "any", label: "Any rule" },
+              { value: "all", label: "All rules" },
+            ]}
+            onChange={(match) => onPatch({ match })}
           />
-        ))}
-      </div>
-      <label className="smart-tag-custom-color">
-        <input type="color" value={color} onChange={(event) => onPatch({ color: event.target.value.toLowerCase() })} />
-        <span>Custom color</span>
-      </label>
+        </div>
+      ) : null}
 
-      <CoverPicker color={color} value={tag.cover ?? "full"} onChange={(cover) => onPatch({ cover })} />
-
-      <div className="smart-tag-section-label">
-        {tag.rules.length > 1 ? (
-          <>
-            <span>Match</span>
-            <select
-              value={tag.match}
-              aria-label="Match mode"
-              onChange={(event) => onPatch({ match: event.target.value === "all" ? "all" : "any" })}
-            >
-              <option value="any">any rule</option>
-              <option value="all">all rules</option>
-            </select>
-          </>
-        ) : (
-          <span>When an event’s</span>
-        )}
-      </div>
-
-      <ul className="smart-tag-rules">
-        {tag.rules.map((rule) => {
-          const error = rule.operator === "regex" ? smartTagPatternError(rule.value) : null;
-          return (
-            <li key={rule.id} className="smart-tag-rule">
-              <div className="smart-tag-rule-row">
-                <select
-                  value={rule.field}
-                  aria-label="Field"
-                  onChange={(event) => patchRule(rule.id, { field: event.target.value as SmartTagField })}
-                >
-                  {SMART_TAG_FIELDS.map((field) => (
-                    <option key={field.id} value={field.id}>
-                      {field.label}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  value={rule.operator}
-                  aria-label="Condition"
-                  onChange={(event) => patchRule(rule.id, { operator: event.target.value as SmartTagOperator })}
-                >
-                  {SMART_TAG_OPERATORS.map((operator) => (
-                    <option key={operator.id} value={operator.id}>
-                      {operator.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="smart-tag-rule-row is-value">
-                <CommitTextInput
-                  type="text"
-                  className={`smart-tag-input${error ? " is-invalid" : ""}`}
-                  value={rule.value}
-                  placeholder={rule.operator === "regex" ? "e.g. ^(gym|run)\\b" : "e.g. gym, workout, run"}
-                  aria-label="Text to match"
-                  aria-invalid={Boolean(error)}
-                  maxLength={SMART_TAG_LIMITS.value}
-                  spellCheck={false}
-                  onCommit={(value) => patchRule(rule.id, { value })}
-                />
-                {tag.rules.length > 1 ? (
-                  <button
-                    type="button"
-                    className="smart-tag-icon-btn"
-                    aria-label="Remove rule"
-                    onClick={() => onPatch({ rules: tag.rules.filter((item) => item.id !== rule.id) })}
-                  >
-                    <CloseIcon />
-                  </button>
+      <div className="smart-tag-field">
+        <span>{tag.rules.length > 1 ? "Rules" : "When an event’s"}</span>
+        <ul className="smart-tag-rules">
+          {tag.rules.map((rule, ruleIndex) => {
+            const error = rule.operator === "regex" ? smartTagPatternError(rule.value) : null;
+            return (
+              <li key={rule.id} className="smart-tag-rule">
+                {ruleIndex > 0 ? (
+                  <span className="smart-tag-joiner">{tag.match === "all" ? "and" : "or"}</span>
                 ) : null}
-              </div>
-              {error ? <p className="smart-tag-error">{error}</p> : null}
-            </li>
-          );
-        })}
-      </ul>
+                <div className="smart-tag-rule-row">
+                  <select
+                    value={rule.field}
+                    aria-label="Field"
+                    onChange={(event) => patchRule(rule.id, { field: event.target.value as SmartTagField })}
+                  >
+                    {SMART_TAG_FIELDS.map((field) => (
+                      <option key={field.id} value={field.id}>
+                        {field.label}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    value={rule.operator}
+                    aria-label="Condition"
+                    onChange={(event) => patchRule(rule.id, { operator: event.target.value as SmartTagOperator })}
+                  >
+                    {SMART_TAG_OPERATORS.map((operator) => (
+                      <option key={operator.id} value={operator.id}>
+                        {operator.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="smart-tag-rule-row is-value">
+                  <CommitTextInput
+                    type="text"
+                    className={`smart-tag-input${error ? " is-invalid" : ""}`}
+                    value={rule.value}
+                    placeholder={rule.operator === "regex" ? "e.g. ^(gym|run)\\b" : "e.g. gym, workout, run"}
+                    aria-label="Text to match"
+                    aria-invalid={Boolean(error)}
+                    maxLength={SMART_TAG_LIMITS.value}
+                    spellCheck={false}
+                    onCommit={(value) => patchRule(rule.id, { value })}
+                  />
+                  {tag.rules.length > 1 ? (
+                    <button
+                      type="button"
+                      className="smart-tag-icon-btn"
+                      aria-label="Remove rule"
+                      onClick={() => onPatch({ rules: tag.rules.filter((item) => item.id !== rule.id) })}
+                    >
+                      <CloseIcon />
+                    </button>
+                  ) : null}
+                </div>
+                {error ? <p className="smart-tag-error">{error}</p> : null}
+              </li>
+            );
+          })}
+        </ul>
+      </div>
       {tag.rules.length < SMART_TAG_LIMITS.rules ? (
         <button
           type="button"

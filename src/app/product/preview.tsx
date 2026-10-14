@@ -9,6 +9,7 @@ import { daysInView, formatFocusLabel, shiftFocus, startOfLocalDay, viewForToday
 import { leadHourForDays } from "@/calendar/time-scale";
 import { useTimedGridScroll } from "@/calendar/use-time-scale";
 import type { CalendarView, TimelineItem } from "@/calendar/types";
+import { Disclosure } from "@/shared/disclosure";
 import { SegmentedControl, type SegmentOption } from "@/shared/segmented-control";
 import { ChevronLeftIcon, ChevronRightIcon } from "@/shared/icons";
 import { ExploreDialog } from "./explore-dialog";
@@ -150,18 +151,22 @@ function CalendarPreview({ onFeature, onAskAgent }: { onFeature: (id: FeatureId)
                 <span>SMART TAGS</span>
                 <i aria-hidden="true">{tagsOpen ? "–" : "+"}</i>
               </button>
-              {tagsOpen ? SAMPLE_TAGS.map((tag) => {
-                const open = openTag === tag.id;
-                return (
-                  <div key={tag.id} className={styles.tagRow}>
-                    <button type="button" aria-expanded={open} onClick={() => setOpenTag(open ? null : tag.id)}>
-                      <i style={{ background: tag.color }} />
-                      <span>{tag.name}</span>
-                    </button>
-                    {open ? <p>{tag.rule} {tag.note}</p> : null}
-                  </div>
-                );
-              }) : null}
+              <Disclosure open={tagsOpen}>
+                {SAMPLE_TAGS.map((tag) => {
+                  const open = openTag === tag.id;
+                  return (
+                    <div key={tag.id} className={styles.tagRow}>
+                      <button type="button" aria-expanded={open} onClick={() => setOpenTag(open ? null : tag.id)}>
+                        <i style={{ background: tag.color }} />
+                        <span>{tag.name}</span>
+                      </button>
+                      <Disclosure open={open}>
+                        <p>{tag.rule} {tag.note}</p>
+                      </Disclosure>
+                    </div>
+                  );
+                })}
+              </Disclosure>
             </div>
           </div>
         </aside>

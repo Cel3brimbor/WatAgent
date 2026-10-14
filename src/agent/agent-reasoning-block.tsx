@@ -78,11 +78,9 @@ export function AgentReasoningBlock({
         ) : null}
       </div>
       <Disclosure open={open} id={panelId}>
-        {open ? (
-          <div className="agent-reasoning-body" ref={bodyRef}>
-            {body}
-          </div>
-        ) : null}
+        <div className="agent-reasoning-body" ref={bodyRef}>
+          {body}
+        </div>
       </Disclosure>
     </div>
   );

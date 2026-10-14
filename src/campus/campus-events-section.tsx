@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Expandable } from "@/shared/expandable";
 import { SearchInput } from "@/shared/responsive-text-input";
 import { fetchCampusEvents, fetchCampusEventsStatus } from "@/campus/campus-client";
 import {
@@ -321,18 +322,20 @@ export function CampusEventsSection({ items, calendars, onAdd, subscriptions, on
               </button>
             ) : null}
           </div>
-          {open ? (
-            <ul className={styles.dates}>
-              {more.map((occurrence) => {
-                const lines = whenLines(occurrence);
-                return (
-                  <li key={occurrence.id}>
-                    <span>{[shortDay(localSpan(occurrence).startUTC), lines.end ? `${lines.main} – ${lines.end}` : lines.until ?? lines.main].join(" · ")}</span>
-                    {addButton(occurrence, true)}
-                  </li>
-                );
-              })}
-            </ul>
+          {more.length > 0 ? (
+            <Expandable open={open}>
+              <ul className={styles.dates}>
+                {more.map((occurrence) => {
+                  const lines = whenLines(occurrence);
+                  return (
+                    <li key={occurrence.id}>
+                      <span>{[shortDay(localSpan(occurrence).startUTC), lines.end ? `${lines.main} – ${lines.end}` : lines.until ?? lines.main].join(" · ")}</span>
+                      {addButton(occurrence, true)}
+                    </li>
+                  );
+                })}
+              </ul>
+            </Expandable>
           ) : null}
         </div>
         <div className={styles.actions}>{addButton(next)}</div>

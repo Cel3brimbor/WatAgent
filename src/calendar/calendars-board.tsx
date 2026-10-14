@@ -16,6 +16,7 @@ import { GripIcon } from "@/shared/icons";
 import { SegmentedControl } from "@/shared/segmented-control";
 import { Switch } from "@/shared/switch";
 import { CalendarSyncStatus } from "@/calendar/calendar-sync-status";
+import { Disclosure } from "@/shared/disclosure";
 import { useDialog } from "@/shared/use-dialog";
 import { usePresence } from "@/shared/use-presence";
 
@@ -214,14 +215,16 @@ export function CalendarsBoard(props: Props) {
             Settings
           </button>
           <div className={`calendars-settings${settingsOpen ? " is-open" : ""}`}>
-            <label className="calendars-toggle">
-              New calendars start shown
-              <Switch checked={props.newCalendarsShown} onChange={props.onNewCalendarsShown} />
-            </label>
-            <label className="calendars-toggle">
-              Ask before the Agent changes events
-              <Switch checked={props.approval} onChange={props.onApproval} />
-            </label>
+            <div className="calendars-settings-panel">
+              <label className="calendars-toggle">
+                New calendars start shown
+                <Switch checked={props.newCalendarsShown} onChange={props.onNewCalendarsShown} />
+              </label>
+              <label className="calendars-toggle">
+                Ask before the Agent changes events
+                <Switch checked={props.approval} onChange={props.onApproval} />
+              </label>
+            </div>
           </div>
         </div>
       </header>
@@ -359,34 +362,36 @@ function Group({
         {label}
         <span className="calendars-count">{rows.length}</span>
       </button>
-      {open ? (
-        rows.length ? (
-          rows.map((row) => (
-            <div key={row.id} className={`calendars-row${row.shown === false ? " is-dimmed" : ""}${row.id === selectedId ? " is-selected" : ""}`} role="listitem">
-              <button type="button" className="calendars-row-main" data-calendar={row.id} aria-pressed={row.id === selectedId} onClick={() => onActivate(row.id, true)}>
-                <span className="calendars-swatch" style={{ background: row.color }} aria-hidden="true" />
-                <span className="calendars-row-copy">
-                  <span className="calendars-row-name">{row.name}</span>
-                  <span className="calendars-row-caption">{row.caption}</span>
-                </span>
-                {row.pending > 0 && row.agent && !row.lock ? <span className="calendars-waiting">{row.pending} waiting</span> : null}
-              </button>
-              {row.shown === null ? (
-                <span className="calendars-row-aside">{row.mergeLink?.name}</span>
-              ) : (
-                <Switch
-                  checked={row.shown}
-                  disabled={Boolean(row.showBlocked)}
-                  aria-label={row.showBlocked ?? (row.shown ? `Hide ${row.name} on the calendar` : `Show ${row.name} on the calendar`)}
-                  onChange={(shown) => onShown(row.id, shown)}
-                />
-              )}
-            </div>
-          ))
-        ) : empty ? (
-          <p className="calendars-note">{empty}</p>
-        ) : null
-      ) : null}
+      <Disclosure open={open}>
+        <div className="calendars-group-body">
+          {rows.length ? (
+            rows.map((row) => (
+              <div key={row.id} className={`calendars-row${row.shown === false ? " is-dimmed" : ""}${row.id === selectedId ? " is-selected" : ""}`} role="listitem">
+                <button type="button" className="calendars-row-main" data-calendar={row.id} aria-pressed={row.id === selectedId} onClick={() => onActivate(row.id, true)}>
+                  <span className="calendars-swatch" style={{ background: row.color }} aria-hidden="true" />
+                  <span className="calendars-row-copy">
+                    <span className="calendars-row-name">{row.name}</span>
+                    <span className="calendars-row-caption">{row.caption}</span>
+                  </span>
+                  {row.pending > 0 && row.agent && !row.lock ? <span className="calendars-waiting">{row.pending} waiting</span> : null}
+                </button>
+                {row.shown === null ? (
+                  <span className="calendars-row-aside">{row.mergeLink?.name}</span>
+                ) : (
+                  <Switch
+                    checked={row.shown}
+                    disabled={Boolean(row.showBlocked)}
+                    aria-label={row.showBlocked ?? (row.shown ? `Hide ${row.name} on the calendar` : `Show ${row.name} on the calendar`)}
+                    onChange={(shown) => onShown(row.id, shown)}
+                  />
+                )}
+              </div>
+            ))
+          ) : empty ? (
+            <p className="calendars-note">{empty}</p>
+          ) : null}
+        </div>
+      </Disclosure>
     </section>
   );
 }
