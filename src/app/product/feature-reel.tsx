@@ -32,7 +32,7 @@ export function FeatureReel({ active, onActive }: Props) {
       active={active}
       onActive={onActive}
       ariaLabel="Calendar features"
-      hint="Drag sideways to turn it. Tags and tasks respond like the app — still view-only on your real calendar."
+      hint="Drag sideways to turn it. Make a tag on the calendar above — it stays on this page only."
       renderBody={(id) => <FeatureBody id={id} />}
     />
   );
@@ -129,7 +129,7 @@ function TagsCard() {
 
   return (
     <div className={styles.interactiveCard}>
-      <p className={styles.cardLead}>Rules paint events on your week. Coverage can fill the chip, half, or a quarter wedge.</p>
+      <p className={styles.cardLead}>A word paints the chip. Full, half, or a quarter.</p>
       <div className={styles.stack}>
         {SAMPLE_TAGS.map((tag) => (
           <ExpandRow
@@ -144,17 +144,13 @@ function TagsCard() {
         ))}
       </div>
       <div className={styles.previewBlock}>
-        <span className={styles.previewLabel}>{activeTag ? `${activeTag.name} on the grid` : "On the grid"}</span>
-        <StripPreview
-          items={strips}
-          highlightTagId={highlightTagId}
-          onOpen={setFocusItem}
-        />
+        <span className={styles.previewLabel}>{activeTag ? activeTag.name : "On the grid"}</span>
+        <StripPreview items={strips} highlightTagId={highlightTagId} onOpen={setFocusItem} />
       </div>
       {focusItem ? (
         <div className={styles.inlineDetail}>
           <strong>{focusItem.title}</strong>
-          <span>{focusItem.smartTag ? `${focusItem.smartTag.name} · ${focusItem.smartTag.cover} coverage` : "No tag"}</span>
+          <span>{focusItem.smartTag ? `${focusItem.smartTag.name} · ${focusItem.smartTag.cover}` : "No tag"}</span>
           <button type="button" onClick={() => setFocusItem(null)}>Close</button>
         </div>
       ) : null}
@@ -172,7 +168,7 @@ function EventsCard() {
 
   return (
     <div className={styles.interactiveCard}>
-      <p className={styles.cardLead}>Campus talks sit beside class blocks — open a day to read times and places.</p>
+      <p className={styles.cardLead}>A talk sits beside class. Open a row to read it.</p>
       <div className={styles.stack}>
         {talk ? (
           <ExpandRow
@@ -182,12 +178,11 @@ function EventsCard() {
             onToggle={() => setOpenId(openId === "talk" ? null : "talk")}
           >
             <p>{talk.description}</p>
-            <StripPreview items={[talk]} onOpen={() => {}} />
           </ExpandRow>
         ) : null}
         <ExpandRow
-          title="Thursday · 3 on the day"
-          meta="Sample week"
+          title="Thursday"
+          meta="Three events"
           open={openId === "thu"}
           onToggle={() => setOpenId(openId === "thu" ? null : "thu")}
         >
@@ -207,7 +202,7 @@ function TasksCard() {
 
   return (
     <div className={styles.interactiveCard}>
-      <p className={styles.cardLead}>Tasks use the task color and a checkbox — try checking one off.</p>
+      <p className={styles.cardLead}>A checkbox, on the task color. Try one.</p>
       <StripPreview
         items={tasks}
         completed={completed}
@@ -221,16 +216,14 @@ function TasksCard() {
 function CalendarsCard() {
   const [open, setOpen] = useState("course");
   const sources = [
-    { id: "course", name: "Course schedule", meta: "Imported", color: "#3d6b8c", blurb: "One link, kept in its own lane. Lectures land here before a rule copies what you care about." },
-    { id: "personal", name: "Personal", meta: "WatAgent", color: "#5b8a72", blurb: "Lunch, the market, the Sunday call. The calendar you write in yourself." },
-    { id: "google", name: "Google Calendar", meta: "Connected", color: "#b0600f", blurb: "Busy blocks and events you already keep. WatAgent reads them. It does not become them." },
+    { id: "course", name: "Course schedule", meta: "Imported", color: "#3d6b8c", blurb: "Lectures stay in their own lane." },
+    { id: "personal", name: "Personal", meta: "WatAgent", color: "#5b8a72", blurb: "Lunch, the market, the Sunday call." },
+    { id: "google", name: "Google Calendar", meta: "Connected", color: "#b0600f", blurb: "WatAgent reads it. It does not become it." },
   ];
-
-  const previewItems = useMemo(() => sampleItems(DEMO_THURSDAY).slice(0, 4), []);
 
   return (
     <div className={styles.interactiveCard}>
-      <p className={styles.cardLead}>Each source keeps its color. Merged view is what you see above.</p>
+      <p className={styles.cardLead}>Each source keeps its color. One week shows all of them.</p>
       <div className={styles.stack}>
         {sources.map((source) => (
           <ExpandRow
@@ -243,14 +236,10 @@ function CalendarsCard() {
             <p>{source.blurb}</p>
             <div className={styles.sourceSwatch} style={{ "--strip-color": source.color } as CSSProperties}>
               <i style={{ background: source.color }} />
-              <span>Events from {source.name}</span>
+              <span>{source.name}</span>
             </div>
           </ExpandRow>
         ))}
-      </div>
-      <div className={styles.previewBlock}>
-        <span className={styles.previewLabel}>Thursday together</span>
-        <StripPreview items={previewItems} onOpen={() => {}} />
       </div>
     </div>
   );
@@ -268,7 +257,7 @@ function RulesCard() {
           open={open === "classes"}
           onToggle={() => setOpen(open === "classes" ? null : "classes")}
         >
-          <p>When a new lecture appears on the course feed, add it to Personal if the title contains a course code. Look two weeks ahead. Ask before writing.</p>
+          <p>A new lecture on the course feed lands on Personal when the title has a course code. Ask before writing.</p>
         </ExpandRow>
         <ExpandRow
           title="Talks worth the walk"
@@ -276,7 +265,7 @@ function RulesCard() {
           open={open === "talks"}
           onToggle={() => setOpen(open === "talks" ? null : "talks")}
         >
-          <p>If a campus event mentions a talk or a workshop, draft it onto Personal for the next 10 days. Leave sports alone.</p>
+          <p>A campus talk or workshop can be drafted onto Personal. Sports stay out.</p>
         </ExpandRow>
       </div>
     </div>

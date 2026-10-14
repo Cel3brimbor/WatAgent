@@ -1,6 +1,7 @@
 import { accessErrorFrom, reportAccessError } from "@/auth/access";
 import { authUserOf, type AuthDriver, type AuthUser } from "@/auth/types";
 import { API_BASE_URL } from "@/shared/config";
+import { noteLockdown } from "@/shared/lockdown";
 
 type MemorySession = { accessToken: string; expiresAt: number; user: AuthUser };
 
@@ -25,6 +26,14 @@ async function refresh(): Promise<MemorySession | null> {
     return null;
   }
   if (!res || !res.ok) {
+    if (res?.status === 503) {
+      const payload = (await res.json().catch(() => null)) as { code?: unknown; scope?: unknown } | null;
+      if (payload?.code === "lockdown") {
+        if (payload.scope !== "route") noteLockdown(true);
+        //a still-valid access token can keep this page up while routes are closed
+        if (session && session.expiresAt > Date.now()) return session;
+      }
+    }
     session = null;
     return null;
   }
