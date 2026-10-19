@@ -14,7 +14,7 @@ assert.equal(groupOf({ dueUTC: at(12), allDay: true, done: true }, now, today), 
 assert.equal(groupOf({ dueUTC: at(12), allDay: true, done: true }, now, today, true), "overdue");
 
 //today stays put once it's checked, including a time that already passed
-assert.equal(groupOf({ dueUTC: at(13, 9), allDay: false, done: true }, now, today), "overdue");
+assert.equal(groupOf({ dueUTC: at(13, 9), allDay: false, done: true }, now, today), "today");
 assert.equal(groupOf({ dueUTC: at(13, 18), allDay: false, done: true }, now, today), "today");
 assert.equal(groupOf({ dueUTC: at(13), allDay: true, done: true }, now, today), "today");
 
@@ -24,7 +24,7 @@ assert.equal(groupOf({ dueUTC: at(25), allDay: true, done: true }, now, today), 
 
 //open tasks still sort by when they're due
 assert.equal(groupOf({ dueUTC: at(12, 9), allDay: false, done: false }, now, today), "overdue");
-assert.equal(groupOf({ dueUTC: at(13, 9), allDay: false, done: false }, now, today), "overdue");
+assert.equal(groupOf({ dueUTC: at(13, 9), allDay: false, done: false }, now, today), "today");
 assert.equal(groupOf({ dueUTC: at(13), allDay: true, done: false }, now, today), "today");
 assert.equal(groupOf({ dueUTC: at(16), allDay: true, done: false }, now, today), "week");
 assert.equal(groupOf({ dueUTC: at(30), allDay: true, done: false }, now, today), "later");

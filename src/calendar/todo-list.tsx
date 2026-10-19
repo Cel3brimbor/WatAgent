@@ -65,9 +65,9 @@ function isPastDay(dueUTC: number, today: Date): boolean {
   return startOfLocalDay(new Date(dueUTC)).getTime() < today.getTime();
 }
 
-//an all-day task stays on time through its whole day. a timed task is late once its time passes
-function scheduleGroup(row: { dueUTC: number; allDay: boolean }, now: number, today: Date): ScheduleGroup {
-  if (row.dueUTC < (row.allDay ? today.getTime() : now)) return "overdue";
+//only previous calendar days land in overdue; today's timed tasks stay under today even after their time
+function scheduleGroup(row: { dueUTC: number; allDay: boolean }, _now: number, today: Date): ScheduleGroup {
+  if (isPastDay(row.dueUTC, today)) return "overdue";
   if (row.dueUTC < addDays(today, 1).getTime()) return "today";
   if (row.dueUTC < addDays(today, 7).getTime()) return "week";
   return "later";
@@ -78,6 +78,11 @@ export function groupOf(row: { dueUTC: number; allDay: boolean; done: boolean },
   //holdPast keeps a just-checked previous day on screen long enough to strike it through
   if (row.done && isPastDay(row.dueUTC, today) && !holdPast) return "done";
   return scheduleGroup(row, now, today);
+}
+
+function isDueLate(row: { dueUTC: number; allDay: boolean }, now: number, today: Date): boolean {
+  if (row.allDay) return isPastDay(row.dueUTC, today);
+  return row.dueUTC < now;
 }
 
 function sourceDone(id: string, items: CalendarItemDoc[], tasks: KeywordTask[]): boolean | undefined {
@@ -218,7 +223,7 @@ export const TodoList = memo(function TodoList({ items, onOpen, onComplete, onCr
     const tag = row.kind === "keyword" ? (tagForKeyword ? tagForKeyword(row.task) : row.task.tag) : tagForItem?.(row.item);
     const cover = tag?.cover === "half" || tag?.cover === "quarter" ? tag.cover : "full";
     const className = [row.done ? "is-done" : "", draft ? "is-editor-draft" : "", tag ? `is-tagged is-tag-${cover}` : ""].filter(Boolean).join(" ");
-    const late = scheduleGroup(row, now, today) === "overdue";
+    const late = isDueLate(row, now, today);
     return (
       <li
         key={row.id}
