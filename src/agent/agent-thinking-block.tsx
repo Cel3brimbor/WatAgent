@@ -60,11 +60,14 @@ export function AgentThinkingBlock({
   events,
   active = true,
   live = false,
+  reopenWhileCalling = true,
 }: {
   events?: ToolEventRecord[];
   active?: boolean;
   /**true only while this turn is still streaming a call*/
   live?: boolean;
+  /**false keeps a manual collapse while later calls in the same group arrive*/
+  reopenWhileCalling?: boolean;
 }) {
   const steps = events ?? [];
   const toolBusy = live && steps.some((event) => event.state === "calling");
@@ -73,10 +76,10 @@ export function AgentThinkingBlock({
   const activeRef = useRef(active);
 
   useEffect(() => {
-    if (toolBusy) setOpen(true);
+    if (reopenWhileCalling && toolBusy) setOpen(true);
     else if (activeRef.current && !active) setOpen(false);
     activeRef.current = active;
-  }, [toolBusy, active]);
+  }, [toolBusy, active, reopenWhileCalling]);
 
   if (steps.length === 0) return null;
 

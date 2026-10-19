@@ -35,6 +35,8 @@ export type CalendarSpace = {
   mutedIds: string[];
   colorOverrides: Record<string, string>;
   smartTags: SmartTag[];
+  //calendar tags this shortcut leaves off. empty means every calendar tag still paints
+  mutedSmartTagIds: string[];
 };
 
 export type SpaceCalendarChoice = {
@@ -91,6 +93,7 @@ export function newCalendarSpace(name: string, color: string, view: CalendarView
     mutedIds: [],
     colorOverrides: {},
     smartTags: [],
+    mutedSmartTagIds: [],
   };
 }
 
@@ -156,6 +159,7 @@ export function calendarSpacesOf(raw: unknown, reservedFeedIds: ReadonlySet<stri
       //shortcut-local. never copied onto the main calendar's colors or tags
       colorOverrides: colorMap(rec.colorOverrides),
       smartTags: parseSmartTagsFromUnknown(rec.smartTags),
+      mutedSmartTagIds: idList(rec.mutedSmartTagIds, 50),
     });
     if (list.length >= MAX_CALENDAR_SPACES) break;
   }

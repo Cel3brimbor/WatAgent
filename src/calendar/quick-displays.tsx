@@ -12,7 +12,7 @@ import {
   type SpaceCalendarChoice,
 } from "@/calendar/calendar-spaces";
 import { SmartTagsPanel, type SmartTagCalendarOption } from "@/calendar/smart-tags-panel";
-import type { SmartTag, SmartTagTarget } from "@/calendar/smart-tags";
+import { smartTagGlance, smartTagLabel, type SmartTag, type SmartTagTarget } from "@/calendar/smart-tags";
 import { CheckIcon, DotsIcon, PlusIcon } from "@/calendar/sidebar-icons";
 import { RenameCalendarDialog } from "@/calendar/imported-calendars-panel";
 import { ConfirmDialog } from "@/shared/confirm-dialog";
@@ -26,13 +26,14 @@ type Props = {
   displays: CalendarSpace[];
   choices: SpaceCalendarChoice[];
   samples: SmartTagTarget[];
+  calendarTags: SmartTag[];
   onOpen: (id: string) => void;
   onCreate: (display: CalendarSpace) => void;
   onUpdate: (id: string, edit: (display: CalendarSpace) => CalendarSpace) => void;
   onDelete: (id: string) => Promise<void>;
 };
 
-export function QuickDisplays({ displays, choices, samples, onOpen, onCreate, onUpdate, onDelete }: Props) {
+export function QuickDisplays({ displays, choices, samples, calendarTags, onOpen, onCreate, onUpdate, onDelete }: Props) {
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
@@ -103,6 +104,7 @@ export function QuickDisplays({ displays, choices, samples, onOpen, onCreate, on
           display={editingDisplay}
           choices={choices}
           samples={samples}
+          calendarTags={calendarTags}
           onClose={() => setEditing(null)}
           onUpdate={(edit) => onUpdate(editingDisplay.id, edit)}
         />
@@ -326,12 +328,14 @@ function EditDisplayDialog({
   display,
   choices,
   samples,
+  calendarTags,
   onClose,
   onUpdate,
 }: {
   display: CalendarSpace;
   choices: SpaceCalendarChoice[];
   samples: SmartTagTarget[];
+  calendarTags: SmartTag[];
   onClose: () => void;
   onUpdate: (edit: (display: CalendarSpace) => CalendarSpace) => void;
 }) {
@@ -341,6 +345,7 @@ function EditDisplayDialog({
   const [colorFor, setColorFor] = useState<string | null>(null);
   useDialog(ref, { open: true, onEscape: onClose });
   const included = new Set(display.includedCalendarIds);
+  const mutedTags = new Set(display.mutedSmartTagIds);
   const tagCalendars: SmartTagCalendarOption[] = choices
     .filter((choice) => included.has(choice.id))
     .map((choice) => ({ id: choice.id, name: choice.name, google: choice.group === "Google" }));
@@ -360,6 +365,15 @@ function EditDisplayDialog({
       ...current,
       colorOverrides: { ...current.colorOverrides, [id]: color },
     }));
+  }
+
+  function toggleTag(id: string) {
+    onUpdate((current) => {
+      const muted = current.mutedSmartTagIds.includes(id)
+        ? current.mutedSmartTagIds.filter((entry) => entry !== id)
+        : [...current.mutedSmartTagIds, id];
+      return { ...current, mutedSmartTagIds: muted };
+    });
   }
 
   function setTags(tags: SmartTag[]) {
@@ -391,6 +405,7 @@ function EditDisplayDialog({
             onColorToggle={setColorFor}
             onColor={paint}
           />
+          <CalendarTagChecklist tags={calendarTags} muted={mutedTags} onToggle={toggleTag} />
           <SmartTagsPanel
             tags={display.smartTags}
             onChange={setTags}
@@ -398,6 +413,9 @@ function EditDisplayDialog({
             samples={tagSamples}
             open={tagsOpen}
             onOpenChange={setTagsOpen}
+            heading="This display"
+            emptyCopy="Tags you add here color this Quick Display only."
+            footnote="Only this Quick Display uses these tags."
           />
         </div>
       </div>
@@ -424,6 +442,52 @@ function IconPicker({ icon, onIcon }: { icon: QuickDisplayIcon; onIcon: (icon: Q
           </button>
         ))}
       </div>
+    </section>
+  );
+}
+
+function CalendarTagChecklist({
+  tags,
+  muted,
+  onToggle,
+}: {
+  tags: SmartTag[];
+  muted: Set<string>;
+  onToggle: (id: string) => void;
+}) {
+  return (
+    <section className="qd-choices" aria-labelledby="qd-calendar-tags">
+      <h3 id="qd-calendar-tags">Calendar tags</h3>
+      {tags.length === 0 ? (
+        <p className="qd-empty">Tags you make on Calendar show up here.</p>
+      ) : (
+        <ul className="qd-inset">
+          {tags.map((tag) => {
+            const on = !muted.has(tag.id);
+            const label = smartTagLabel(tag);
+            return (
+              <li key={tag.id}>
+                <div className="qd-row">
+                  <button
+                    type="button"
+                    className={`qd-row-hit qd-tag-hit${tag.enabled ? "" : " is-paused"}`}
+                    aria-pressed={on}
+                    aria-label={`${on ? "Hide" : "Show"} ${label}${tag.enabled ? "" : ", paused on Calendar"}`}
+                    onClick={() => onToggle(tag.id)}
+                  >
+                    <span className="qd-cal-swatch" style={{ background: tag.color }} aria-hidden="true" />
+                    <span className="qd-tag-copy">
+                      <span className="qd-row-name">{label}</span>
+                      <span className="qd-tag-glance">{tag.enabled ? smartTagGlance(tag) : `Paused · ${smartTagGlance(tag)}`}</span>
+                    </span>
+                    <span className="qd-mark" aria-hidden="true">{on ? <CheckIcon /> : null}</span>
+                  </button>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </section>
   );
 }

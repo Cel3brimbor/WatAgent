@@ -16,11 +16,14 @@ export function AgentActivity({
   parts,
   streaming,
   toolsLive = false,
+  reopenWhileCalling = true,
 }: {
   parts?: ActivityPart[];
   streaming: boolean;
   /**the turn is still streaming, even after answer text has started*/
   toolsLive?: boolean;
+  /**false keeps a manual collapse while later calls in the same group arrive*/
+  reopenWhileCalling?: boolean;
 }) {
   const items = parts ?? [];
   if (items.length === 0) {
@@ -52,6 +55,7 @@ export function AgentActivity({
             events={part.events}
             active={live || latest}
             live={live}
+            reopenWhileCalling={reopenWhileCalling}
           />
         );
       })}

@@ -18,6 +18,7 @@ import { AgentReel } from "./agent-reel";
 import { FeatureReel, type FeatureId } from "./feature-reel";
 import { paintWithTags, sampleTagTargets } from "./product-lab";
 import { useProductLab } from "./product-lab-context";
+import { smoothScrollToElement } from "@/shared/motion";
 import { sampleItems } from "./sample-calendar";
 import styles from "./product.module.css";
 
@@ -53,8 +54,8 @@ export function ProductStage() {
 
   function showFeature(id: FeatureId) {
     setFeature(id);
-    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    document.getElementById("showcase")?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "nearest" });
+    const showcase = document.getElementById("showcase");
+    if (showcase) smoothScrollToElement(showcase, "start");
   }
 
   return (

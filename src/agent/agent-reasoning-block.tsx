@@ -27,14 +27,24 @@ export function AgentReasoningBlock({
   const panelId = useId();
   const bodyRef = useRef<HTMLDivElement>(null);
   const previewRef = useRef<HTMLButtonElement>(null);
+  //follow new words only while the reader is already at the bottom of the thought
+  const stick = useRef(true);
+  const locking = useRef(false);
   const showPreview = live && !open && body.length > 0;
   const label = live ? "Thinking" : thoughtLabel(seconds);
 
   useEffect(() => {
-    //follow the stream while the thought is open
-    if (!open || !live) return;
+    if (!live) stick.current = true;
+  }, [live]);
+
+  useEffect(() => {
+    //follow the stream while the thought is open and the reader hasn't scrolled up
+    if (!open || !live || !stick.current) return;
     const el = bodyRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    if (!el) return;
+    locking.current = true;
+    el.scrollTop = el.scrollHeight;
+    locking.current = false;
   }, [body, open, live]);
 
   useEffect(() => {
@@ -78,7 +88,18 @@ export function AgentReasoningBlock({
         ) : null}
       </div>
       <Disclosure open={open} id={panelId}>
-        <div className="agent-reasoning-body" ref={bodyRef}>
+        <div
+          className="agent-reasoning-body"
+          ref={bodyRef}
+          onScroll={(event) => {
+            if (locking.current) return;
+            const el = event.currentTarget;
+            const gap = el.scrollHeight - el.scrollTop - el.clientHeight;
+            //a real move up lets go; returning to the bottom follows again
+            if (gap > 28) stick.current = false;
+            else if (gap < 12) stick.current = true;
+          }}
+        >
           {body}
         </div>
       </Disclosure>

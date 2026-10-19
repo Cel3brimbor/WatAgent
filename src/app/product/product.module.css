@@ -5,6 +5,7 @@
   background: var(--paper);
   font-family: var(--font-body);
 }
+#main { scroll-margin-top: 28px; }
 .page a { color: inherit; text-decoration: none; }
 .page a:focus-visible, .page button:focus-visible, .page summary:focus-visible {
   outline: 2px solid var(--accent);
@@ -25,9 +26,17 @@
 .page em { font-weight: 400; color: var(--accent); }
 .hero > p { font-size: 16px; line-height: 1.8; color: var(--ink-soft); margin: 0; }
 .actions { display: flex; justify-content: center; align-items: center; gap: 28px; margin-top: 30px; }
-.primary { display: inline-flex; align-items: center; justify-content: center; gap: 30px; background: var(--accent); color: var(--on-accent) !important; padding: 15px 22px; border-radius: var(--radius); font-size: 13px; transition: background .2s; }
+.primary {
+  display: inline-flex; align-items: center; justify-content: center; gap: 30px;
+  background: var(--accent); color: var(--on-accent) !important; padding: 15px 22px; border-radius: var(--radius);
+  font-size: 13px; transition: background 0.2s, transform 100ms ease-out;
+}
 .primary:hover { background: var(--accent-deep); }
-.secondary { font-size: 13px; }
+.primary:active { transform: scale(0.98); }
+.secondary { font-size: 13px; transition: transform 100ms ease-out; }
+.secondary:active { transform: scale(0.98); }
+.nav nav a, .navCta { transition: transform 100ms ease-out; }
+.nav nav a:active, .navCta:active { transform: scale(0.98); }
 .secondary span { margin-left: 12px; }
 .heroNote { font-size: 8px; letter-spacing: 1.6px; color: var(--ink-soft); margin-top: 25px; }
 .previewSection { max-width: 1376px; margin: auto; padding: 0 48px; }
@@ -39,7 +48,11 @@
 .demoSidebar { max-height: 680px; overflow: auto; padding: 18px 10px; background: var(--nav-bg); border-right: 1px solid var(--line); }
 .demoWordmark { font: 600 23px var(--font-display); padding: 0 10px 22px; letter-spacing: -.7px; }
 .demoSidebar nav { display: grid; gap: 5px; }
-.demoSidebar nav button { width: 100%; min-height: 35px; padding-left: 14px; text-align: left; }
+.demoSidebar nav button {
+  width: 100%; min-height: 35px; padding-left: 14px; text-align: left;
+  transition: transform 100ms ease-out;
+}
+.demoSidebar nav button:active { transform: scale(0.98); }
 .sourceList { padding: 12px 10px; }
 .sourceList h3 { font-size: 9px; letter-spacing: 1px; color: var(--ink-soft); margin: 24px 0 12px; }
 .sourceList p { display: flex; align-items: center; gap: 9px; font-size: 12px; margin: 13px 0; }
@@ -204,10 +217,11 @@
 .reel { position: relative; margin-top: 28px; }
 .reelStage {
   position: relative;
-  height: 540px;
-  perspective: 1400px;
+  height: 560px;
+  perspective: 1800px;
+  perspective-origin: 50% 48%;
   overflow: hidden;
-  touch-action: none;
+  touch-action: pan-y;
   cursor: grab;
 }
 .reelStage[data-dragging="true"] { cursor: grabbing; user-select: none; }
@@ -219,35 +233,87 @@
   touch-action: pan-y;
   cursor: auto;
 }
+.reelRing {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  transform-origin: 50% 50%;
+}
+.reelStage[data-reduced="true"] .reelRing {
+  position: relative;
+  inset: auto;
+  transform: none;
+}
 .reelCard {
   position: absolute;
-  top: 50%;
-  left: 50%;
-  display: flex;
-  flex-direction: column;
+  inset: 0;
+  margin: auto;
   width: min(420px, 74%);
   height: min(450px, 86%);
-  padding: 22px 20px 16px;
-  border-radius: 18px;
-  background: color-mix(in srgb, var(--panel-solid) 78%, transparent);
-  backdrop-filter: blur(22px) saturate(170%);
-  border: 1px solid color-mix(in srgb, white 46%, var(--line));
-  box-shadow: var(--shadow);
-  overflow: hidden;
-  will-change: transform;
+  border-radius: 20px;
+  background: var(--panel-solid);
+  border: 1px solid color-mix(in srgb, white 18%, var(--line-strong, var(--line)));
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--panel-solid) 88%, black),
+    0 16px 40px rgba(0, 0, 0, 0.26);
+  transform-origin: center center;
+  transform-style: preserve-3d;
+  -webkit-font-smoothing: antialiased;
 }
-.reelCard[data-front="true"] { box-shadow: var(--shadow-dialog, var(--shadow)); }
+.reelCard::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: color-mix(in srgb, black 42%, var(--panel-solid));
+  transform: translateZ(-4px);
+  backface-visibility: hidden;
+}
+.reelCard[data-front="true"] {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--panel-solid) 88%, black),
+    0 28px 64px rgba(0, 0, 0, 0.34);
+}
 .reelCard[data-hidden="true"] { display: none; }
+.reelCardFace {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 22px 20px 16px;
+  border-radius: inherit;
+  overflow: hidden;
+  background: var(--panel-solid);
+  transform: translateZ(1px);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, white 20%, transparent);
+}
+.reelCardFace::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  border-radius: inherit;
+  background: rgb(0 0 0 / calc(var(--shade, 0) * 0.26));
+}
 .reelStage[data-reduced="true"] .reelCard {
   position: relative;
-  top: auto;
-  left: auto;
+  inset: auto;
   width: min(440px, 100%);
   height: auto;
   min-height: 420px;
   margin: 0 auto;
   transform: none;
 }
+.reelStage[data-reduced="true"] .reelCard::before { display: none; }
+.reelStage[data-reduced="true"] .reelCardFace {
+  transform: none;
+  backface-visibility: visible;
+}
+.reelStage[data-reduced="true"] .reelCardFace::after { display: none; }
 .cardPick {
   position: absolute;
   inset: 0;
@@ -260,6 +326,7 @@
 .cardHead span { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-soft); }
 .cardHead h3 { margin: 6px 0 14px; font: 500 32px/1.05 var(--font-display); letter-spacing: -0.03em; }
 .cardBody { position: relative; z-index: 1; min-height: 0; flex: 1; overflow: auto; padding-right: 2px; }
+.cardBody:has(.agentCardBody) { display: flex; flex-direction: column; overflow: hidden; }
 .stack, .chat { display: grid; gap: 8px; }
 .expand > button, .menuToggle, .chatAgent {
   display: flex;
@@ -311,7 +378,7 @@
   background: var(--panel-solid);
   color: var(--ink);
 }
-.reelStep:disabled { opacity: 0.35; }
+.reelStep:disabled { opacity: 0.35; pointer-events: none; }
 .reelDots { display: flex; gap: 8px; }
 .reelDot {
   width: 8px;
@@ -325,8 +392,24 @@
 .reelHint { margin: 12px 0 0; text-align: center; font-size: 12px; color: var(--ink-soft); }
 .agentShowcase { margin-top: 72px; scroll-margin-top: 24px; }
 .agentShowcase .sectionIntro h2 { font-size: clamp(36px, 5vw, 49px); }
-.agentCardBody { display: flex; flex-direction: column; min-height: 0; flex: 1; }
-.agentThread { gap: 10px; }
+.agentCardBody { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.agentCardBody .ask { flex-shrink: 0; }
+.agentThread {
+  flex: 1 1 auto;
+  gap: 10px;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  overflow-anchor: none;
+  touch-action: pan-y;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+  outline: none;
+}
+.agentThread:focus-visible {
+  border-radius: 10px;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent);
+}
 .agentThread .bubble-row { margin: 0; }
 .agentThread .bubble { font-size: 12px; }
 .agentThread .bubble-role { font-size: 9px; }
@@ -402,17 +485,16 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .detail, .dialog, .scrim, .drawer { animation: none; transition: none; }
-  .reelCard { will-change: auto; }
 }
 @media (prefers-reduced-transparency: reduce) {
-  .detail, .reelCard, .dialog { background: var(--panel-solid); backdrop-filter: none; }
+  .detail, .dialog { background: var(--panel-solid); backdrop-filter: none; }
 }
 @media (prefers-contrast: more) {
   .detail, .reelCard, .dialog { background: var(--panel-solid); border-color: var(--ink); }
 }
 @media (max-width: 760px) {
   .showcase { margin-top: 56px; }
-  .reelStage { height: 500px; }
+  .reelStage { height: 520px; }
   .reelCard { width: min(420px, 88%); height: min(430px, 78vw); }
   .detail { left: 8px; right: 8px; }
   .dialogActions { flex-direction: column-reverse; }

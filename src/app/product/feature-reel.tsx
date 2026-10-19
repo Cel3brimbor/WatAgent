@@ -32,7 +32,7 @@ export function FeatureReel({ active, onActive }: Props) {
       active={active}
       onActive={onActive}
       ariaLabel="Calendar features"
-      hint="Drag sideways to turn it. Make a tag on the calendar above — it stays on this page only."
+      hint="Drag to turn it — it loops. Make a tag on the calendar above — it stays on this page only."
       renderBody={(id) => <FeatureBody id={id} />}
     />
   );

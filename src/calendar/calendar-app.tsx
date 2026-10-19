@@ -1112,7 +1112,10 @@ export function CalendarApp({
       ].join("\n")
     : "";
   const displayForGrid = useContentStable(viewingDisplay, displayFilterKey);
-  const displayForTags = useContentStable(viewingDisplay, viewingDisplay ? `on\n${smartTagKey(viewingDisplay.smartTags)}` : "off");
+  const displayForTags = useContentStable(
+    viewingDisplay,
+    viewingDisplay ? `on\n${smartTagKey(viewingDisplay.smartTags)}\n${viewingDisplay.mutedSmartTagIds.join("\0")}` : "off",
+  );
   //like main `view`, kept out of calendarSpaces until the display closes so toggles stay cheap
   const shownView = viewingDisplay ? displayView : view;
 
@@ -1738,10 +1741,15 @@ export function CalendarApp({
 
   const displayTagMatcherNow = useMemo(() => {
     if (!displayForTags) return smartTagMatcher;
-    //shortcut tags paint this view only. the calendar's own tags stay underneath
+    //tags made on this shortcut paint first. calendar tags paint unless this shortcut turned them off
     const local = compileSmartTags(displayForTags.smartTags);
-    return (target: SmartTagTarget) => local(target) ?? smartTagMatcher(target);
-  }, [displayForTags, smartTagMatcher]);
+    const muted = new Set(displayForTags.mutedSmartTagIds);
+    const inherited = compileSmartTags(
+      (groups.smartTags ? smartTags : smartTags.map((tag) => ({ ...tag, enabled: false })))
+        .filter((tag) => !muted.has(tag.id)),
+    );
+    return (target: SmartTagTarget) => local(target) ?? inherited(target);
+  }, [displayForTags, smartTagMatcher, smartTags, groups.smartTags]);
   //typing a tag or keyword rule stays urgent; visible days re-tag at low priority
   const displayTagMatcher = useDeferredValue(displayTagMatcherNow);
 
@@ -2847,6 +2855,7 @@ export function CalendarApp({
             {section === "displays" && !viewingDisplay ? (
               <DisplaysFromStore
                 displays={calendarSpaces}
+                calendarTags={smartTags}
                 onOpen={openQuickDisplay}
                 onCreate={createQuickDisplay}
                 onUpdate={updateQuickDisplay}

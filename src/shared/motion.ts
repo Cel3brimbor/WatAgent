@@ -125,3 +125,83 @@ export function createVelocityTracker(windowMs = 100): VelocityTracker {
     },
   };
 }
+
+type ScrollBlock = "start" | "center";
+
+let pageScrollSpring: SpringHandle | null = null;
+let pageScrollCleanup: (() => void) | null = null;
+
+function detachPageScrollListeners() {
+  pageScrollCleanup?.();
+  pageScrollCleanup = null;
+}
+
+export function scrollTopForElement(el: HTMLElement, block: ScrollBlock = "start"): number {
+  const root = document.scrollingElement;
+  const current = root instanceof HTMLElement ? root.scrollTop : window.scrollY;
+  const rect = el.getBoundingClientRect();
+  const style = getComputedStyle(el);
+  const marginTop = parseFloat(style.scrollMarginTop) || 0;
+  const marginBottom = parseFloat(style.scrollMarginBottom) || 0;
+  const top = rect.top + current - marginTop;
+  if (block === "center") {
+    const height = rect.height + marginTop + marginBottom;
+    return top - (window.innerHeight - height) / 2;
+  }
+  return top;
+}
+
+export function smoothScrollToY(targetY: number, options?: { response?: number }) {
+  const root = document.scrollingElement;
+  if (!(root instanceof HTMLElement)) return;
+
+  const max = Math.max(0, root.scrollHeight - root.clientHeight);
+  const to = Math.max(0, Math.min(max, targetY));
+  const from = root.scrollTop;
+
+  pageScrollSpring?.stop();
+  detachPageScrollListeners();
+
+  if (prefersReducedMotion() || Math.abs(to - from) < 2) {
+    root.scrollTop = to;
+    return;
+  }
+
+  const onInterrupt = () => {
+    pageScrollSpring?.stop();
+    pageScrollSpring = null;
+    detachPageScrollListeners();
+  };
+
+  const listenerOpts = { passive: true, capture: true } as const;
+  window.addEventListener("wheel", onInterrupt, listenerOpts);
+  window.addEventListener("touchstart", onInterrupt, listenerOpts);
+  window.addEventListener("keydown", onInterrupt, listenerOpts);
+  pageScrollCleanup = () => {
+    window.removeEventListener("wheel", onInterrupt, listenerOpts);
+    window.removeEventListener("touchstart", onInterrupt, listenerOpts);
+    window.removeEventListener("keydown", onInterrupt, listenerOpts);
+  };
+
+  pageScrollSpring = animateSpring({
+    from,
+    to,
+    damping: 1,
+    response: options?.response ?? 0.55,
+    onUpdate: (value) => {
+      root.scrollTop = value;
+    },
+    onComplete: () => {
+      pageScrollSpring = null;
+      detachPageScrollListeners();
+    },
+  });
+}
+
+export function smoothScrollToElement(
+  el: HTMLElement,
+  block: ScrollBlock = "start",
+  options?: { response?: number },
+) {
+  smoothScrollToY(scrollTopForElement(el, block), options);
+}

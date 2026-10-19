@@ -408,7 +408,8 @@ Let me plan out the full schedule:
       {
         id: "msg-batch-assistant",
         role: "assistant",
-        content: "The assistant is unavailable right now. Please try again.",
+        content:
+          "Done — four changes, all queued for your approval:\n\n- **Badminton** moved to 8:30–11:00 AM\n- **Shower** removed\n- **Review derivatives integration**, today 9:00–10:00 AM. Watch the visualising video, then finish the integration assignment question\n- **Finish physics assignment, finish in class examples** at 4:20 PM, an hour after your last lecture\n\nWant any of those times changed?",
         toolEvents: [
           {
             id: "tool-batch-badminton",

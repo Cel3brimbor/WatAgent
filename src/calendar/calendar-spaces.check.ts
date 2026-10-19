@@ -19,6 +19,7 @@ assert.equal(sports.view, "month");
 assert.equal(sports.icon, "layers");
 assert.deepEqual(sports.colorOverrides, {});
 assert.deepEqual(sports.smartTags, []);
+assert.deepEqual(sports.mutedSmartTagIds, []);
 assert.deepEqual(sports.importedCalendars, []);
 assert.equal(spaceNameError([sports], "sports"), "You already have a Quick Display with this name.");
 assert.equal(spaceNameError([sports], "Main"), "Main is your main calendar.");
@@ -76,6 +77,16 @@ const tinted = calendarSpacesOf([{
 assert.equal(tinted[0].icon, "bolt");
 assert.deepEqual(tinted[0].colorOverrides, { events: "#f83a22" });
 assert.equal(tinted[0].smartTags[0].name, "Gym");
+assert.deepEqual(tinted[0].mutedSmartTagIds, []);
+
+const quiet = calendarSpacesOf([{
+  id: sports.id,
+  name: "Sports",
+  color: "#16a765",
+  view: "week",
+  mutedSmartTagIds: ["tag-gym", "tag-gym", ""],
+}]);
+assert.deepEqual(quiet[0].mutedSmartTagIds, ["tag-gym"]);
 
 const only = spaceOnlyFeedIds(owned, ["learn"]);
 assert.equal(only.has(feed), true);

@@ -77,6 +77,20 @@ export function smartTagLabel(tag: SmartTag): string {
   return firstValue ? `“${firstValue}”` : "Untitled tag";
 }
 
+/**one line under the name, so a tag is readable without opening the editor*/
+export function smartTagGlance(tag: SmartTag): string {
+  const filled = tag.rules.filter((rule) => rule.value.trim());
+  if (filled.length === 0) return "Add a word to match";
+  const first = filled[0];
+  const field = SMART_TAG_FIELDS.find((item) => item.id === first.field)?.label.toLowerCase() ?? "title";
+  const operator = SMART_TAG_OPERATORS.find((item) => item.id === first.operator)?.label ?? "contains";
+  const value = first.value.trim();
+  const shown = value.length > 36 ? `${value.slice(0, 34)}…` : value;
+  const lead = `${field} ${operator} ${shown}`;
+  if (filled.length === 1) return lead;
+  return `${lead}, ${tag.match === "all" ? "and" : "or"} ${filled.length - 1} more`;
+}
+
 /** Comma-separated values are alternatives: "gym, run" matches either word. */
 export function smartTagTerms(value: string): string[] {
   return value

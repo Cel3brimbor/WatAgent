@@ -12,6 +12,7 @@ import {
   compileSmartTag,
   newSmartTag,
   newSmartTagRule,
+  smartTagGlance,
   smartTagLabel,
   smartTagPatternError,
   type SmartTag,
@@ -44,20 +45,6 @@ type Props = {
   footnote?: string;
   namePlaceholder?: string;
 };
-
-//one line under the name, so a tag is readable without opening the editor
-function ruleGlance(tag: SmartTag): string {
-  const filled = tag.rules.filter((rule) => rule.value.trim());
-  if (filled.length === 0) return "Add a word to match";
-  const first = filled[0];
-  const field = SMART_TAG_FIELDS.find((item) => item.id === first.field)?.label.toLowerCase() ?? "title";
-  const operator = SMART_TAG_OPERATORS.find((item) => item.id === first.operator)?.label ?? "contains";
-  const value = first.value.trim();
-  const shown = value.length > 36 ? `${value.slice(0, 34)}…` : value;
-  const lead = `${field} ${operator} ${shown}`;
-  if (filled.length === 1) return lead;
-  return `${lead}, ${tag.match === "all" ? "and" : "or"} ${filled.length - 1} more`;
-}
 
 export function SmartTagsPanel({
   tags,
@@ -177,7 +164,7 @@ export function SmartTagsPanel({
                       onClick={() => setEditingId(editing ? null : tag.id)}
                     >
                       <span className="smart-tag-name">{label}</span>
-                      <span className="smart-tag-glance">{ruleGlance(tag)}</span>
+                      <span className="smart-tag-glance">{smartTagGlance(tag)}</span>
                     </button>
                   </div>
                   <Expandable open={editing}>

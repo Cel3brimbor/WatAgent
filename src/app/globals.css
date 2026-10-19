@@ -1852,6 +1852,32 @@ button.qd-cal-swatch:active {
   white-space: nowrap;
 }
 
+.qd-tag-hit {
+  padding-top: 0.48rem;
+  padding-bottom: 0.48rem;
+}
+
+.qd-tag-copy {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  gap: 0.04rem;
+}
+
+.qd-tag-glance {
+  overflow: hidden;
+  color: var(--ink-soft);
+  font-size: 0.75rem;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.qd-tag-hit.is-paused .qd-row-name {
+  color: var(--ink-soft);
+}
+
 .qd-mark {
   display: grid;
   flex-shrink: 0;
@@ -1900,6 +1926,24 @@ button.qd-cal-swatch:active {
   flex-wrap: wrap;
   gap: 0.4rem;
   padding: 0 0.85rem 0.7rem 0.85rem;
+}
+
+.qd-sheet .smart-tags {
+  margin-top: 0;
+  gap: 0.35rem;
+}
+
+.qd-sheet .smart-tags-title {
+  padding-left: 0.2rem;
+}
+
+.qd-sheet .smart-tags-title-text {
+  color: var(--ink-soft);
+  font-family: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1.2;
 }
 
 .qd-sheet .side-cal-check svg,

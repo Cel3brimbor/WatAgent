@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ProductLabProvider } from "./product-lab-context";
 import { ProductStage } from "./preview";
+import { ProductScrollLink } from "./product-scroll-link";
 import styles from "./product.module.css";
 
 export const metadata: Metadata = {
@@ -12,17 +13,17 @@ export const metadata: Metadata = {
 export default function ProductPage() {
   return (
     <div className={styles.page}>
-      <a className={styles.skip} href="#main">Skip to content</a>
+      <ProductScrollLink className={styles.skip} href="#main">Skip to content</ProductScrollLink>
       <header className={styles.nav}>
         <Link className={styles.brand} href="/product" aria-label="WatAgent home">WatAgent</Link>
-        <nav aria-label="Main navigation"><a href="#features">Why WatAgent</a><a href="#preview">Take a look</a><Link className={styles.navCta} href="/">Open app <span aria-hidden="true">↗</span></Link></nav>
+        <nav aria-label="Main navigation"><ProductScrollLink href="#features">Why WatAgent</ProductScrollLink><ProductScrollLink href="#preview">Take a look</ProductScrollLink><Link className={styles.navCta} href="/">Open app <span aria-hidden="true">↗</span></Link></nav>
       </header>
       <main id="main">
         <section className={styles.hero}>
           <div className={styles.eyebrow}><span /> A LITTLE STRUCTURE. A LOT MORE POSSIBILITY.</div>
           <h1>Your days,<br /><em>thoughtfully</em> planned.</h1>
           <p>Bring your calendars together. Talk through your plans.<br className={styles.desktopBreak} /> Find a little more space for what matters.</p>
-          <div className={styles.actions}><Link className={styles.primary} href="/">Start your day with WatAgent <span aria-hidden="true">↗</span></Link><a className={styles.secondary} href="#preview">Explore the calendar <span aria-hidden="true">↓</span></a></div>
+          <div className={styles.actions}><Link className={styles.primary} href="/">Start your day with WatAgent <span aria-hidden="true">↗</span></Link><ProductScrollLink className={styles.secondary} href="#preview">Explore the calendar <span aria-hidden="true">↓</span></ProductScrollLink></div>
           <div className={styles.heroNote}>YOUR WEEK, WITH A LITTLE BREATHING ROOM.</div>
         </section>
         <ProductLabProvider>
