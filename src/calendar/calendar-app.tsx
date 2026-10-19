@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, startTransition, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentProps, type CSSProperties, type MutableRefObject } from "react";
+import { memo, startTransition, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentProps, type MutableRefObject } from "react";
 import { leadHourForDays } from "@/calendar/time-scale";
 import { useTimedGridScroll } from "@/calendar/use-time-scale";
 import type { CalendarItemDoc, CalendarItemMeta, CalendarView, ImportedCalendar, ImportedCalendarSource, MergedCalendar, TimelineItem } from "@/calendar/types";
@@ -908,6 +908,7 @@ export function CalendarApp({
   const [calendarSpaces, setCalendarSpaces] = useState<CalendarSpace[]>(() => readCalendarSpaces().spaces);
   const [activeCalendarSpaceId, setActiveCalendarSpaceId] = useState(() => readCalendarSpaces().activeId);
   const [openDisplayId, setOpenDisplayId] = useState<string | null>(null);
+  const [arrangingDisplays, setArrangingDisplays] = useState(false);
   const [displayView, setDisplayView] = useState<CalendarView>(() => readCalendarView());
   const displayViewRef = useRef(displayView);
   displayViewRef.current = displayView;
@@ -2849,6 +2850,8 @@ export function CalendarApp({
                 onCreate={createQuickDisplay}
                 onUpdate={updateQuickDisplay}
                 onDelete={deleteCalendarSpace}
+                arranging={arrangingDisplays}
+                onArranging={setArrangingDisplays}
               />
             ) : null}
             {section === "tasks" ? (

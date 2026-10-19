@@ -675,7 +675,7 @@ function editorDomWasWiped(root: HTMLElement, snapshot: string): boolean {
 function syncChipTails(root: HTMLElement): boolean {
   let changed = false;
   root.querySelectorAll<HTMLElement>("[data-calendar-id]").forEach((wrap) => {
-    let next = wrap.nextSibling;
+    const next = wrap.nextSibling;
     if (!next || next.nodeType !== Node.TEXT_NODE) {
       const gap = next instanceof HTMLElement && next.dataset.calendarId ? " " : " ";
       wrap.after(document.createTextNode(gap));
