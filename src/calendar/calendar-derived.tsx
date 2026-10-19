@@ -148,13 +148,13 @@ function sampleSignature(samples: SmartTagTarget[]): string {
   return rowSignature(samples.map((sample) => [sample.calendarId, sample.title, sample.location ?? "", sample.description ?? ""]));
 }
 
-function dueSignature(tasks: { key: string; dueUTC: number }[]): string {
+function dueSignature(tasks: readonly { key: string; dueUTC: number }[]): string {
   const parts = tasks.map((task) => `${task.key}:${task.dueUTC}`);
   parts.sort();
   return parts.join("|");
 }
 
-function dueMapOf(tasks: { key: string; dueUTC: number }[]): ReadonlyMap<string, number> {
+function dueMapOf(tasks: readonly { key: string; dueUTC: number }[]): ReadonlyMap<string, number> {
   if (tasks.length === 0) return EMPTY_TASK_DUES;
   const map = new Map<string, number>();
   for (const task of tasks) map.set(task.key, task.dueUTC);
@@ -370,20 +370,186 @@ function recolorOnlyConfigChange(previous: DerivedConfig, config: DerivedConfig)
   return previous.colors !== config.colors || previous.colorOverrides !== config.colorOverrides;
 }
 
-function calendarSpaceViewOnlyChange(previous: DerivedConfig, config: DerivedConfig): boolean {
-  const a = previous.calendarSpaces;
-  const b = config.calendarSpaces;
-  if (a === b) return false;
-  if (a.length !== b.length) return false;
-  let viewMoved = false;
-  for (let i = 0; i < a.length; i++) {
-    const left = a[i];
-    const right = b[i];
-    if (left.id !== right.id) return false;
-    if (left.view !== right.view) viewMoved = true;
-    if (JSON.stringify({ ...left, view: "" }) !== JSON.stringify({ ...right, view: "" })) return false;
+//shortcut colors and tags never change which events the main lists are built from
+export function spaceImportedFeedsMatch(previous: readonly CalendarSpace[], next: readonly CalendarSpace[]): boolean {
+  if (previous.length !== next.length) return false;
+  for (let i = 0; i < previous.length; i++) {
+    if (previous[i].id !== next[i].id) return false;
+    const left = previous[i].importedCalendars;
+    const right = next[i].importedCalendars;
+    if (left.length !== right.length) return false;
+    for (let j = 0; j < left.length; j++) {
+      if (left[j].id !== right[j].id || left[j].url !== right[j].url || left[j].name !== right[j].name) return false;
+    }
   }
-  return viewMoved;
+  return true;
+}
+
+function sameIdSet(left: ReadonlySet<string>, right: ReadonlySet<string>): boolean {
+  if (left === right) return true;
+  if (left.size !== right.size) return false;
+  for (const id of left) if (!right.has(id)) return false;
+  return true;
+}
+
+function configExcept(previous: DerivedConfig, config: DerivedConfig, skip: Partial<Record<keyof DerivedConfig, true>>): boolean {
+  const keys: (keyof DerivedConfig)[] = [
+    "pendingChanges",
+    "googleCalendars",
+    "importedCalendars",
+    "campusCalendarFeeds",
+    "mergedCalendars",
+    "feedsForMerge",
+    "calendarSpaces",
+    "spaceOnlyFeeds",
+    "shownCalendars",
+    "colors",
+    "colorOverrides",
+    "sources",
+    "agentHiddenCalendarIds",
+    "googleConnected",
+    "keywordTasks",
+    "taskSmartTags",
+  ];
+  for (const key of keys) {
+    if (skip[key]) continue;
+    if (previous[key] !== config[key]) return false;
+  }
+  return true;
+}
+
+function spacePresentationOnlyChange(previous: DerivedConfig, config: DerivedConfig): boolean {
+  if (previous.calendarSpaces === config.calendarSpaces) return false;
+  if (!configExcept(previous, config, { calendarSpaces: true, spaceOnlyFeeds: true })) return false;
+  if (!spaceImportedFeedsMatch(previous.calendarSpaces, config.calendarSpaces)) return false;
+  return sameIdSet(previous.spaceOnlyFeeds, config.spaceOnlyFeeds);
+}
+
+//dues follow event times and which events are tasks. a checked box does not move them
+export function sameDueConfig(previous: DerivedConfig | null, config: DerivedConfig): boolean {
+  if (!previous) return false;
+  return previous.keywordTasks === config.keywordTasks
+    && previous.taskSmartTags === config.taskSmartTags
+    && previous.pendingChanges === config.pendingChanges
+    && previous.mergedCalendars === config.mergedCalendars
+    && previous.feedsForMerge === config.feedsForMerge
+    && previous.importedCalendars === config.importedCalendars
+    && previous.campusCalendarFeeds === config.campusCalendarFeeds
+    && sameIdSet(previous.spaceOnlyFeeds, config.spaceOnlyFeeds)
+    && previous.sources === config.sources
+    && previous.googleCalendars === config.googleCalendars;
+}
+
+function taskListOnlyChange(previous: DerivedConfig, config: DerivedConfig): boolean {
+  if (previous.keywordTasks === config.keywordTasks && previous.taskSmartTags === config.taskSmartTags) return false;
+  return configExcept(previous, config, { keywordTasks: true, taskSmartTags: true });
+}
+
+function keywordDoneOnly(previous: KeywordTasks, next: KeywordTasks): boolean {
+  return previous.rules === next.rules && previous.includeDeadlines === next.includeDeadlines && previous.doneKeys !== next.doneKeys;
+}
+
+function completionSwap(before: CalendarItemDoc, after: CalendarItemDoc): boolean {
+  if (before.id !== after.id || before.title !== after.title) return false;
+  if (before.pendingApproval !== after.pendingApproval || before.editorDraft !== after.editorDraft) return false;
+  const left = before.calendar;
+  const right = after.calendar;
+  if (left.kind !== "task" || right.kind !== "task" || left.completed === right.completed) return false;
+  return left.startUTC === right.startUTC
+    && left.endUTC === right.endUTC
+    && left.allDay === right.allDay
+    && left.location === right.location
+    && left.description === right.description
+    && left.calendarId === right.calendarId
+    && left.importSource === right.importSource
+    && left.icsImportId === right.icsImportId
+    && left.googleEventId === right.googleEventId;
+}
+
+//null when the edit is more than checking tasks off, so the caller still derives
+export function taskCompletionDocs(
+  previous: readonly CalendarItemDoc[] | null,
+  next: readonly CalendarItemDoc[],
+): Map<string, CalendarItemDoc> | null {
+  if (!previous || previous.length !== next.length) return null;
+  const changed = new Map<string, CalendarItemDoc>();
+  for (let i = 0; i < next.length; i++) {
+    if (previous[i] === next[i]) continue;
+    if (!completionSwap(previous[i], next[i])) return null;
+    changed.set(next[i].id, next[i]);
+  }
+  return changed;
+}
+
+export function patchListedDone(listed: readonly KeywordTask[], doneKeys: readonly string[]): KeywordTask[] {
+  const done = new Set(doneKeys);
+  let changed = false;
+  const next = listed.map((task) => {
+    const isDone = done.has(task.key);
+    if (isDone === task.done) return task;
+    changed = true;
+    return { ...task, done: isDone };
+  });
+  return changed ? next : listed as KeywordTask[];
+}
+
+function swapDocs(items: CalendarItemDoc[], changed: Map<string, CalendarItemDoc>): CalendarItemDoc[] {
+  let next: CalendarItemDoc[] | null = null;
+  for (let i = 0; i < items.length; i++) {
+    const doc = changed.get(items[i].id);
+    if (!doc || doc === items[i]) continue;
+    next ??= items.slice();
+    next[i] = doc;
+  }
+  return next ?? items;
+}
+
+function applyCompletion(surfaces: Surfaces, changed: Map<string, CalendarItemDoc>): Surfaces {
+  if (changed.size === 0) return surfaces;
+  const taskItems = swapDocs(surfaces.tasks.items, changed);
+  const chatItems = swapDocs(surfaces.chat.items, changed);
+  const mapItems = swapDocs(surfaces.map.items, changed);
+  const events = swapDocs(surfaces.events, changed);
+  if (
+    taskItems === surfaces.tasks.items
+    && chatItems === surfaces.chat.items
+    && mapItems === surfaces.map.items
+    && events === surfaces.events
+  ) return surfaces;
+  return {
+    ...surfaces,
+    tasks: taskItems === surfaces.tasks.items ? surfaces.tasks : { ...surfaces.tasks, items: taskItems },
+    chat: chatItems === surfaces.chat.items ? surfaces.chat : { ...surfaces.chat, items: chatItems },
+    map: mapItems === surfaces.map.items ? surfaces.map : { ...surfaces.map, items: mapItems },
+    events,
+  };
+}
+
+//tag and keyword edits reuse the event list already on the slice. they do not rebuild the grid
+function relistTasks(tasks: TaskDerived, config: DerivedConfig): KeywordTask[] {
+  const keyword = keywordTasksOf(config.keywordTasks, tasks.sources);
+  const seen = new Set(keyword.map((task) => task.key));
+  const done = new Set(config.keywordTasks.doneKeys);
+  const deadlines = config.keywordTasks.includeDeadlines === false
+    ? []
+    : tasks.listed.flatMap((task) => {
+      if (task.ruleId !== "deadline" || seen.has(task.key)) return [];
+      return [done.has(task.key) === task.done ? task : { ...task, done: done.has(task.key) }];
+    });
+  const claimed = new Set(seen);
+  for (const task of deadlines) claimed.add(task.key);
+  const fromTags = smartTagTasksOf(config.taskSmartTags, tasks.sources, config.keywordTasks.doneKeys, claimed);
+  return withTaskTags(
+    dedupeSchoolAssignmentTasks(
+      [...keyword, ...deadlines, ...fromTags].sort((a, b) => a.dueUTC - b.dueUTC || a.title.localeCompare(b.title)),
+    ),
+    config.taskSmartTags,
+  );
+}
+
+function duesFromListed(previous: ReadonlyMap<string, number>, listed: readonly KeywordTask[]): ReadonlyMap<string, number> {
+  const next = dueMapOf(listed);
+  return dueSignatureOf(previous) === dueSignatureOf(next) ? previous : next;
 }
 
 function paintOnlyConfig(previous: DerivedConfig, config: DerivedConfig): boolean {
@@ -467,7 +633,16 @@ function deriveCalendarSurfaces(
   return value;
 }
 
-//stable map for the sync column paint. does not wait on the deferred provider render
+function rememberDues(
+  items: CalendarItemDoc[],
+  google: OverlayEvent[],
+  config: DerivedConfig,
+  due: ReadonlyMap<string, number>,
+) {
+  dueHold = { items, google, config, due };
+}
+
+//stable map for the sync column paint. a checked task keeps the previous map
 export function currentTaskDues(
   items: CalendarItemDoc[],
   google: OverlayEvent[],
@@ -475,9 +650,13 @@ export function currentTaskDues(
 ): ReadonlyMap<string, number> {
   const held = dueHold;
   if (held.items === items && held.google === google && held.config === config) return held.due;
+  if (held.google === google && sameDueConfig(held.config, config) && taskCompletionDocs(held.items, items)) {
+    rememberDues(items, google, config, held.due);
+    return held.due;
+  }
   const due = deriveCalendarSurfaces(items, google, config).taskDueById;
   const stable = dueSignatureOf(held.due) === dueSignatureOf(due) ? held.due : due;
-  dueHold = { items, google, config, due: stable };
+  rememberDues(items, google, config, stable);
   return stable;
 }
 
@@ -763,8 +942,39 @@ export function DerivedProvider({
     const live = liveConfig();
     if (live === config && recolorOnlyConfigChange(previous, config)) {
       shown = slices;
-    } else if (live === config && calendarSpaceViewOnlyChange(previous, config)) {
+    } else if (live === config && spacePresentationOnlyChange(previous, config)) {
+      //quick display tags and colors paint through the day matcher, same as the main calendar
       shown = slices;
+      rememberDues(store.getAllItems(), store.getAllGoogle(), live, slices.taskDueById);
+    } else if (live === config && taskListOnlyChange(previous, config)) {
+      const doneOnly = previous.taskSmartTags === config.taskSmartTags
+        && keywordDoneOnly(previous.keywordTasks, config.keywordTasks);
+      if (doneOnly) {
+        const listed = patchListedDone(slices.tasks.listed, config.keywordTasks.doneKeys);
+        rememberDues(store.getAllItems(), store.getAllGoogle(), live, slices.taskDueById);
+        if (listed !== slices.tasks.listed) {
+          shown = { ...slices, tasks: { ...slices.tasks, listed } };
+          setSlices(shown);
+        }
+      } else if (previous.keywordTasks.rules === config.keywordTasks.rules && previous.keywordTasks.includeDeadlines === config.keywordTasks.includeDeadlines) {
+        //the editor paints now. matching events join the list after that frame, same as calendar tags
+        rememberDues(store.getAllItems(), store.getAllGoogle(), live, slices.taskDueById);
+        const snapshot = live;
+        startTransition(() => {
+          setSlices((current) => {
+            const listed = relistTasks(current.tasks, snapshot);
+            const taskDueById = duesFromListed(current.taskDueById, listed);
+            rememberDues(store.getAllItems(), store.getAllGoogle(), snapshot, taskDueById);
+            if (listed === current.tasks.listed && taskDueById === current.taskDueById) return current;
+            return { ...current, tasks: { ...current.tasks, listed }, taskDueById };
+          });
+        });
+      } else {
+        const snapshot = live;
+        startTransition(() => {
+          setSlices((current) => stabilize(current, deriveCalendarSurfaces(store.getAllItems(), store.getAllGoogle(), snapshot)));
+        });
+      }
     } else if (live === config && paintOnlyConfig(previous, config)) {
       const snapshot = live;
       startTransition(() => {
@@ -813,11 +1023,29 @@ export function DerivedProvider({
 
   useLayoutEffect(() => {
     const pull = () => {
-      const fresh = deriveCalendarSurfaces(store.getAllItems(), store.getAllGoogle(), liveConfig());
-      const next = stabilize(slicesRef.current, fresh);
-      mentionsRef.current = next.chat.mentions;
+      const items = store.getAllItems();
+      const google = store.getAllGoogle();
+      const config = liveConfig();
+      const changed = taskCompletionDocs(derivedHold.items, items);
+      //checking a task off flips that row. it does not rebuild mentions, tags, or the other days
+      if (changed && derivedHold.value && derivedHold.google === google && sameDueConfig(derivedHold.config, config)) {
+        if (changed.size === 0) return;
+        const next = applyCompletion(slicesRef.current, changed);
+        //the row is already on the list. otherwise fall through and derive it in
+        if (next !== slicesRef.current) {
+          derivedHold = { items, google, config, value: next };
+          rememberDues(items, google, config, next.taskDueById);
+          mentionsRef.current = next.chat.mentions;
+          setSlices(next);
+          return;
+        }
+      }
       startTransition(() => {
-        setSlices((current) => stabilize(current, deriveCalendarSurfaces(store.getAllItems(), store.getAllGoogle(), liveConfig())));
+        setSlices((current) => {
+          const next = stabilize(current, deriveCalendarSurfaces(store.getAllItems(), store.getAllGoogle(), liveConfig()));
+          mentionsRef.current = next.chat.mentions;
+          return next;
+        });
       });
     };
     const unsubItems = store.subscribeAll(pull);

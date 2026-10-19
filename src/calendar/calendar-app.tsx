@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, startTransition, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentProps, type CSSProperties, type MutableRefObject } from "react";
+import { memo, startTransition, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentProps, type MutableRefObject } from "react";
 import { leadHourForDays } from "@/calendar/time-scale";
 import { useTimedGridScroll } from "@/calendar/use-time-scale";
 import type { CalendarItemDoc, CalendarItemMeta, CalendarView, ImportedCalendar, ImportedCalendarSource, MergedCalendar, TimelineItem } from "@/calendar/types";
@@ -9,6 +9,8 @@ import {
   DerivedProvider,
   EMPTY_TASK_DUES,
   currentTaskDues,
+  sameDueConfig,
+  taskCompletionDocs,
   useChatDerived,
   useDisplayDerived,
   useEventItems,
@@ -676,7 +678,13 @@ function useViewLeadHour(
     const config = configRef.current;
     const filter = filterRef.current;
     const hit = cache.current;
-    if (hit.keys === key && hit.items === items && hit.google === google && hit.config === config && hit.filter === filter) return hit.hour;
+    //tags on a shortcut, and checking a task off, do not move the first hour
+    const sameConfig = hit.config === config || (config != null && sameDueConfig(hit.config, config));
+    const sameItems = hit.items === items || taskCompletionDocs(hit.items, items) != null;
+    if (hit.keys === key && hit.google === google && hit.filter === filter && sameConfig && sameItems) {
+      if (hit.items !== items || (config && hit.config !== config)) cache.current = { ...hit, items, config: config ?? hit.config };
+      return hit.hour;
+    }
     const hour = visible.length === 0 || !config ? 0 : leadHourForDays([...visible], (date) => itemsForDayRef.current(date));
     cache.current = { keys: key, items, google, config, filter, hour };
     return hour;
@@ -835,6 +843,12 @@ function TasksFromStore({
     location: item.calendar.location,
     description: item.calendar.description,
   }), [tagMatcher]);
+  const tagForKeyword = useCallback((task: KeywordTask) => tagMatcher({
+    calendarId: task.source.calendarId,
+    title: task.source.title,
+    location: task.source.location,
+    description: task.source.description,
+  }), [tagMatcher]);
   const calendarName = useCallback(
     (id: string) => tasks.calendars.find((calendar) => calendar.id === id)?.name ?? "Calendar",
     [tasks.calendars],
@@ -856,6 +870,7 @@ function TasksFromStore({
       keywordTasks={tasks.listed}
       calendarName={calendarName}
       tagForItem={tagForTaskItem}
+      tagForKeyword={tagForKeyword}
       onKeywordComplete={onKeywordComplete}
       onKeywordOpen={onKeywordOpen}
       rules={rules}
@@ -1223,10 +1238,12 @@ export function CalendarApp({
     [importedCalendars, campusCalendarFeeds, mergedCalendars],
   );
   const feedsForMerge = useMemo(() => [...importedCalendars, ...campusCalendarFeeds], [importedCalendars, campusCalendarFeeds]);
-  const spaceOnlyFeeds = useMemo(
+  const spaceOnlyFeedsRaw = useMemo(
     () => spaceOnlyFeedIds(calendarSpaces, feedsForMerge.map((feed) => feed.id)),
     [calendarSpaces, feedsForMerge],
   );
+  //a tag or color on a shortcut must not look like a new feed set, or every column rebuilds
+  const spaceOnlyFeeds = useContentStable(spaceOnlyFeedsRaw, [...spaceOnlyFeedsRaw].sort().join("\0"));
 
   //item lists live in DerivedProvider, so an edit does not re-run this component
   //checking a calendar does not change read-only, so this stays put and the derive does not run

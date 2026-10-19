@@ -22,6 +22,8 @@ type Props = {
   onKeywordOpen?: (task: KeywordTask) => void;
   /**color a calendar task when a task smart tag matches it*/
   tagForItem?: (item: CalendarItemDoc) => SmartTagHit | null;
+  /**color a keyword row from the live tags, without waiting on the task list rebuild*/
+  tagForKeyword?: (task: KeywordTask) => SmartTagHit | null;
   /**the keyword rules panel, shown below the list*/
   rules?: ReactNode;
 };
@@ -86,7 +88,7 @@ function sourceDone(id: string, items: CalendarItemDoc[], tasks: KeywordTask[]):
   return item && item.calendar.kind === "task" ? Boolean(item.calendar.completed) : undefined;
 }
 
-export const TodoList = memo(function TodoList({ items, onOpen, onComplete, onCreate, keywordTasks = [], calendarName, onKeywordComplete, onKeywordOpen, tagForItem, rules }: Props) {
+export const TodoList = memo(function TodoList({ items, onOpen, onComplete, onCreate, keywordTasks = [], calendarName, onKeywordComplete, onKeywordOpen, tagForItem, tagForKeyword, rules }: Props) {
   const listRef = useRef<HTMLDivElement>(null);
   const writeGen = useRef(new Map<string, number>());
   const sentGen = useRef(new Map<string, number>());
@@ -213,7 +215,7 @@ export const TodoList = memo(function TodoList({ items, onOpen, onComplete, onCr
 
   function renderRow(row: Row) {
     const draft = row.kind === "own" && row.item.editorDraft;
-    const tag = row.kind === "keyword" ? row.task.tag : tagForItem?.(row.item);
+    const tag = row.kind === "keyword" ? (tagForKeyword ? tagForKeyword(row.task) : row.task.tag) : tagForItem?.(row.item);
     const cover = tag?.cover === "half" || tag?.cover === "quarter" ? tag.cover : "full";
     const className = [row.done ? "is-done" : "", draft ? "is-editor-draft" : "", tag ? `is-tagged is-tag-${cover}` : ""].filter(Boolean).join(" ");
     const late = scheduleGroup(row, now, today) === "overdue";
