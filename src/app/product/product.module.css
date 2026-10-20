@@ -418,8 +418,9 @@
 }
 @media (max-width: 760px) {
   .showcase { margin-top: 56px; }
-  .reelStage { height: 500px; }
-  .reelCard { width: min(420px, 88%); height: min(430px, 78vw); }
+  /* Size cards by the screen height, not its width, so a phone shows a full chat turn. */
+  .reelStage { height: clamp(460px, calc(100svh - 160px), 600px); }
+  .reelCard { width: min(420px, 88%); height: calc(100% - 40px); }
   .detail { left: 8px; right: 8px; }
   .dialogActions { flex-direction: column-reverse; }
   .dialogGo, .dialogStay { text-align: center; }
