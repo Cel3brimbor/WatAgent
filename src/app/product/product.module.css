@@ -25,7 +25,7 @@
 .page em { font-weight: 400; color: var(--accent); }
 .hero > p { font-size: 16px; line-height: 1.8; color: var(--ink-soft); margin: 0; }
 .actions { display: flex; justify-content: center; align-items: center; gap: 28px; margin-top: 30px; }
-.primary { display: inline-flex; align-items: center; justify-content: center; gap: 30px; background: var(--accent); color: var(--on-accent) !important; padding: 15px 22px; border-radius: var(--radius); font-size: 13px; transition: background .2s; }
+.primary { display: inline-flex; align-items: center; justify-content: center; gap: 30px; background: color-mix(in srgb, var(--accent), var(--accent-deep) 25%); color: var(--on-accent) !important; padding: 15px 22px; border-radius: var(--radius); font-size: 13px; transition: background .2s; }
 .primary:hover { background: var(--accent-deep); }
 .secondary { font-size: 13px; }
 .secondary span { margin-left: 12px; }
