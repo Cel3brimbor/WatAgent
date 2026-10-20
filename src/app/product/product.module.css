@@ -48,7 +48,8 @@
 .demoMain { min-width: 0; position: relative; }
 .demoToolbar { min-height: 76px; }
 .agentLink { color: var(--accent) !important; font-size: 12px; white-space: nowrap; }
-.demoCalendar { height: 560px; overflow: auto; padding: 10px; }
+/* No top padding: the sticky day header must sit flush with the top or events show above it. */
+.demoCalendar { height: 560px; overflow: auto; padding: 0 10px 10px; }
 .demoCalendar :global(.calendar-month-grid) { grid-auto-rows: minmax(90px, 1fr); }
 .demoCalendar :global(.calendar-month-cell) { min-height: 90px; }
 .demoFootnote { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 14px 20px; border-top: 1px solid var(--line); font-size: 10px; color: var(--ink-soft); }
@@ -117,7 +118,8 @@
   .demoToolbar :global(.calendar-toolbar-right) { gap: 8px; flex-wrap: wrap; }
   .demoToolbar :global(.segmented) { width: auto; }
   .demoToolbar :global(.segmented-option) { padding-inline: 12px; }
-  .demoCalendar { height: 580px; padding: 5px; }
+  /* Shorter than the screen, so a swipe can land outside it and scroll the page. */
+  .demoCalendar { height: min(440px, 55svh); padding: 0 5px 5px; }
   .demoFootnote { flex-wrap: wrap; justify-content: flex-start; gap: 6px 15px; padding: 12px; }
   .features { margin-top: 65px; padding: 0 24px; }
   .sectionIntro h2 { font-size: 37px; letter-spacing: -1px; }
