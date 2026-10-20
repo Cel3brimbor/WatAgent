@@ -212,7 +212,7 @@
   height: 540px;
   perspective: 1400px;
   overflow: hidden;
-  touch-action: none;
+  touch-action: pan-y;
   cursor: grab;
 }
 .reelStage[data-dragging="true"] { cursor: grabbing; user-select: none; }
@@ -317,16 +317,17 @@
   color: var(--ink);
 }
 .reelStep:disabled { opacity: 0.35; }
-.reelDots { display: flex; gap: 8px; }
+.reelDots { display: flex; }
+/* The dot stays 8px, but the button around it is a 24px target. */
 .reelDot {
-  width: 8px;
-  height: 8px;
+  width: 24px;
+  height: 24px;
   padding: 0;
   border: 0;
   border-radius: 50%;
-  background: color-mix(in srgb, var(--ink) 22%, transparent);
+  background: radial-gradient(circle, color-mix(in srgb, var(--ink) 22%, transparent) 4px, transparent 4.5px);
 }
-.reelDot[aria-checked="true"] { background: var(--ink); transform: none; }
+.reelDot[aria-checked="true"] { background: radial-gradient(circle, var(--ink) 4px, transparent 4.5px); transform: none; }
 .reelHint { margin: 12px 0 0; text-align: center; font-size: 12px; color: var(--ink-soft); }
 .agentShowcase { margin-top: 72px; scroll-margin-top: 24px; }
 .agentShowcase .sectionIntro h2 { font-size: clamp(36px, 5vw, 49px); }
