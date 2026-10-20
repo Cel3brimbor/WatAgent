@@ -52,6 +52,9 @@ export function LoginScreen({ error, onSignIn }: Props) {
         <p className="login-legal">
           By continuing, you agree to our <a href="/privacy/">Privacy Policy</a>.
         </p>
+        <p className="login-legal">
+          New to WatAgent? <a href="/product/">See how it works</a>.
+        </p>
       </section>
     </main>
   );
