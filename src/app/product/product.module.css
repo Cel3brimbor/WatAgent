@@ -18,20 +18,20 @@
 .navCta { border: 1px solid var(--line); background: var(--panel-solid); padding: 10px 17px; border-radius: var(--radius); }
 .navCta span { margin-left: 16px; }
 .hero { text-align: center; padding: 70px 24px 58px; }
-.eyebrow, .label { font-size: 10px; letter-spacing: 1.7px; font-weight: 600; color: var(--ink-soft); }
+.eyebrow, .label { font-size: 11px; letter-spacing: 1.5px; font-weight: 600; color: var(--ink-soft); }
 .eyebrow { display: flex; justify-content: center; align-items: center; gap: 9px; }
 .eyebrow > span { height: 6px; width: 6px; border-radius: 50%; background: var(--accent); }
 .hero h1 { font-family: var(--font-display); font-size: clamp(48px, 6.2vw, 84px); font-weight: 450; line-height: 1.08; letter-spacing: -3.5px; margin: 24px 0; }
 .page em { font-weight: 400; color: var(--accent); }
 .hero > p { font-size: 16px; line-height: 1.8; color: var(--ink-soft); margin: 0; }
 .actions { display: flex; justify-content: center; align-items: center; gap: 28px; margin-top: 30px; }
-.primary { display: inline-flex; align-items: center; justify-content: center; gap: 30px; background: var(--accent); color: var(--on-accent) !important; padding: 15px 22px; border-radius: var(--radius); font-size: 13px; transition: background .2s; }
+.primary { display: inline-flex; align-items: center; justify-content: center; gap: 30px; background: color-mix(in srgb, var(--accent), var(--accent-deep) 25%); color: var(--on-accent) !important; padding: 15px 22px; border-radius: var(--radius); font-size: 13px; transition: background .2s; }
 .primary:hover { background: var(--accent-deep); }
 .secondary { font-size: 13px; }
 .secondary span { margin-left: 12px; }
-.heroNote { font-size: 8px; letter-spacing: 1.6px; color: var(--ink-soft); margin-top: 25px; }
+.heroNote { font-size: 11px; letter-spacing: 1.3px; color: var(--ink-soft); margin-top: 25px; }
 .previewSection { max-width: 1376px; margin: auto; padding: 0 48px; }
-.previewCaption { display: flex; justify-content: space-between; margin-bottom: 15px; font-size: 9px; letter-spacing: 1.1px; color: var(--ink-soft); }
+.previewCaption { display: flex; justify-content: space-between; margin-bottom: 15px; font-size: 11px; letter-spacing: 1.1px; color: var(--ink-soft); }
 .previewCaption > span:last-child { font-family: var(--font-display); font-style: italic; font-size: 14px; letter-spacing: 0; }
 .productDemo { border: 1px solid var(--line-strong); border-radius: 10px; background: var(--paper); box-shadow: var(--shadow); overflow: hidden; }
 .demoFrame { display: grid; grid-template-columns: 205px minmax(0, 1fr); }
@@ -40,7 +40,7 @@
 .demoSidebar nav { display: grid; gap: 5px; }
 .demoSidebar nav button { width: 100%; min-height: 35px; padding-left: 14px; text-align: left; }
 .sourceList { padding: 12px 10px; }
-.sourceList h3 { font-size: 9px; letter-spacing: 1px; color: var(--ink-soft); margin: 24px 0 12px; }
+.sourceList h3 { font-size: 11px; letter-spacing: 1px; color: var(--ink-soft); margin: 24px 0 12px; }
 .sourceList p { display: flex; align-items: center; gap: 9px; font-size: 12px; margin: 13px 0; }
 .sourceList i { width: 11px; height: 11px; border-radius: 3px; background: var(--event-color); }
 .sourceList .taskSwatch { background: var(--task-color); }
@@ -48,10 +48,11 @@
 .demoMain { min-width: 0; position: relative; }
 .demoToolbar { min-height: 76px; }
 .agentLink { color: var(--accent) !important; font-size: 12px; white-space: nowrap; }
-.demoCalendar { height: 560px; overflow: auto; padding: 10px; }
+/* No top padding: the sticky day header must sit flush with the top or events show above it. */
+.demoCalendar { height: 560px; overflow: auto; padding: 0 10px 10px; }
 .demoCalendar :global(.calendar-month-grid) { grid-auto-rows: minmax(90px, 1fr); }
 .demoCalendar :global(.calendar-month-cell) { min-height: 90px; }
-.demoFootnote { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 14px 20px; border-top: 1px solid var(--line); font-size: 10px; color: var(--ink-soft); }
+.demoFootnote { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 14px 20px; border-top: 1px solid var(--line); font-size: 12px; color: var(--ink-soft); }
 .demoFootnote strong { color: var(--ink); }
 .demoFootnote button { background: var(--panel-solid); border: 1px solid var(--line); color: var(--ink); border-radius: 5px; padding: 5px 9px; cursor: pointer; }
 .features { max-width: 1280px; margin: 95px auto 0; padding: 0 48px; }
@@ -59,21 +60,21 @@
 .sectionIntro h2, .closing h2 { font: 400 49px/1.12 var(--font-display); letter-spacing: -1.8px; margin: 20px 0; }
 .sectionIntro > p { font-size: 14px; color: var(--ink-soft); line-height: 1.7; }
 .featureGrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 36px; margin-top: 50px; }
-.featureNumber { font-size: 8px; letter-spacing: 1.4px; color: var(--ink-soft); }
+.featureNumber { font-size: 11px; letter-spacing: 1.4px; color: var(--ink-soft); }
 .featureGrid h3 { font: 400 24px var(--font-display); letter-spacing: -.5px; margin: 25px 0 12px; }
 .featureGrid article > p { font-size: 13px; line-height: 1.8; color: var(--ink-soft); margin: 0; }
 .miniCalendars, .miniChat, .miniEvent { height: 175px; margin-top: 18px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--nav-bg); padding: 24px; display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 7px; }
-.miniCalendars span { background: var(--panel-solid); border: 1px solid var(--line); padding: 8px; border-radius: 5px; font-size: 8px; }
+.miniCalendars span { background: var(--panel-solid); border: 1px solid var(--line); padding: 8px; border-radius: 5px; font-size: 11px; }
 .miniCalendars b { width: 100%; text-align: center; font-size: 23px; color: var(--accent); line-height: 1; }
-.miniCalendars strong { font-size: 10px; font-weight: 500; background: var(--panel-solid); border: 1px solid var(--accent); padding: 10px 25px; border-radius: var(--radius); }
+.miniCalendars strong { font-size: 12px; font-weight: 500; background: var(--panel-solid); border: 1px solid var(--accent); padding: 10px 25px; border-radius: var(--radius); }
 .miniChat { background: var(--panel-solid); flex-direction: column; align-items: flex-start; gap: 15px; }
-.miniChat span { align-self: flex-end; border: 1px solid var(--line); background: var(--nav-bg); padding: 11px; border-radius: var(--radius); font-size: 10px; }
-.miniChat strong { font-size: 11px; font-weight: 500; }
-.miniChat i { font-style: normal; font-size: 9px; line-height: 1.5; color: var(--ink-soft); }
+.miniChat span { align-self: flex-end; border: 1px solid var(--line); background: var(--nav-bg); padding: 11px; border-radius: var(--radius); font-size: 12px; }
+.miniChat strong { font-size: 13px; font-weight: 500; }
+.miniChat i { font-style: normal; font-size: 11px; line-height: 1.5; color: var(--ink-soft); }
 .miniEvent { background: var(--panel-solid); flex-direction: column; align-items: flex-start; gap: 10px; }
-.miniEvent > span { font-size: 7px; letter-spacing: 1.5px; color: var(--accent); }
+.miniEvent > span { font-size: 11px; letter-spacing: 1.5px; color: var(--accent); }
 .miniEvent strong { font: 400 25px/1.1 var(--font-display); }
-.miniEvent > div { font-size: 8px; color: var(--ink-soft); }
+.miniEvent > div { font-size: 11px; color: var(--ink-soft); }
 .faq { max-width: 1184px; margin: 100px auto 0; border-top: 1px solid var(--line); padding: 50px 0; display: grid; grid-template-columns: 1fr 1.3fr; gap: 60px; }
 .faq h2 { font: 400 32px var(--font-display); letter-spacing: -.8px; margin: 10px 0; }
 .faq details { border-bottom: 1px solid var(--line); padding: 20px 0; }
@@ -85,7 +86,7 @@
 .closing { text-align: center; background: var(--nav-bg); border-block: 1px solid var(--line); margin-top: 25px; padding: 65px 24px 70px; }
 .closing h2 { font-size: 55px; margin-bottom: 28px; }
 .footer { max-width: 1280px; margin: auto; padding: 34px 48px; display: flex; align-items: center; justify-content: space-between; gap: 20px; }
-.footer > span, .footer > a:last-child { font-size: 10px; color: var(--ink-soft); }
+.footer > span, .footer > a:last-child { font-size: 12px; color: var(--ink-soft); }
 .footer .brand { font-size: 22px; }
 @media (max-width: 1100px) {
   .demoFrame { grid-template-columns: 165px minmax(0, 1fr); }
@@ -102,14 +103,12 @@
   .nav nav > a:not(:last-child) { display: none; }
   .brand { font-size: 24px; }
   .hero { padding: 50px 22px 42px; }
-  .eyebrow { font-size: 7px; letter-spacing: 1.3px; }
+  .eyebrow { letter-spacing: 1.2px; }
   .hero h1 { font-size: 50px; letter-spacing: -2px; }
   .hero > p { font-size: 14px; }
   .desktopBreak { display: none; }
   .actions { flex-direction: column; gap: 22px; }
-  .heroNote { font-size: 7px; }
   .previewSection { padding: 0 16px; }
-  .previewCaption { font-size: 7px; }
   .previewCaption > span:last-child { display: none; }
   .demoFrame { grid-template-columns: minmax(0, 1fr); }
   .demoSidebar { display: none; }
@@ -117,14 +116,14 @@
   .demoToolbar :global(.calendar-toolbar-right) { gap: 8px; flex-wrap: wrap; }
   .demoToolbar :global(.segmented) { width: auto; }
   .demoToolbar :global(.segmented-option) { padding-inline: 12px; }
-  .demoCalendar { height: 580px; padding: 5px; }
+  /* Shorter than the screen, so a swipe can land outside it and scroll the page. */
+  .demoCalendar { height: min(440px, 55svh); padding: 0 5px 5px; }
   .demoFootnote { flex-wrap: wrap; justify-content: flex-start; gap: 6px 15px; padding: 12px; }
   .features { margin-top: 65px; padding: 0 24px; }
   .sectionIntro h2 { font-size: 37px; letter-spacing: -1px; }
   .featureGrid { grid-template-columns: 1fr; gap: 38px; margin-top: 35px; }
   .featureGrid h3 { margin-top: 20px; }
   .miniCalendars, .miniChat, .miniEvent { padding: 25px; }
-  .miniCalendars span { font-size: 10px; }
   .miniChat span { font-size: 12px; }
   .miniChat strong { font-size: 13px; }
   .miniChat i { font-size: 11px; }
@@ -159,7 +158,7 @@
   width: 100%;
   margin: 0 0 8px;
   padding: 0;
-  font-size: 9px;
+  font-size: 11px;
   letter-spacing: 1px;
   color: var(--ink-soft);
 }
@@ -198,7 +197,7 @@
   animation: detailIn 280ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 .detail header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.detail header span { font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-soft); }
+.detail header span { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-soft); }
 .detail header button { border: 0; background: transparent; color: var(--accent); font-size: 12px; padding: 4px; }
 .detail h3 { margin: 8px 0 4px; font: 500 22px/1.15 var(--font-display); letter-spacing: -0.03em; }
 .detail p { margin: 0; font-size: 13px; line-height: 1.5; }
@@ -212,7 +211,7 @@
   height: 540px;
   perspective: 1400px;
   overflow: hidden;
-  touch-action: none;
+  touch-action: pan-y;
   cursor: grab;
 }
 .reelStage[data-dragging="true"] { cursor: grabbing; user-select: none; }
@@ -262,7 +261,7 @@
   cursor: pointer;
 }
 .cardHead { position: relative; z-index: 1; padding-right: 8px; }
-.cardHead span { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-soft); }
+.cardHead span { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-soft); }
 .cardHead h3 { margin: 6px 0 14px; font: 500 32px/1.05 var(--font-display); letter-spacing: -0.03em; }
 .cardBody { position: relative; z-index: 1; min-height: 0; flex: 1; overflow: auto; padding-right: 2px; }
 .stack, .chat { display: grid; gap: 8px; }
@@ -317,16 +316,17 @@
   color: var(--ink);
 }
 .reelStep:disabled { opacity: 0.35; }
-.reelDots { display: flex; gap: 8px; }
+.reelDots { display: flex; }
+/* The dot stays 8px, but the button around it is a 24px target. */
 .reelDot {
-  width: 8px;
-  height: 8px;
+  width: 24px;
+  height: 24px;
   padding: 0;
   border: 0;
   border-radius: 50%;
-  background: color-mix(in srgb, var(--ink) 22%, transparent);
+  background: radial-gradient(circle, color-mix(in srgb, var(--ink) 22%, transparent) 4px, transparent 4.5px);
 }
-.reelDot[aria-checked="true"] { background: var(--ink); transform: none; }
+.reelDot[aria-checked="true"] { background: radial-gradient(circle, var(--ink) 4px, transparent 4.5px); transform: none; }
 .reelHint { margin: 12px 0 0; text-align: center; font-size: 12px; color: var(--ink-soft); }
 .agentShowcase { margin-top: 72px; scroll-margin-top: 24px; }
 .agentShowcase .sectionIntro h2 { font-size: clamp(36px, 5vw, 49px); }
@@ -334,12 +334,12 @@
 .agentThread { gap: 10px; }
 .agentThread .bubble-row { margin: 0; }
 .agentThread .bubble { font-size: 12px; }
-.agentThread .bubble-role { font-size: 9px; }
+.agentThread .bubble-role { font-size: 11px; }
 .agentUserText { margin: 0; font-size: 13px; line-height: 1.45; white-space: pre-wrap; }
 .interactiveCard { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
 .cardLead { margin: 0 0 4px; font-size: 12px; line-height: 1.55; color: var(--ink-soft); }
 .previewBlock { margin-top: 8px; padding-top: 10px; border-top: 1px solid var(--line); }
-.previewLabel { display: block; margin-bottom: 8px; font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-soft); }
+.previewLabel { display: block; margin-bottom: 8px; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-soft); }
 .stripPreview { display: grid; gap: 6px; }
 .stripPreviewRow[data-dim="true"] { opacity: 0.38; transition: opacity 200ms ease; }
 .stripPreview :global(.calendar-strip) { width: 100%; }
@@ -389,7 +389,7 @@
   transform-origin: center top;
   animation: dialogIn 320ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-.dialogKicker { margin: 0; font-size: 10px; letter-spacing: 0.16em; color: var(--ink-soft); }
+.dialogKicker { margin: 0; font-size: 11px; letter-spacing: 0.16em; color: var(--ink-soft); }
 .dialog h2 { margin: 10px 0; font: 500 28px/1.15 var(--font-display); letter-spacing: -0.03em; }
 .dialog p { margin: 0; font-size: 14px; line-height: 1.6; color: var(--ink-soft); }
 .dialogActions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
@@ -417,8 +417,9 @@
 }
 @media (max-width: 760px) {
   .showcase { margin-top: 56px; }
-  .reelStage { height: 500px; }
-  .reelCard { width: min(420px, 88%); height: min(430px, 78vw); }
+  /* Size cards by the screen height, not its width, so a phone shows a full chat turn. */
+  .reelStage { height: clamp(460px, calc(100svh - 160px), 600px); }
+  .reelCard { width: min(420px, 88%); height: calc(100% - 40px); }
   .detail { left: 8px; right: 8px; }
   .dialogActions { flex-direction: column-reverse; }
   .dialogGo, .dialogStay { text-align: center; }
