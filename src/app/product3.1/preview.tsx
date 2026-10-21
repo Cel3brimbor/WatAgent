@@ -1,0 +1,326 @@
+"use client";
+
+import { useEffect, useMemo, useRef, useState } from "react";
+import { CalendarDayView } from "@/calendar/views/day-view";
+import { CalendarMonthView } from "@/calendar/views/month-view";
+import { CalendarWeekView } from "@/calendar/views/week-view";
+import { CalendarYearView } from "@/calendar/views/year-view";
+import { daysInView, formatFocusLabel, shiftFocus, startOfLocalDay, viewForToday } from "@/calendar/date-utils";
+import { leadHourForDays } from "@/calendar/time-scale";
+import { useTimedGridScroll } from "@/calendar/use-time-scale";
+import { SmartTagsPanel } from "@/calendar/smart-tags-panel";
+import type { SmartTag } from "@/calendar/smart-tags";
+import type { CalendarView, TimelineItem } from "@/calendar/types";
+import { SegmentedControl, type SegmentOption } from "@/shared/segmented-control";
+import { ChevronLeftIcon, ChevronRightIcon } from "@/shared/icons";
+import { ExploreDialog } from "./explore-dialog";
+import { AgentReel } from "./agent-reel";
+import { FeatureReel, type FeatureId } from "./feature-reel";
+import { paintWithTags, sampleTagTargets } from "./product-lab";
+import { useProductLab } from "./product-lab-context";
+import { smoothScrollToElement } from "@/shared/motion";
+import { sampleItems } from "./sample-calendar";
+import styles from "./product.module.css";
+
+const WEEK_STARTS = 1 as const;
+
+const VIEW_OPTIONS: SegmentOption<CalendarView>[] = [
+  { value: "day", label: "Day", hint: "Day" },
+  { value: "workweek", label: "5 Day", hint: "Monday to Friday" },
+  { value: "week", label: "Week", hint: "Week" },
+  { value: "month", label: "Month", hint: "Month" },
+  { value: "year", label: "Year", hint: "Year" },
+];
+
+const SECTIONS: Array<{ id: FeatureId | "calendar"; label: string }> = [
+  { id: "calendar", label: "Calendar" },
+  { id: "tasks", label: "Tasks" },
+  { id: "events", label: "Events" },
+  { id: "calendars", label: "Configuration" },
+];
+
+function whenLabel(item: TimelineItem): string {
+  const start = new Date(item.startUTC);
+  const day = start.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
+  if (item.allDay) return `${day} · All day`;
+  const clock: Intl.DateTimeFormatOptions = { hour: "numeric", minute: "2-digit" };
+  const end = new Date(item.endUTC).toLocaleTimeString(undefined, clock);
+  return `${day} · ${start.toLocaleTimeString(undefined, clock)} – ${end}`;
+}
+
+export function ProductStage() {
+  const [feature, setFeature] = useState<FeatureId>("tags");
+  const [ask, setAsk] = useState(false);
+
+  function showFeature(id: FeatureId) {
+    setFeature(id);
+    const showcase = document.getElementById("showcase");
+    if (showcase) smoothScrollToElement(showcase, "start");
+  }
+
+  return (
+    <>
+      <CalendarPreview onFeature={showFeature} onAskAgent={() => setAsk(true)} />
+      <div className={styles.showcase} id="showcase">
+        <div className={styles.sectionIntro}>
+          <span className={styles.label}>A CLOSER LOOK</span>
+          <h2>Turn it, and <em>read a side.</em></h2>
+          <p>Tags, events, tasks, calendars, and rules.<br />Open a row. Make a tag on the calendar itself.</p>
+        </div>
+        <FeatureReel active={feature} onActive={setFeature} />
+        <AgentReel onAskAgent={() => setAsk(true)} />
+      </div>
+      {ask ? <ExploreDialog onClose={() => setAsk(false)} /> : null}
+    </>
+  );
+}
+
+export function CalendarPreview({ onFeature, onAskAgent }: { onFeature: (id: FeatureId) => void; onAskAgent: () => void }) {
+  const scroller = useRef<HTMLDivElement>(null);
+  const [focus, setFocus] = useState(() => startOfLocalDay(new Date(2026, 9, 8)));
+  const [view, setView] = useState<CalendarView>("week");
+  const [selected, setSelected] = useState<TimelineItem | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
+  const [todayScroll, setTodayScroll] = useState(0);
+  const [tagsOpen, setTagsOpen] = useState(true);
+  const [tagsPop, setTagsPop] = useState(false);
+  const lab = useProductLab();
+
+  const itemsForDay = (date: Date) =>
+    paintWithTags(sampleItems(date), lab.tags).map((item) => ({ ...item, completed: lab.completed[item.id] ?? false }));
+  const timedView = view === "day" || view === "week" || view === "workweek";
+  const leadHour = leadHourForDays(daysInView(focus, view, WEEK_STARTS), itemsForDay);
+  const hourPx = useTimedGridScroll({
+    scrollerRef: scroller,
+    active: mounted && timedView,
+    resetKey: `${view}:${focus.toDateString()}:${todayScroll}`,
+    leadHour,
+  });
+
+  useEffect(() => setMounted(true), []);
+
+  useEffect(() => {
+    if (!selected && !tagsPop) return;
+    function dismiss(event: PointerEvent) {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (target.closest("[data-demo-popup]")) return;
+      if (target.closest("[data-popup-toggle]")) return;
+      if (target.closest("[data-calendar-item]")) {
+        setTagsPop(false);
+        return;
+      }
+      setSelected(null);
+      setTagsPop(false);
+    }
+    function onKey(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      setSelected(null);
+      setTagsPop(false);
+    }
+    document.addEventListener("pointerdown", dismiss, true);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", dismiss, true);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [selected, tagsPop]);
+
+  function refuseEdit() {
+    setSelected(null);
+    setNotice("This preview can’t add or edit. The week above is a sample.");
+  }
+
+  function openItem(item: TimelineItem) {
+    setNotice(null);
+    setSelected(item);
+  }
+
+  function move(offset: number) {
+    setSelected(null);
+    setNotice(null);
+    setFocus((current) => shiftFocus(current, view, offset));
+  }
+
+  function openDay(date: Date) {
+    setSelected(null);
+    setNotice(null);
+    setFocus(startOfLocalDay(date));
+    setView("day");
+  }
+
+  const workDays = view === "workweek" ? daysInView(focus, "workweek", WEEK_STARTS) : undefined;
+
+  return (
+    <div className={styles.productDemo} data-tags={tagsPop ? "true" : undefined}>
+      <div className={styles.demoFrame}>
+        <aside className={styles.demoSidebar} data-demo-popup={tagsPop ? "true" : undefined}>
+          <div className={styles.demoWordmark}>WatAgent</div>
+          <nav aria-label="Sample sections">
+            {SECTIONS.map((section) => (
+              <button
+                key={section.id}
+                type="button"
+                className={`side-nav-bar${section.id === "calendar" ? " is-active" : ""}`}
+                aria-current={section.id === "calendar" ? "page" : undefined}
+                onClick={() => {
+                  if (section.id === "calendar") return;
+                  onFeature(section.id);
+                }}
+              >
+                {section.label}
+              </button>
+            ))}
+          </nav>
+          <div className={styles.sourceList}>
+            <h3>WATAGENT CALENDARS</h3>
+            <p><i /> Agent Main</p>
+            <h3>EXTERNAL CALENDARS</h3>
+            <p><i /> Course schedule</p>
+          </div>
+          <DemoTags open={tagsOpen} onOpenChange={setTagsOpen} />
+        </aside>
+        <div className={styles.demoMain}>
+          <header data-section="calendar" className={`calendar-toolbar ${styles.demoToolbar}`}>
+            <div className="calendar-toolbar-left">
+              <h2 aria-live="polite">{formatFocusLabel(focus, view, WEEK_STARTS)}</h2>
+            </div>
+            <div className="calendar-toolbar-right">
+              <div className="calendar-step">
+                <button type="button" className="icon-btn" aria-label="Previous" onClick={() => move(-1)}><ChevronLeftIcon /></button>
+                <button type="button" className="calendar-today-btn" onClick={() => {
+                  const today = startOfLocalDay(new Date());
+                  setView((current) => viewForToday(current, today));
+                  setFocus(today);
+                  setTodayScroll((n) => n + 1);
+                  setSelected(null);
+                  setNotice(null);
+                }}>Today</button>
+                <button type="button" className="icon-btn" aria-label="Next" onClick={() => move(1)}><ChevronRightIcon /></button>
+              </div>
+              <SegmentedControl
+                value={view}
+                onChange={(next) => { setView(next); setSelected(null); setNotice(null); }}
+                options={VIEW_OPTIONS}
+                label="Calendar view"
+              />
+              <button
+                type="button"
+                className="ghost-btn calendar-agent-btn"
+                data-popup-toggle="true"
+                aria-expanded={tagsPop || tagsOpen}
+                onClick={() => {
+                  setSelected(null);
+                  const narrow = window.matchMedia("(max-width: 760px)").matches;
+                  if (narrow) {
+                    setTagsPop((open) => !open);
+                    setTagsOpen(true);
+                    return;
+                  }
+                  setTagsOpen((open) => !open);
+                }}
+              >
+                Tags
+              </button>
+              <button type="button" className="ghost-btn calendar-agent-btn" aria-haspopup="dialog" onClick={onAskAgent}>
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 3a7 7 0 0 0-4 12.7V19a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-3.3A7 7 0 0 0 12 3z" />
+                  <path d="M9.5 21h5" />
+                  <circle cx="10" cy="11" r="0.85" fill="currentColor" stroke="none" />
+                  <circle cx="14" cy="11" r="0.85" fill="currentColor" stroke="none" />
+                </svg>
+                Agent
+              </button>
+            </div>
+          </header>
+          {notice ? <p className={styles.previewNotice} role="status">{notice}</p> : null}
+          <div className={styles.demoCalendar} ref={scroller}>
+            {mounted && view === "day" ? (
+              <CalendarDayView
+                focus={focus}
+                items={itemsForDay(focus)}
+                onOpen={openItem}
+                onCreateTimed={refuseEdit}
+                onCreateAllDay={refuseEdit}
+                onCompleteTask={(id, done) => lab.setCompleted((previous) => ({ ...previous, [id]: done }))}
+                hourPx={hourPx}
+              />
+            ) : null}
+            {mounted && (view === "week" || view === "workweek") ? (
+              <CalendarWeekView
+                focus={focus}
+                weekStartsOn={WEEK_STARTS}
+                days={workDays}
+                itemsForDay={itemsForDay}
+                onOpen={openItem}
+                onCreateTimed={refuseEdit}
+                onCreateAllDay={refuseEdit}
+                onSelectDay={openDay}
+                onCompleteTask={(id, done) => lab.setCompleted((previous) => ({ ...previous, [id]: done }))}
+                hourPx={hourPx}
+              />
+            ) : null}
+            {mounted && view === "month" ? (
+              <CalendarMonthView
+                focus={focus}
+                onSelectDate={(date) => { setFocus(startOfLocalDay(date)); setNotice(null); }}
+                weekStartsOn={WEEK_STARTS}
+                itemsForDay={itemsForDay}
+                onOpen={openItem}
+                onCreate={refuseEdit}
+                onCompleteTask={(id, done) => lab.setCompleted((previous) => ({ ...previous, [id]: done }))}
+              />
+            ) : null}
+            {mounted && view === "year" ? (
+              <CalendarYearView focus={focus} weekStartsOn={WEEK_STARTS} itemsForDay={itemsForDay} onSelectDay={openDay} />
+            ) : null}
+          </div>
+          {selected ? (
+            <div className={styles.detail} data-demo-popup="true" role="dialog" aria-label={selected.title}>
+              <header>
+                <span>{selected.kind === "task" ? "Task" : "Event"}{selected.smartTag ? ` · ${selected.smartTag.name}` : ""}</span>
+                <button type="button" onClick={() => setSelected(null)}>Close</button>
+              </header>
+              <h3>{selected.title}</h3>
+              <p>{whenLabel(selected)}</p>
+              {selected.location ? <p className={styles.detailPlace}>{selected.location}</p> : null}
+              {selected.description ? <p className={styles.detailCopy}>{selected.description}</p> : null}
+            </div>
+          ) : null}
+        </div>
+      </div>
+      <div className={styles.demoFootnote}>
+        <span>Sample week · a tag you make stays only while you look</span>
+        <span>Smart tags sit in the side list. Click away to close a card.</span>
+      </div>
+    </div>
+  );
+}
+
+const SAMPLE_CALENDARS = [{ id: "sample", name: "Sample week", google: false }];
+
+function DemoTags({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+  const lab = useProductLab();
+  const samples = useMemo(() => sampleTagTargets(), []);
+
+  function onChange(next: SmartTag[]) {
+    lab.setTags((current) => {
+      if (next.length !== current.length + 1) return next;
+      const added = next.find((tag) => !current.some((item) => item.id === tag.id));
+      return added ? [added, ...next.filter((tag) => tag.id !== added.id)] : next;
+    });
+  }
+
+  return (
+    <SmartTagsPanel
+      tags={lab.tags}
+      onChange={onChange}
+      calendars={SAMPLE_CALENDARS}
+      samples={samples}
+      open={open}
+      onOpenChange={onOpenChange}
+      footnote="Only on this page. Nothing is saved."
+    />
+  );
+}

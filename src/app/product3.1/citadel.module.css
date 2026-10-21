@@ -1,0 +1,204 @@
+/* Citadel intro. Same tokens as product.module.css: --paper, --ink, Fraunces, Inter. */
+
+/* clip, not hidden: no scroll container, so the sticky stage still sticks */
+.root { position: relative; overflow-x: clip; --runway: 560svh; }
+
+/* the runway: the stage sticks for --runway while the timeline plays */
+.track { position: relative; height: calc(100svh + var(--runway)); }
+/* scroll targets for in-page links, one per hold */
+.anchor {
+  position: absolute;
+  top: calc(var(--at) * var(--runway));
+  left: 0;
+  width: 1px;
+  height: 1px;
+  pointer-events: none;
+  scroll-margin-top: 0;
+}
+
+.stage {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  height: 100svh;
+  overflow: hidden;
+}
+.root[data-phase="features"] .stage,
+.root[data-phase="agents"] .stage { cursor: grab; touch-action: pan-y; }
+.stage[data-grabbing] { cursor: grabbing; user-select: none; }
+
+/* layers, back to front: calendar iris, webgl bands, live cards on the drum, copy and controls */
+.lensLayer,
+.canvas,
+.reelLayer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.lensLayer { z-index: 1; }
+.canvas { z-index: 2; transform: translate3d(0, 0, 0); }
+.reelLayer { z-index: 3; perspective-origin: 50% 50%; }
+.lensLayer[data-off],
+.canvas[data-off] { visibility: hidden; }
+.canvas canvas { display: block; }
+
+.lens {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: min(1280px, calc(100vw - 64px));
+  border-radius: 10px;
+  transform-origin: 50% 50%;
+  will-change: transform, clip-path;
+  pointer-events: auto;
+  /* unplaced until the scene's first frame sizes the iris */
+  visibility: hidden;
+}
+.lens[inert] { pointer-events: none; }
+.lensShade {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 5;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  width: calc(var(--lens-r, 0px) * 2);
+  height: calc(var(--lens-r, 0px) * 2);
+  translate: -50% -50%;
+  border-radius: 50%;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 34% 28%, rgb(255 255 255 / 0.38), transparent 32%),
+    radial-gradient(circle at 50% 50%, transparent 50%, rgb(20 14 6 / 0.36) 100%);
+  box-shadow: inset 0 0 0 calc(var(--lens-r, 0px) * 0.025) rgb(201 173 122 / 0.75);
+}
+/* sized off the iris radius so it reads the same at every lens scale */
+.sphereSlide {
+  display: grid;
+  gap: calc(var(--lens-r, 0px) * 0.015);
+  margin-bottom: calc(var(--lens-r, 0px) * 0.2);
+  padding: calc(var(--lens-r, 0px) * 0.05) calc(var(--lens-r, 0px) * 0.13);
+  border-radius: 999px;
+  text-align: center;
+  background: color-mix(in srgb, var(--panel-solid) 90%, transparent);
+  box-shadow: 0 10px 40px rgb(0 0 0 / 0.18);
+  animation: slideIn 0.5s ease-out;
+}
+.sphereSlide span { font-size: calc(var(--lens-r, 0px) * 0.06); letter-spacing: 0.14em; color: var(--ink-soft); }
+.sphereSlide strong { font: 500 calc(var(--lens-r, 0px) * 0.15) / 1 var(--font-display); letter-spacing: -0.03em; }
+.sphereSlide em { font-size: calc(var(--lens-r, 0px) * 0.075); font-style: normal; color: var(--accent); }
+@keyframes slideIn { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+
+/* a live card, printed on the drum face the scene places it on */
+.reelCard {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  width: var(--card-w, 400px);
+  height: var(--card-h, 470px);
+  margin: calc(var(--card-h, 470px) / -2) 0 0 calc(var(--card-w, 400px) / -2);
+  padding: 20px 20px 14px;
+  border-radius: 18px;
+  background: var(--panel-solid);
+  border: 1px solid rgb(201 173 122 / 0.55);
+  box-shadow: 0 18px 50px rgb(0 0 0 / 0.28);
+  transform-origin: 50% 50%;
+  backface-visibility: hidden;
+  will-change: transform, opacity;
+  pointer-events: auto;
+  visibility: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+.hero {
+  position: relative;
+  z-index: 4;
+  width: min(38vw, 520px);
+  margin-left: max(48px, calc((100vw - 1376px) / 2 + 48px));
+  will-change: transform, opacity;
+  transform: translate3d(0, 0, 0);
+}
+.hero > div:first-child { justify-content: flex-start; }
+.hero h1 {
+  margin: 22px 0;
+  font: 450 clamp(44px, 5.2vw, 78px) / 1.06 var(--font-display);
+  letter-spacing: -3px;
+}
+.hero > p { max-width: 32ch; margin: 0; font-size: 16px; line-height: 1.75; color: var(--ink-soft); }
+.actions { display: flex; flex-wrap: wrap; align-items: center; gap: 18px 28px; margin-top: 30px; }
+.scrollCue { margin-top: 52px; font-size: 10px; font-weight: 600; letter-spacing: 1.7px; color: var(--ink-soft); }
+.scrollCue::after { content: " ↓"; }
+
+/* captions and controls fade in with each hold; GSAP owns their visibility */
+.caption {
+  position: absolute;
+  top: clamp(14px, 3.2svh, 32px);
+  left: 0;
+  right: 0;
+  z-index: 5;
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 0 16px;
+  text-align: center;
+  pointer-events: none;
+  visibility: hidden;
+}
+.caption h2 {
+  margin: 0;
+  font: 450 clamp(24px, 3vw, 36px) / 1.1 var(--font-display);
+  letter-spacing: -0.03em;
+  text-shadow: 0 2px 18px var(--paper);
+}
+.caption[data-compact] { top: 10px; gap: 0; grid-auto-flow: column; justify-content: center; column-gap: 18px; }
+.captionAside { font: italic 14px var(--font-display); color: var(--ink-soft); }
+
+.reelControls {
+  position: absolute;
+  bottom: clamp(14px, 3.4svh, 34px);
+  left: 0;
+  right: 0;
+  z-index: 5;
+  display: grid;
+  justify-items: center;
+  visibility: hidden;
+}
+.reelButtons { display: flex; align-items: center; gap: 14px; }
+.reelHint { margin: 10px 0 0; font-size: 12px; color: var(--ink-soft); }
+
+/* prefers-reduced-motion: plain flow */
+.reduced { max-width: 1376px; margin: 0 auto; padding: 0 48px; }
+.reduced .hero { width: auto; max-width: 640px; margin: 0; padding: 70px 0 40px; }
+.reducedBlock { margin-top: 72px; scroll-margin-top: 24px; }
+
+@media (max-width: 1100px) {
+  .stage { flex-direction: column; align-items: stretch; }
+  .hero { width: auto; max-width: 640px; margin: 0 auto; padding: 48px 24px 0; text-align: center; }
+  .hero > div:first-child { justify-content: center; }
+  .hero > p { margin: 0 auto; }
+  .actions { justify-content: center; }
+  .scrollCue { margin-top: 24px; }
+}
+
+@media (max-width: 760px) {
+  .root { --runway: 520svh; }
+  .hero { padding: 32px 16px 0; }
+  .hero h1 { margin: 16px 0; font-size: 42px; letter-spacing: -2px; }
+  .hero > p { font-size: 14px; line-height: 1.6; }
+  .actions { gap: 12px 20px; margin-top: 20px; }
+  .lens { width: calc(100vw - 24px); }
+  .reelCard { padding: 16px 16px 12px; }
+  .caption[data-compact] { grid-auto-flow: row; }
+  .captionAside { display: none; }
+  .reduced { padding: 0 16px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sphereSlide { animation: none; }
+}
