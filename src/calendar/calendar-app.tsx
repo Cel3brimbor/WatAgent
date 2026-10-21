@@ -20,7 +20,7 @@ import {
   type DerivedConfig,
 } from "@/calendar/calendar-derived";
 import { DayBuilderProvider, buildDayTimeline, type BuildDay } from "@/calendar/day-builder";
-import { useCalendarActions, useCalendarStatus, useChatActions, useChatState } from "@/calendar/store";
+import { useCalendarActions, useCalendarApproval, useCalendarStatus, useChatActions, useChatState } from "@/calendar/store";
 import {
   addDays,
   daysInView,
@@ -429,6 +429,18 @@ function importAlreadyRunning(err: unknown): boolean {
 }
 
 const EMPTY_CHAT_MESSAGES: ChatMessage[] = [];
+const STABLE_PENDING: PendingAiChange[] = [];
+
+function PendingChatOpener({ onOpen }: { onOpen: () => void }) {
+  const { pendingChanges } = useCalendarApproval();
+  const count = pendingChanges.length;
+  const seen = useRef(0);
+  useEffect(() => {
+    if (count > seen.current) onOpen();
+    seen.current = count;
+  }, [count, onOpen]);
+  return null;
+}
 
 //start of the period the stage is showing, so moving within the same week/month isn't a "navigation"
 const CalendarChatDock = memo(function CalendarChatDock({
@@ -446,8 +458,6 @@ const CalendarChatDock = memo(function CalendarChatDock({
   onClose,
   calendars,
   items,
-  pendingChanges,
-  approvalBusy,
   onApprove,
   onReject,
   onApproveAll,
@@ -471,8 +481,6 @@ const CalendarChatDock = memo(function CalendarChatDock({
   onClose: () => void;
   calendars: MentionCalendar[];
   items: CalendarItemDoc[];
-  pendingChanges: PendingAiChange[];
-  approvalBusy: boolean;
   onApprove: (id: string) => void;
   onReject: (id: string) => void;
   onApproveAll: () => void;
@@ -483,6 +491,7 @@ const CalendarChatDock = memo(function CalendarChatDock({
   ruleNames?: Record<string, string>;
 }) {
   const { chats, activeChat } = useChatState();
+  const { pendingChanges, approvalBusy } = useCalendarApproval();
   const { createChat, deleteChat, renameChat, closeChat, reopenChat, selectChat, reorderChats, setChatPinned } =
     useChatActions();
   useEffect(() => {
@@ -1252,7 +1261,8 @@ export function CalendarApp({
   const deferredColors = useDeferredValue(colors);
   const deferredColorOverrides = useDeferredValue(colorOverrides);
   const derivedConfig = useMemo<DerivedConfig>(() => ({
-    pendingChanges: status.pendingChanges,
+    //queued rows come from the approval context inside DerivedProvider, so this stays put while the agent writes
+    pendingChanges: STABLE_PENDING,
     googleCalendars,
     importedCalendars,
     campusCalendarFeeds,
@@ -1269,7 +1279,6 @@ export function CalendarApp({
     keywordTasks,
     taskSmartTags,
   }), [
-    status.pendingChanges,
     googleCalendars,
     importedCalendars,
     campusCalendarFeeds,
@@ -1871,7 +1880,8 @@ export function CalendarApp({
         const done = item.kind === "task" ? ` completed=${item.completed ? "true" : "false"}` : "";
         const where = item.location ? ` @ ${item.location}` : "";
         const about = item.description ? ` — ${item.description.replace(/\s+/g, " ").slice(0, 140)}` : "";
-        return `- ${item.kind} id=${item.id}${calendar} "${item.title}" ${when}${where}${about}${done}`;
+        const queued = item.pendingApproval ? " queued" : "";
+        return `- ${item.kind} id=${item.id}${calendar} "${item.title}" ${when}${where}${about}${done}${queued}`;
       })
       .join("\n")
       .slice(0, 12_000);
@@ -1972,12 +1982,9 @@ export function CalendarApp({
     if (!chatOpen) pruneEmptyChats();
   }, [chatOpen, pruneEmptyChats]);
 
-  const pendingCount = calendar.pendingChanges.length;
-  const pendingSeen = useRef(0);
-  useEffect(() => {
-    if (pendingCount > pendingSeen.current) setChatOpen(true);
-    pendingSeen.current = pendingCount;
-  }, [pendingCount]);
+  const openChatForPending = useStableCallback(() => {
+    setChatOpen(true);
+  });
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -2410,17 +2417,19 @@ export function CalendarApp({
 
     const writeAssistant = () => {
       const activity = cloneActivity(parts);
-      calendar.setChatMessages(
-        currentMessages().map((message) =>
-          message.id === assistantId
-            ? {
-                ...message,
-                content: assistantText,
-                activity: activity.length > 0 ? activity : undefined,
-              }
-            : message,
-        ),
+      const next = currentMessages().map((message) =>
+        message.id === assistantId
+          ? {
+              ...message,
+              content: assistantText,
+              activity: activity.length > 0 ? activity : undefined,
+            }
+          : message,
       );
+      //stream paints can be interrupted by adding an event
+      startTransition(() => {
+        calendar.setChatMessages(next);
+      });
     };
 
     try {
@@ -3005,6 +3014,7 @@ export function CalendarApp({
           </div>
         </div>
 
+        <PendingChatOpener onOpen={openChatForPending} />
         <ChatDockFromStore
           open={chatOpen}
           busy={busy}
@@ -3018,8 +3028,6 @@ export function CalendarApp({
           onError={setError}
           onResizingChange={setChatResizing}
           onClose={closeChat}
-          pendingChanges={status.pendingChanges}
-          approvalBusy={status.approvalBusy}
           onApprove={approvePending}
           onReject={rejectPending}
           onApproveAll={approveAllPending}

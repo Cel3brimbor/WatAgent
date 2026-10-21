@@ -5,6 +5,7 @@ import {
   startTransition,
   useContext,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type MutableRefObject,
@@ -18,6 +19,7 @@ import type { SideExternalCalendar } from "@/calendar/calendar-side-panel";
 import { itemOnMainCalendar, spaceOnlyFeedIds, type CalendarSpace, type SpaceCalendarChoice } from "@/calendar/calendar-spaces";
 import { isExcludedGoogleCalendarName } from "@/calendar/calendar-lists";
 import { useEventStore } from "@/calendar/event-store";
+import { useCalendarApproval } from "@/calendar/store";
 import { externalCalendarId, externalCalendarsOf } from "@/calendar/external-calendars";
 import type { GoogleCalendarRef } from "@/calendar/google-calendar-client";
 import { feedOfCalendarId, mergedByMember } from "@/calendar/imported-calendars";
@@ -552,6 +554,11 @@ function duesFromListed(previous: ReadonlyMap<string, number>, listed: readonly 
   return dueSignatureOf(previous) === dueSignatureOf(next) ? previous : next;
 }
 
+function pendingOnlyConfigChange(previous: DerivedConfig, config: DerivedConfig): boolean {
+  if (previous.pendingChanges === config.pendingChanges) return false;
+  return configExcept(previous, config, { pendingChanges: true });
+}
+
 function paintOnlyConfig(previous: DerivedConfig, config: DerivedConfig): boolean {
   if (
     previous.pendingChanges !== config.pendingChanges
@@ -917,7 +924,7 @@ function computeCalendarSurfaces(
 }
 
 export function DerivedProvider({
-  config,
+  config: configProp,
   mentionsRef,
   campusFeedsRef,
   children,
@@ -928,6 +935,12 @@ export function DerivedProvider({
   children: ReactNode;
 }) {
   const store = useEventStore();
+  const { pendingChanges } = useCalendarApproval();
+  //the grid already paints queued rows from the event store. this list is for side panels
+  const config = useMemo(
+    () => (configProp.pendingChanges === pendingChanges ? configProp : { ...configProp, pendingChanges }),
+    [configProp, pendingChanges],
+  );
   const configRef = useRef(config);
   const [slices, setSlices] = useState<Surfaces>(() => deriveCalendarSurfaces(store.getAllItems(), store.getAllGoogle(), config));
   const slicesRef = useRef(slices);
@@ -975,6 +988,12 @@ export function DerivedProvider({
           setSlices((current) => stabilize(current, deriveCalendarSurfaces(store.getAllItems(), store.getAllGoogle(), snapshot)));
         });
       }
+    } else if (live === config && pendingOnlyConfigChange(previous, config)) {
+      //day columns already updated from the store. lists catch up without blocking the click
+      const snapshot = live;
+      startTransition(() => {
+        setSlices((current) => stabilize(current, deriveCalendarSurfaces(store.getAllItems(), store.getAllGoogle(), snapshot)));
+      });
     } else if (live === config && paintOnlyConfig(previous, config)) {
       const snapshot = live;
       startTransition(() => {

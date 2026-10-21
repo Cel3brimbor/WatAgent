@@ -31,6 +31,28 @@ const NO_IDS: string[] = [];
 
 type Listener = () => void;
 
+function samePendingMeta(a: CalendarItemDoc["calendar"] | undefined, b: CalendarItemDoc["calendar"] | undefined): boolean {
+  if (a === b) return true;
+  if (!a || !b) return !a && !b;
+  return (
+    a.kind === b.kind &&
+    a.startUTC === b.startUTC &&
+    a.endUTC === b.endUTC &&
+    a.allDay === b.allDay &&
+    a.completed === b.completed &&
+    a.calendarId === b.calendarId &&
+    a.importSource === b.importSource &&
+    a.location === b.location &&
+    a.description === b.description
+  );
+}
+
+function samePendingChange(a: PendingAiChange, b: PendingAiChange): boolean {
+  return a.action === b.action && a.sourceId === b.sourceId && a.title === b.title
+    && samePendingMeta(a.calendar, b.calendar)
+    && samePendingMeta(a.previousCalendar, b.previousCalendar);
+}
+
 function sameIdList(a: readonly string[], b: readonly string[]): boolean {
   if (a === b) return true;
   if (a.length !== b.length) return false;
@@ -478,8 +500,11 @@ export function createEventStore(): EventStore {
     const nextSource: Record<string, PendingAiChange> = {};
     const grouped = new Map<string, string[]>();
     for (const change of changes) {
-      nextSource[change.sourceId] = change;
-      for (const day of pendingDays(change)) {
+      //a refresh of the same queued edit should not repaint the day
+      const prev = aiPendingBySource[change.sourceId];
+      const stored = prev && samePendingChange(prev, change) ? prev : change;
+      nextSource[change.sourceId] = stored;
+      for (const day of pendingDays(stored)) {
         const list = grouped.get(day);
         if (list) list.push(change.sourceId);
         else grouped.set(day, [change.sourceId]);

@@ -215,4 +215,35 @@ function overlay(id: string, startUTC: number, endUTC: number): OverlayEvent {
   assert.equal(notes, 12, "a day with no listener stays quiet");
 }
 
+//a refresh of the same queued edit does not repaint that day
+{
+  const store = createEventStore();
+  store.applyUpsert(item("swim", "Swim", at(18, 9), at(18, 10)));
+  const queued = {
+    id: "p1",
+    sourceId: "new",
+    action: "upsert" as const,
+    title: "Badminton",
+    createdAt: 1,
+    calendar: { kind: "event" as const, startUTC: at(18, 11), endUTC: at(18, 12), allDay: false },
+  };
+  store.setAiPending([queued]);
+  const snap = store.getDayBucket(dayKey(18));
+  const other = store.getDayBucket(dayKey(20));
+  let hits = 0;
+  store.subscribeDay(dayKey(18), () => {
+    hits += 1;
+  });
+  store.subscribeDay(dayKey(20), () => {
+    hits += 10;
+  });
+  store.setAiPending([{ ...queued, id: "p2", createdAt: 9, ruleId: "rule" }]);
+  assert.equal(hits, 0);
+  assert.equal(store.getDayBucket(dayKey(18)), snap);
+  assert.equal(store.getDayBucket(dayKey(20)), other);
+  store.setAiPending([{ ...queued, title: "Moved" }]);
+  assert.equal(hits, 1);
+  assert.equal(store.getDayBucket(dayKey(18)).aiPending[0]?.title, "Moved");
+}
+
 console.log("event store buckets, echo, and rollback");

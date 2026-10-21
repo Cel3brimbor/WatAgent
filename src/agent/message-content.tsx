@@ -66,12 +66,15 @@ function hideToolMarkup(content: string): string {
 
 export const MessageContent = memo(function MessageContent({
   content,
+  pending,
 }: {
   content: string;
   pending?: boolean;
 }) {
   const visible = hideToolMarkup(content);
   if (!visible) return null;
+  //a long stream re-parses markdown every frame and blocks clicks on the calendar
+  if (pending) return <p className="md-stream">{visible}</p>;
   return (
     <ReactMarkdown
       remarkPlugins={REMARK_PLUGINS}

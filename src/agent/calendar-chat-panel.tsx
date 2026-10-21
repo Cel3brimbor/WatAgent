@@ -352,7 +352,7 @@ export const CalendarChatPanel = memo(function CalendarChatPanel({
                           />
                         ) : (
                           <AssistantAnswer settling={settlingAssistantId === m.id} holdLabel={streaming ? holdLabel : null}>
-                            <MessageContent content={m.content} />
+                            <MessageContent content={m.content} pending={streaming} />
                           </AssistantAnswer>
                         )}
                       </div>

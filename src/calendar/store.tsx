@@ -46,7 +46,7 @@ import {
   setRequireAiApproval,
   type PendingAiChange,
 } from "@/calendar/approval-client";
-import { commitApprovedPendingChanges, mergePendingIntoItems, pendingChangesMatching } from "@/calendar/merge-pending";
+import { mergePendingIntoItems, pendingChangesMatching } from "@/calendar/merge-pending";
 import {
   createEventStore,
   EventStoreProvider,
@@ -86,6 +86,9 @@ type CalendarStatus = {
   hydrated: boolean;
   loadError: string | null;
   requireAiApproval: boolean;
+};
+
+type CalendarApproval = {
   pendingChanges: PendingAiChange[];
   approvalBusy: boolean;
 };
@@ -112,6 +115,7 @@ type ChatStateValue = {
 };
 
 type CalendarContextValue = CalendarStatus &
+  CalendarApproval &
   CalendarActions &
   ChatActions &
   ChatStateValue & {
@@ -123,6 +127,7 @@ type ChatState = { chats: ChatSession[]; activeChatId: string | null };
 
 const CalendarActionsContext = createContext<CalendarActions | null>(null);
 const CalendarStatusContext = createContext<CalendarStatus | null>(null);
+const CalendarApprovalContext = createContext<CalendarApproval | null>(null);
 const ChatActionsContext = createContext<ChatActions | null>(null);
 const ChatStateContext = createContext<ChatStateValue | null>(null);
 
@@ -227,11 +232,11 @@ export function CalendarProvider({ userId, children }: { userId: string; childre
     setChatState(next);
   }, []);
 
-  const commitPending = useCallback(
+  const publishPending = useCallback(
     (next: PendingAiChange[]) => {
       pendingChangesRef.current = next;
-      setPendingChanges(next);
       store.setAiPending(next);
+      setPendingChanges(next);
     },
     [store],
   );
@@ -276,11 +281,11 @@ export function CalendarProvider({ userId, children }: { userId: string; childre
 
   const refreshPending = useCallback(async () => {
     try {
-      commitPending(await listPendingChanges());
+      publishPending(await listPendingChanges());
     } catch {
       logFailure("pending load")();
     }
-  }, [commitPending]);
+  }, [publishPending]);
 
   const refreshSettings = useCallback(async () => {
     try {
@@ -577,10 +582,36 @@ export function CalendarProvider({ userId, children }: { userId: string; childre
     [raiseNotice, store, userId, wrote],
   );
 
+  const pendingRefreshTimer = useRef(0);
+  const schedulePendingRefresh = useCallback(() => {
+    window.clearTimeout(pendingRefreshTimer.current);
+    //one list fetch after a burst of tool writes, not one per call
+    pendingRefreshTimer.current = window.setTimeout(() => {
+      void refreshPending().catch(logFailure("pending load"));
+    }, 350);
+  }, [refreshPending]);
+  useEffect(() => () => window.clearTimeout(pendingRefreshTimer.current), []);
+
   const applyRemoteCalendarChange = useCallback(
     (change: CalendarChange) => {
       if (change.pending) {
-        void refreshPending();
+        if (change.pendingId) {
+          const existing = store.getItem(change.id);
+          const row: PendingAiChange = {
+            id: change.pendingId,
+            sourceId: change.id,
+            action: change.action,
+            title: (change.title?.trim() || existing?.title || "Calendar item").slice(0, 200),
+            calendar: change.action === "upsert" ? change.calendar : undefined,
+            previousTitle: existing?.title,
+            previousCalendar: existing?.calendar,
+            createdAt: Date.now(),
+          };
+          const next = pendingChangesRef.current.filter((item) => item.sourceId !== row.sourceId);
+          next.push(row);
+          publishPending(next);
+        }
+        schedulePendingRefresh();
         return;
       }
       if (change.action === "delete") {
@@ -601,7 +632,7 @@ export function CalendarProvider({ userId, children }: { userId: string; childre
       });
       wrote();
     },
-    [refreshPending, store, wrote],
+    [publishPending, schedulePendingRefresh, store, wrote],
   );
 
   const approvalWriteRef = useRef(0);
@@ -623,13 +654,29 @@ export function CalendarProvider({ userId, children }: { userId: string; childre
       if (approving.length === 0) return;
       const approvedIds = new Set(approving.map((change) => change.id));
       const nextPending = pendingChangesRef.current.filter((change) => !approvedIds.has(change.id));
-      const beforeIds = store.getAllItems().map((item) => item.id);
-      const nextItems = commitApprovedPendingChanges(store.getAllItems(), approving);
-      const nextIds = new Set(nextItems.map((item) => item.id));
+      const now = Date.now();
       store.batch(() => {
         store.setAiPending(nextPending);
-        for (const item of nextItems) store.applyUpsert(item);
-        for (const id of beforeIds) if (!nextIds.has(id)) store.applyRemove(id);
+        for (const change of approving) {
+          if (change.action === "delete") {
+            store.applyRemove(change.sourceId);
+            continue;
+          }
+          if (!change.calendar) continue;
+          const existing = store.getItem(change.sourceId);
+          store.applyUpsert({
+            id: change.sourceId,
+            title: change.title,
+            calendar: {
+              ...change.calendar,
+              googleEventId: existing?.calendar.googleEventId ?? change.calendar.googleEventId,
+              icsImportId: existing?.calendar.icsImportId ?? change.calendar.icsImportId,
+              importSource: existing?.calendar.importSource ?? change.calendar.importSource,
+            },
+            createdAt: existing?.createdAt ?? change.createdAt,
+            updatedAt: now,
+          });
+        }
       });
       pendingChangesRef.current = nextPending;
       setPendingChanges(nextPending);
@@ -655,7 +702,7 @@ export function CalendarProvider({ userId, children }: { userId: string; childre
       const rejecting = pendingChangesMatching(pendingChangesRef.current, input);
       if (rejecting.length === 0) return;
       const rejectedIds = new Set(rejecting.map((change) => change.id));
-      commitPending(pendingChangesRef.current.filter((change) => !rejectedIds.has(change.id)));
+      publishPending(pendingChangesRef.current.filter((change) => !rejectedIds.has(change.id)));
 
       setApprovalBusy(true);
       try {
@@ -668,7 +715,7 @@ export function CalendarProvider({ userId, children }: { userId: string; childre
         setApprovalBusy(false);
       }
     },
-    [commitPending, refreshPending],
+    [publishPending, refreshPending],
   );
 
   const persistChat = useCallback((chatId: string) => {
@@ -914,8 +961,13 @@ export function CalendarProvider({ userId, children }: { userId: string; childre
   );
 
   const status = useMemo<CalendarStatus>(
-    () => ({ hydrated, loadError, requireAiApproval, pendingChanges, approvalBusy }),
-    [hydrated, loadError, requireAiApproval, pendingChanges, approvalBusy],
+    () => ({ hydrated, loadError, requireAiApproval }),
+    [hydrated, loadError, requireAiApproval],
+  );
+
+  const approval = useMemo<CalendarApproval>(
+    () => ({ pendingChanges, approvalBusy }),
+    [pendingChanges, approvalBusy],
   );
 
   const chatActions = useMemo<ChatActions>(
@@ -960,9 +1012,11 @@ export function CalendarProvider({ userId, children }: { userId: string; childre
     <EventStoreProvider store={store}>
       <CalendarActionsContext.Provider value={actions}>
         <CalendarStatusContext.Provider value={status}>
-          <ChatActionsContext.Provider value={chatActions}>
-            <ChatStateContext.Provider value={chatStateValue}>{children}</ChatStateContext.Provider>
-          </ChatActionsContext.Provider>
+          <CalendarApprovalContext.Provider value={approval}>
+            <ChatActionsContext.Provider value={chatActions}>
+              <ChatStateContext.Provider value={chatStateValue}>{children}</ChatStateContext.Provider>
+            </ChatActionsContext.Provider>
+          </CalendarApprovalContext.Provider>
         </CalendarStatusContext.Provider>
       </CalendarActionsContext.Provider>
     </EventStoreProvider>
@@ -977,6 +1031,10 @@ export function useCalendarStatus(): CalendarStatus {
   return useRequiredContext(CalendarStatusContext);
 }
 
+export function useCalendarApproval(): CalendarApproval {
+  return useRequiredContext(CalendarApprovalContext);
+}
+
 export function useChatActions(): ChatActions {
   return useRequiredContext(ChatActionsContext);
 }
@@ -988,15 +1046,16 @@ export function useChatState(): ChatStateValue {
 export function useCalendar(): CalendarContextValue {
   const actions = useCalendarActions();
   const status = useCalendarStatus();
+  const approval = useCalendarApproval();
   const chatActions = useChatActions();
   const chatState = useChatState();
   const items = useAllItems();
   const displayItems = useMemo(
-    () => mergePendingIntoItems(items, status.pendingChanges),
-    [items, status.pendingChanges],
+    () => mergePendingIntoItems(items, approval.pendingChanges),
+    [items, approval.pendingChanges],
   );
   return useMemo(
-    () => ({ ...status, ...actions, ...chatState, ...chatActions, items, displayItems }),
-    [status, actions, chatState, chatActions, items, displayItems],
+    () => ({ ...status, ...approval, ...actions, ...chatState, ...chatActions, items, displayItems }),
+    [status, approval, actions, chatState, chatActions, items, displayItems],
   );
 }
