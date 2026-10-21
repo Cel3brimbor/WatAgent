@@ -76,7 +76,7 @@ export const BANDS: readonly BandSpec[] = [
     width: 0.03,
     depth: 0.3,
     orbit: { axisA: [0, 1, 0], speedA: 0.06, tilt: tiltOf(1.12, 0, 0), axisB: [0, 0, 1], speedB: 0.26 },
-    film: { frames: 10, aspect: 0.85 },
+    film: { frames: 15, aspect: 0.85 },
   },
 ] as const;
 
@@ -134,33 +134,23 @@ export function wrap(value: number, count: number): number {
   return ((value % count) + count) % count;
 }
 
-//signed angle from the nearest edge midpoint, in [-π/n, π/n)
-export function edgeOffset(theta: number, sides: number, phase: number): number {
-  const sector = (Math.PI * 2) / sides;
-  return wrapAngle(theta - phase, sector) - sector / 2;
-}
-
-//radial scale that turns a circle of inradius r into a regular polygon with the same inradius.
-//1 on edge midpoints, 1/cos(π/n) on corners. mirrored in the band vertex shader.
-export function polygonFactor(theta: number, morph: number, sides: number, phase: number): number {
-  return 1 + (1 / Math.cos(edgeOffset(theta, sides, phase)) - 1) * morph;
-}
-
-//film frame k is centred on θ = k·sector, so the polygon's edge midpoints land on frame centres
-export function filmPhase(film: FilmSpec): number {
-  return -Math.PI / film.frames;
-}
-
 export function frameTheta(film: FilmSpec, frame: number): number {
   return (frame / film.frames) * Math.PI * 2;
 }
 
-//the flat face a frame becomes, measured on the outer skin of the band
+//one frame on the outer skin of the band: its arc length, and its height once the band is a drum.
+//the strip stays round, so a frame is bent along that arc, never flattened.
 export function frameSize(band: BandSpec): { width: number; height: number; inradius: number } {
   const film = filmOf(band);
   const inradius = band.radius + band.width / 2;
-  const width = 2 * inradius * Math.tan(Math.PI / film.frames);
+  const width = (inradius * Math.PI * 2) / film.frames;
   return { width, height: width / film.aspect, inradius };
+}
+
+//where each ring snaps in two to let the calendar out: the cut runs through local angle `cut` and cut + π.
+//each half slides away along the normal of its arc's midpoint and turns a little, like a sprung clasp.
+export function breakCut(band: BandSpec): number {
+  return band.film ? Math.PI / band.film.frames : 0;
 }
 
 //band depth once it is a drum, over its depth in orbit

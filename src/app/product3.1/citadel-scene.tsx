@@ -16,7 +16,7 @@ import {
 } from "three";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { stepDial } from "./citadel-dial";
-import { HEADER_V, filmCanvasSize, paintFilm, type FilmPalette } from "./citadel-film";
+import { HEADER_V, filmCanvasSize, paintFilm, paintInner, type FilmPalette } from "./citadel-film";
 import {
   BANDS,
   DRUM_LEAN,
@@ -43,6 +43,7 @@ import {
   createEngravingTexture,
   createFilmMaterial,
   createFilmTexture,
+  createInnerMaterial,
   createMetalMaterial,
   engravingFor,
   paintEngraving,
@@ -57,9 +58,11 @@ const CENTER_SCALE = 0.9;
 const METAL = "#c9ad7a";
 const PALE = "#e8d9b2";
 const ENGRAVE = "#2b2219";
-const FILM = "#15110d";
-//lip height on the film strip, in band units
-const LIP = 0.04;
+//brass lip round the prints, in band units
+const LIP = 0.016;
+//inner skin texture: one turn of engraved titles
+const INNER_W = 4096;
+const INNER_H = 256;
 
 type Props = {
   rig: MutableRefObject<Rig>;
@@ -91,6 +94,8 @@ type LiveBand = {
   angleA: number;
   angleB: number;
   repaint: () => void;
+  //film bands: which batch of card photographs is on the strip
+  printed: number;
 };
 
 function token(styles: CSSStyleDeclaration, name: string, fallback: string): string {
@@ -100,13 +105,13 @@ function token(styles: CSSStyleDeclaration, name: string, fallback: string): str
 function readPalette(): FilmPalette {
   const styles = getComputedStyle(document.body);
   return {
-    film: FILM,
     panel: token(styles, "--panel-solid", "#1f1c18"),
     ink: token(styles, "--ink", "#ece6dc"),
     soft: token(styles, "--ink-soft", "#a39a8c"),
     line: token(styles, "--line", "rgba(236, 230, 220, 0.12)"),
     accent: token(styles, "--accent", "#e07a5a"),
     metal: METAL,
+    engrave: ENGRAVE,
     display: token(styles, "--font-display", "Georgia, serif"),
     sans: styles.fontFamily || "sans-serif",
   };
@@ -141,7 +146,7 @@ function Citadel({ rig, dom, dials, running }: Props) {
     const anisotropy = Math.min(8, gl.capabilities.getMaxAnisotropy());
     const maxTexture = gl.capabilities.maxTextureSize;
     return BANDS.map((spec, index) => {
-      const uniforms = createBandUniforms(spec, { film: FILM, metal: METAL });
+      const uniforms = createBandUniforms(spec, { metal: METAL });
       //phase offsets so no two bands start coplanar
       const angles = { angleA: 0.7 * index + 0.4, angleB: 1.3 * index };
       if (spec.kind === "accent") {
@@ -152,10 +157,11 @@ function Citadel({ rig, dom, dials, running }: Props) {
         return {
           spec,
           uniforms,
-          materials: [material, material],
+          materials: [material, material, material],
           textures: [texture],
           geometry: createBandGeometry(spec),
           ...angles,
+          printed: 0,
           repaint: () => {
             paintEngraving(texture.image as HTMLCanvasElement, spec, engraving, getComputedStyle(document.body).fontFamily || "sans-serif");
             texture.needsUpdate = true;
@@ -167,22 +173,31 @@ function Citadel({ rig, dom, dials, running }: Props) {
       const dims = filmCanvasSize(spec, maxTexture);
       canvas.width = dims.width;
       canvas.height = dims.height;
-      paintFilm(canvas, spec, reel, readPalette());
+      paintFilm(canvas, spec, reel, readPalette(), dom.prints[reel]);
       const texture = createFilmTexture(canvas, anisotropy);
+      const innerCanvas = document.createElement("canvas");
+      innerCanvas.width = Math.min(INNER_W, maxTexture);
+      innerCanvas.height = INNER_H;
+      paintInner(innerCanvas, spec, reel, readPalette());
+      const inner = createFilmTexture(innerCanvas, anisotropy);
       return {
         spec,
         uniforms,
-        materials: [createFilmMaterial(uniforms, texture), createMetalMaterial(spec, uniforms)],
-        textures: [texture],
+        materials: [createFilmMaterial(uniforms, texture), createMetalMaterial(spec, uniforms), createInnerMaterial(uniforms, inner)],
+        textures: [texture, inner],
         geometry: createBandGeometry(spec),
         ...angles,
+        printed: dom.printVersion[reel],
         repaint: () => {
-          paintFilm(canvas, spec, reel, readPalette());
+          const palette = readPalette();
+          paintFilm(canvas, spec, reel, palette, dom.prints[reel]);
           texture.needsUpdate = true;
+          paintInner(innerCanvas, spec, reel, palette);
+          inner.needsUpdate = true;
         },
       };
     });
-  }, [gl]);
+  }, [gl, dom]);
 
   useEffect(() => {
     let alive = true;
@@ -268,7 +283,9 @@ function Citadel({ rig, dom, dials, running }: Props) {
     const open = Math.max(r.features, r.agents);
     const fade = 1 - r.exit;
     const sphereAlpha = (1 - smoothstep(0, 0.5, r.lens)) * (1 - smoothstep(0, 0.7, open)) * fade;
-    const ringAlpha = (1 - smoothstep(0.2, 0.75, r.lens)) * fade;
+    //the rings snap open to let the calendar out, drift apart, then fade; closing reverses it and they rejoin
+    const broken = smoothstep(0.02, 0.62, r.lens);
+    const ringAlpha = (1 - smoothstep(0.42, 0.92, r.lens)) * fade;
 
     const g = group.current;
     if (g) {
@@ -290,6 +307,7 @@ function Citadel({ rig, dom, dials, running }: Props) {
       const q = orbit[spec.id];
       orbitQuaternion(spec.orbit, band.angleA, band.angleB, q);
 
+      band.uniforms.uBreak.value = broken;
       if (spec.kind === "accent") {
         const alpha = ringAlpha * (1 - smoothstep(0, 0.6, open));
         for (const material of band.materials) material.opacity = alpha;
@@ -316,10 +334,15 @@ function Citadel({ rig, dom, dials, running }: Props) {
       drumPos.set(0, faceY + frame.inradius * Math.cos(lean), faceZ + frame.inradius * Math.sin(lean));
       drumQuaternion(drumSpin(film, dial.pose), drumQ);
 
-      //turn first, then widen into a drum, then flatten each frame into a face
+      //new card photographs: repaint the strip once per batch
+      if (band.printed !== dom.printVersion[reel]) {
+        band.printed = dom.printVersion[reel];
+        band.repaint();
+      }
+
+      //turn first, then widen into a drum; the strip stays round, its prints bent along it
       const turn = mine;
       const widen = smoothstep(0.12, 0.88, mine);
-      const morph = smoothstep(0.35, 0.95, mine);
       const scale = lerp(groupScale, 1, turn);
       const stretch = lerp(1, drumStretch(spec), widen);
       bandPos.lerpVectors(groupPos, drumPos, turn);
@@ -334,7 +357,6 @@ function Citadel({ rig, dom, dials, running }: Props) {
       const closed = spec.depth / frame.height;
       const centreV = lerp(HEADER_V, 0.5, clamp01((window - closed) / (1 - closed)));
       const u = band.uniforms;
-      u.uMorph.value = morph;
       u.uWindow.value = window;
       u.uWindowCenter.value = Math.min(1 - window / 2, Math.max(window / 2, centreV));
       u.uEdge.value = Math.min(0.2, LIP / depth);

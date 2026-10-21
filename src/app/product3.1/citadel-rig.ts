@@ -1,6 +1,6 @@
 import { Vector3, type Quaternion } from "three";
 import { createDial, type Dial } from "./citadel-dial";
-import { filmItems } from "./citadel-film";
+import { filmItems, type Prints } from "./citadel-film";
 import { BANDS, clamp01, filmOf, frameSize, lerp, smoothstep, wrap, type BandSpec, type ReelId } from "./citadel-math";
 
 //GSAP tweens these numbers on a scrubbed timeline; useFrame reads them. no React state in between.
@@ -39,6 +39,9 @@ export type StageDom = {
   lensSize: { w: number; h: number };
   layers: Record<ReelId, HTMLElement | null>;
   cards: Record<ReelId, (HTMLElement | null)[]>;
+  //photographs of the live cards, painted onto the film; the scene repaints when a version moves
+  prints: Record<ReelId, Prints>;
+  printVersion: Record<ReelId, number>;
 };
 
 export function createStageDom(): StageDom {
@@ -48,6 +51,8 @@ export function createStageDom(): StageDom {
     lensSize: { w: 1, h: 1 },
     layers: { features: null, agents: null },
     cards: { features: [], agents: [] },
+    prints: { features: [], agents: [] },
+    printVersion: { features: 0, agents: 0 },
   };
 }
 
@@ -87,7 +92,7 @@ export function writeLens(dom: StageDom, view: View, sphere: SphereShot, lens: n
 }
 
 //the open drum's front frame on screen: how wide, and where its centre sits
-export function drumShot(view: View): { framePx: number; centerY: number } {
+export function drumShot(view: { width: number; height: number }): { framePx: number; centerY: number } {
   const { width, height } = view;
   const narrow = width < 760;
   const framePx = Math.round(Math.min(420, width * (narrow ? 0.84 : 0.8), height * 0.62 * 0.85));

@@ -10,7 +10,7 @@ import {
   type Material,
   type WebGLProgramParametersWithUniforms,
 } from "three";
-import { filmPhase, type BandSpec } from "./citadel-math";
+import { breakCut, type BandSpec } from "./citadel-math";
 
 //texture rows: the top TEXT_V..1 holds the engraving, the bottom strip is plain metal
 const TEXT_V = 0.25;
@@ -18,20 +18,22 @@ const BLANK_V = 0.1;
 const TEX_W = 4096;
 const TEX_H = 128;
 
-//segments per band: a multiple of every frame count puts a vertex on each polygon corner
-const SEGMENTS = 280;
+//segments per band: a multiple of 2 × every frame count, so each break cut and frame edge lands on a vertex
+const SEGMENTS = 420;
 
 type Face = "front" | "outer" | "back" | "inner";
 
-//box-section ring. group 0 is the outer skin (engraving or film), group 1 the other three faces.
-//accent bands map the engraving across the outer face; film bands map one frame per polygon side.
+//box-section ring built as two half arcs, so it can snap open at the cuts without stretching a triangle.
+//groups: 0 the outer skin (engraving or film), 1 the flat lips, 2 the inner skin.
 export function createBandGeometry(band: BandSpec): BufferGeometry {
   const r0 = band.radius - band.width / 2;
   const r1 = band.radius + band.width / 2;
   const z0 = -band.depth / 2;
   const z1 = band.depth / 2;
-  //frame k spans θ ∈ [k − ½, k + ½]·sector, so u is shifted half a frame and wraps
+  //frame k is centred on θ = k·sector and spans [k − ½, k + ½]·sector, so u is shifted half a frame
   const shift = band.film ? 0.5 / band.film.frames : 0;
+  const cut = breakCut(band);
+  const first = Math.round((cut / (Math.PI * 2)) * SEGMENTS);
 
   //each face is a strip between two (rho, z) corners with a constant (radial, z) normal.
   //flip reverses winding where tangent × (b − a) points into the ring.
@@ -41,126 +43,126 @@ export function createBandGeometry(band: BandSpec): BufferGeometry {
     back: { a: [r1, z0], b: [r0, z0], n: [0, -1], flip: true },
     inner: { a: [r0, z1], b: [r0, z0], n: [-1, 0], flip: false },
   };
+  const groupOf: Record<Face, number> = { outer: 0, front: 1, back: 1, inner: 2 };
 
   const positions: number[] = [];
   const normals: number[] = [];
   const uvs: number[] = [];
+  const breaks: number[] = [];
   const indices: number[] = [];
   const geometry = new BufferGeometry();
 
   for (const face of Object.keys(faces) as Face[]) {
     const { a, b, n, flip } = faces[face];
-    const base = positions.length / 3;
     const start = indices.length;
-    for (let k = 0; k <= SEGMENTS; k += 1) {
-      const t = k / SEGMENTS;
-      const theta = t * Math.PI * 2;
-      const c = Math.cos(theta);
-      const s = Math.sin(theta);
-      for (const [rho, z, v] of [
-        [a[0], a[1], 0],
-        [b[0], b[1], 1],
-      ] as const) {
-        positions.push(rho * c, rho * s, z);
-        normals.push(n[0] * c, n[0] * s, n[1]);
-        //outer is read from outside, counterclockwise, bottom to top
-        if (face !== "outer") uvs.push(t, BLANK_V);
-        else if (band.film) uvs.push(t + shift, v);
-        else uvs.push(t, TEXT_V + v * (1 - TEXT_V));
+    for (let half = 0; half < 2; half += 1) {
+      const base = positions.length / 3;
+      const from = first + (half * SEGMENTS) / 2;
+      //each half flies out along its own midpoint and turns the opposite way to the other
+      const mid = cut + Math.PI / 2 + half * Math.PI;
+      const spin = half === 0 ? 1 : -1;
+      for (let k = from; k <= from + SEGMENTS / 2; k += 1) {
+        const t = k / SEGMENTS;
+        const theta = t * Math.PI * 2;
+        const c = Math.cos(theta);
+        const s = Math.sin(theta);
+        for (const [rho, z, v] of [
+          [a[0], a[1], 0],
+          [b[0], b[1], 1],
+        ] as const) {
+          positions.push(rho * c, rho * s, z);
+          normals.push(n[0] * c, n[0] * s, n[1]);
+          breaks.push(Math.cos(mid), Math.sin(mid), spin);
+          //outer reads from outside, counterclockwise, bottom to top; inner reads from inside, so u runs back
+          if (face === "outer") uvs.push(band.film ? t + shift : t, band.film ? v : TEXT_V + v * (1 - TEXT_V));
+          else if (face === "inner") uvs.push(band.film ? 1 - t : t, band.film ? 1 - v : BLANK_V);
+          else uvs.push(t, BLANK_V);
+        }
+      }
+      for (let k = 0; k < SEGMENTS / 2; k += 1) {
+        const i = base + k * 2;
+        if (flip) indices.push(i, i + 1, i + 2, i + 1, i + 3, i + 2);
+        else indices.push(i, i + 2, i + 1, i + 1, i + 2, i + 3);
       }
     }
-    for (let k = 0; k < SEGMENTS; k += 1) {
-      const i = base + k * 2;
-      if (flip) indices.push(i, i + 1, i + 2, i + 1, i + 3, i + 2);
-      else indices.push(i, i + 2, i + 1, i + 1, i + 2, i + 3);
-    }
-    geometry.addGroup(start, indices.length - start, face === "outer" ? 0 : 1);
+    geometry.addGroup(start, indices.length - start, groupOf[face]);
   }
 
   geometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
   geometry.setAttribute("normal", new Float32BufferAttribute(normals, 3));
   geometry.setAttribute("uv", new Float32BufferAttribute(uvs, 2));
+  geometry.setAttribute("aBreak", new Float32BufferAttribute(breaks, 3));
   geometry.setIndex(indices);
   geometry.computeBoundingSphere();
-  //the drum stretches far past the orbit bounds; never cull it
+  //the drum and the broken halves reach far past the orbit bounds; never cull them
   if (geometry.boundingSphere) geometry.boundingSphere.radius *= 4;
   return geometry;
 }
 
 export type BandUniforms = {
-  uMorph: { value: number };
-  uSides: { value: number };
-  uPhase: { value: number };
-  //film only: visible fraction of a frame's height, where that slice is centred, lip height, holes per turn
+  //0 whole, 1 snapped in two and flown apart
+  uBreak: { value: number };
+  uSpread: { value: number };
+  //film only: visible fraction of a frame's height, where that slice is centred, lip height
   uWindow: { value: number };
   uWindowCenter: { value: number };
   uEdge: { value: number };
-  uHoles: { value: number };
-  uFilmBase: { value: Color };
   uBrass: { value: Color };
 };
 
-//circle → regular polygon with the same inradius, done per vertex. mirrors polygonFactor() in citadel-math.
-const VERTEX_UNIFORMS = /* glsl */ `
-uniform float uMorph;
-uniform float uSides;
-uniform float uPhase;
-float citadelEdge(vec2 p) {
-  float sector = 6.28318530718 / uSides;
-  return mod(atan(p.y, p.x) - uPhase, sector) - 0.5 * sector;
+const VERTEX_HEAD = /* glsl */ `
+uniform float uBreak;
+uniform float uSpread;
+uniform float uWindow;
+uniform float uWindowCenter;
+attribute vec3 aBreak;
+vec2 citadelTurn(vec2 p) {
+  float turn = aBreak.z * uBreak * 0.38;
+  float c = cos(turn);
+  float s = sin(turn);
+  return mat2(c, s, -s, c) * p;
 }
 `;
 
 const NORMAL_PATCH = /* glsl */ `
 #include <beginnormal_vertex>
-{
-  //side faces turn to the polygon edge normal
-  float turn = -citadelEdge(position.xy) * uMorph;
-  float c = cos(turn);
-  float s = sin(turn);
-  objectNormal.xy = mat2(c, s, -s, c) * objectNormal.xy;
-}
+objectNormal.xy = citadelTurn(objectNormal.xy);
 `;
 
+//the halves swing apart in the ring's plane and part along its axis, so every ring breaks its own way
 const POSITION_PATCH = /* glsl */ `
 #include <begin_vertex>
-{
-  float rho = length(transformed.xy);
-  vec2 dir = transformed.xy / max(rho, 1e-5);
-  //each concentric line keeps its own inradius, so the band edges stay parallel and mitred
-  transformed.xy = dir * rho * mix(1.0, 1.0 / cos(citadelEdge(transformed.xy)), uMorph);
-}
+transformed.xy = citadelTurn(transformed.xy) + aBreak.xy * uBreak * uSpread;
+transformed.z += aBreak.z * uBreak * uSpread * 0.35;
 `;
 
-//film is unlit so the frames read like prints; facing does the shading instead of lights
+//a thin band shows only a slice of each print; widening the band reveals the rest, undistorted
+const WINDOW_PATCH = /* glsl */ `
+#include <uv_vertex>
+vMapUv.y = uWindowCenter + (uv.y - 0.5) * uWindow;
+`;
+
+//film is unlit so the prints read like the cards they are; facing does the shading instead of lights
 const FILM_VERTEX = /* glsl */ `
-uniform float uWindow;
-uniform float uWindowCenter;
 varying vec2 vFilm;
 varying float vFacing;
 `;
 
 const FILM_UV_PATCH = /* glsl */ `
-#include <uv_vertex>
+${WINDOW_PATCH}
 vFilm = uv;
-//a thin band shows only a slice of each frame; widening the band reveals the rest, undistorted
-vMapUv.y = uWindowCenter + (uv.y - 0.5) * uWindow;
 `;
 
 const FILM_PROJECT_PATCH = /* glsl */ `
 #include <project_vertex>
 {
-  float turn = -citadelEdge(position.xy) * uMorph;
-  vec2 radial = normalize(position.xy);
-  vec2 n = mat2(cos(turn), sin(turn), -sin(turn), cos(turn)) * radial;
+  vec2 n = citadelTurn(normalize(position.xy));
   vFacing = dot(normalize(normalMatrix * vec3(n, 0.0)), normalize(-mvPosition.xyz));
 }
 `;
 
 const FILM_FRAGMENT = /* glsl */ `
 uniform float uEdge;
-uniform float uHoles;
-uniform vec3 uFilmBase;
 uniform vec3 uBrass;
 varying vec2 vFilm;
 varying float vFacing;
@@ -169,42 +171,33 @@ varying float vFacing;
 const FILM_MAP_PATCH = /* glsl */ `
 #include <map_fragment>
 {
-  //sprocket lips along both edges of the strip, drawn here so they survive any window
+  //a thin brass lip along both edges: the ring's own metal showing round the prints
   float m = min(vFilm.y, 1.0 - vFilm.y);
-  if (m < uEdge) {
-    float across = m / uEdge;
-    float along = fract(vFilm.x * uHoles);
-    float aa = fwidth(along) + 0.01;
-    float hole = smoothstep(0.26 - aa, 0.26 + aa, along) * (1.0 - smoothstep(0.7 - aa, 0.7 + aa, along))
-      * smoothstep(0.3, 0.36, across) * (1.0 - smoothstep(0.74, 0.8, across));
-    vec3 lip = across < 0.14 ? uBrass : uFilmBase;
-    diffuseColor.rgb = mix(lip, uBrass * 0.92, hole);
-  }
+  float aa = fwidth(m);
+  diffuseColor.rgb = mix(uBrass, diffuseColor.rgb, smoothstep(uEdge - aa, uEdge + aa, m));
   diffuseColor.rgb *= mix(0.3, 1.0, smoothstep(-0.05, 0.75, vFacing));
 }
 `;
 
-export function createBandUniforms(band: BandSpec, palette: { film: string; metal: string }): BandUniforms {
-  const frames = band.film?.frames ?? 5;
+export function createBandUniforms(band: BandSpec, palette: { metal: string }): BandUniforms {
   return {
-    uMorph: { value: 0 },
-    uSides: { value: frames },
-    uPhase: { value: band.film ? filmPhase(band.film) : 0 },
+    uBreak: { value: 0 },
+    uSpread: { value: band.radius * 0.9 },
     uWindow: { value: 1 },
     uWindowCenter: { value: 0.5 },
-    uEdge: { value: 0.1 },
-    uHoles: { value: frames * 6 },
-    uFilmBase: { value: new Color(palette.film) },
+    uEdge: { value: 0.05 },
     uBrass: { value: new Color(palette.metal) },
   };
 }
 
-function bend(material: Material, uniforms: BandUniforms, key: string) {
+function bend(material: Material, uniforms: BandUniforms, key: string, windowed = false) {
   material.onBeforeCompile = (shader: WebGLProgramParametersWithUniforms) => {
     Object.assign(shader.uniforms, uniforms);
-    shader.vertexShader = VERTEX_UNIFORMS + shader.vertexShader
+    let vertex = shader.vertexShader
       .replace("#include <beginnormal_vertex>", NORMAL_PATCH)
       .replace("#include <begin_vertex>", POSITION_PATCH);
+    if (windowed) vertex = vertex.replace("#include <uv_vertex>", WINDOW_PATCH);
+    shader.vertexShader = VERTEX_HEAD + vertex;
   };
   //every band of one kind shares a program
   material.customProgramCacheKey = () => key;
@@ -224,11 +217,18 @@ export function createMetalMaterial(band: BandSpec, uniforms: BandUniforms, map?
   return material;
 }
 
+//the inner skin of a film band: titles engraved on brass, windowed like the prints so they never stretch
+export function createInnerMaterial(uniforms: BandUniforms, map: CanvasTexture): MeshStandardMaterial {
+  const material = new MeshStandardMaterial({ map, metalness: 0.8, roughness: 0.38, envMapIntensity: 0.7, transparent: true });
+  bend(material, uniforms, "citadel-inner", true);
+  return material;
+}
+
 export function createFilmMaterial(uniforms: BandUniforms, map: CanvasTexture): MeshBasicMaterial {
   const material = new MeshBasicMaterial({ map, transparent: true, toneMapped: false });
   material.onBeforeCompile = (shader: WebGLProgramParametersWithUniforms) => {
     Object.assign(shader.uniforms, uniforms);
-    shader.vertexShader = VERTEX_UNIFORMS + FILM_VERTEX + shader.vertexShader
+    shader.vertexShader = VERTEX_HEAD + FILM_VERTEX + shader.vertexShader
       .replace("#include <uv_vertex>", FILM_UV_PATCH)
       .replace("#include <begin_vertex>", POSITION_PATCH)
       .replace("#include <project_vertex>", FILM_PROJECT_PATCH);
@@ -322,12 +322,15 @@ export function paintEngraving(canvas: HTMLCanvasElement, band: BandSpec, engrav
 
 const pad = (value: number) => String(value).padStart(2, "0");
 
-//both accent bands take dark ink on light metal: the old accent-on-brass time band washed out
+const MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+
+//both accent bands take dark ink on light metal: the old accent-on-brass time band washed out.
+//the date band carries months: a dozen big labels read while it spins, thirty-one small ones never did.
 export function engravingFor(band: BandSpec, palette: { metal: string; pale: string; ink: string }): Engraving {
   if (band.id === "date") {
     return {
-      labels: Array.from({ length: 31 }, (_, i) => ({ text: `OCT ${pad(i + 1)} ·`, u: (i + 0.5) / 31 })),
-      ticks: 31 * 4,
+      labels: MONTHS.map((text, i) => ({ text, u: (i + 0.5) / 12 })),
+      ticks: 12 * 4,
       majorEvery: 4,
       metal: palette.metal,
       ink: palette.ink,

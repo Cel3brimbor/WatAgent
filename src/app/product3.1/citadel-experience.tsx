@@ -8,13 +8,13 @@ import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useGSAP } from "@gsap/react";
 import Lenis from "lenis";
 import "lenis/dist/lenis.css";
-import { createVelocityTracker, project } from "@/shared/motion";
+import { createVelocityTracker } from "@/shared/motion";
 import { AgentReel } from "./agent-reel";
-import { dialRelease, dialStep, dialTo } from "./citadel-dial";
+import { dialGrab, dialRelease, dialStep, dialTo } from "./citadel-dial";
 import { setPageLenis } from "./citadel-lenis";
-import { BEATS, holdFraction, phaseAt, type Phase, type ReelId } from "./citadel-math";
-import { createDials, createRig, createStageDom } from "./citadel-rig";
-import { LensView, ReelControls, ReelLayer } from "./citadel-stage";
+import { BEATS, bandById, filmOf, holdFraction, phaseAt, type Phase, type ReelId } from "./citadel-math";
+import { createDials, createRig, createStageDom, drumShot } from "./citadel-rig";
+import { FilmPrints, LensView, ReelControls, ReelLayer } from "./citadel-stage";
 import { ExploreDialog } from "./explore-dialog";
 import { FEATURES, FeatureReel, type FeatureId } from "./feature-reel";
 import { CalendarPreview } from "./preview";
@@ -54,6 +54,24 @@ export function CitadelExperience() {
   const phaseRef = useRef<Phase>("orbit");
   const [active, setActive] = useState<Record<ReelId, number>>({ features: 0, agents: 0 });
   const [ask, setAsk] = useState(false);
+  //front-frame size the band's photographs were taken at; retaken when the viewport settles on a new size
+  const [printPx, setPrintPx] = useState(0);
+  const [printed, setPrinted] = useState(0);
+
+  useEffect(() => {
+    let timer = 0;
+    const measure = () => setPrintPx(drumShot({ width: window.innerWidth, height: window.innerHeight }).framePx);
+    measure();
+    const later = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(measure, 350);
+    };
+    window.addEventListener("resize", later);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("resize", later);
+    };
+  }, []);
 
   function enter(next: Phase) {
     if (phaseRef.current === next) return;
@@ -160,6 +178,9 @@ export function CitadelExperience() {
       const target = event.target;
       if (target instanceof Element && target.closest("input, textarea, select, [contenteditable], [data-no-drag]")) return;
       const dial = dials[reel];
+      //a hand on a coasting reel catches it where it is
+      const caught = dial.coast !== null;
+      if (caught) dialGrab(dial);
       const startX = event.clientX;
       const startY = event.clientY;
       const origin = dial.pose;
@@ -178,7 +199,7 @@ export function CitadelExperience() {
             return;
           }
           moved = true;
-          dial.dragging = true;
+          dialGrab(dial);
           stage.dataset.grabbing = "";
           try {
             stage.setPointerCapture(event.pointerId);
@@ -194,15 +215,17 @@ export function CitadelExperience() {
         stop();
         if (!moved) return;
         suppress = true;
-        const vx = tracker.velocity();
-        dialRelease(dial, project(-vx) / dial.framePx, -vx / dial.framePx);
+        //px/s of the hand → frames/s of the reel; the dial coasts it to rest on a slide
+        dialRelease(dial, -tracker.velocity() / dial.framePx);
       };
       const stop = () => {
         window.removeEventListener("pointermove", move);
         window.removeEventListener("pointerup", up);
         window.removeEventListener("pointercancel", up);
         delete stage.dataset.grabbing;
-        if (!moved) dial.dragging = false;
+        //caught and let go without a drag: settle on the nearest slide
+        if (!moved && caught) dialRelease(dial, 0);
+        else if (!moved) dial.dragging = false;
       };
       window.addEventListener("pointermove", move);
       window.addEventListener("pointerup", up);
@@ -266,6 +289,14 @@ export function CitadelExperience() {
           <div className={styles.canvas} data-off={!running || undefined}>
             {animated ? <CitadelScene rig={rig} dom={dom} dials={dials} running={running} /> : null}
           </div>
+          {animated && printPx > 0 && printed !== printPx ? (
+            <FilmPrints
+              dom={dom}
+              width={printPx}
+              height={Math.round(printPx / filmOf(bandById("features")).aspect)}
+              onDone={() => setPrinted(printPx)}
+            />
+          ) : null}
           {animated ? (
             <>
               <ReelLayer reel="features" dom={dom} active={active.features} live={phase === "features"} onAskAgent={() => setAsk(true)} />
