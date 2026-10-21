@@ -1,0 +1,168 @@
+.stage {
+  position: relative;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--paper);
+}
+
+.canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  transform: translate3d(0, 0, 0);
+}
+
+.canvas[data-hidden="true"] {
+  visibility: hidden;
+}
+
+.hud {
+  position: relative;
+  z-index: 2;
+  pointer-events: none;
+}
+
+/*ported out of the pinned stage so the title stays above the plaques*/
+.hud[data-dock="true"] {
+  position: fixed;
+  left: 0;
+  right: 0;
+  z-index: 40;
+  top: var(--citadel-hud, 0px);
+  pointer-events: none;
+  transform: translate3d(0, 0, 0);
+}
+
+.hud[data-live="true"] {
+  will-change: transform;
+}
+
+.hud a,
+.hud button {
+  pointer-events: auto;
+}
+
+.hud .hero {
+  padding: 32px 24px 0;
+}
+
+.hud .hero h1 {
+  font-size: clamp(42px, 5.2vw, 72px);
+  letter-spacing: -2.6px;
+}
+
+.column {
+  position: relative;
+  scroll-margin-top: 16px;
+}
+
+.column[data-lock="true"] [data-citadel-scroll] {
+  overflow: hidden;
+  touch-action: pan-y;
+}
+
+/*hold the plaques out of the column until the ring projection exists*/
+.column[data-arm="true"] .flyer:not([data-flight="true"]):not([data-home="true"]) {
+  visibility: hidden;
+}
+
+.slot {
+  width: 100%;
+}
+
+.slideSlot {
+  width: min(380px, 100%);
+  margin: 0 auto 18px;
+  scroll-margin-top: 24px;
+}
+
+.card {
+  width: 100%;
+  box-sizing: border-box;
+  border-radius: 20px;
+  background: var(--panel-solid);
+  border: 1px solid color-mix(in srgb, white 18%, var(--line));
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.16);
+  padding: 22px 20px 16px;
+}
+
+.card[data-active="true"] {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent),
+    0 16px 40px rgba(0, 0, 0, 0.16);
+}
+
+.cardHead span {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.cardHead h3 {
+  margin: 6px 0 0;
+  font: 500 32px/1.05 var(--font-display);
+  letter-spacing: -0.03em;
+}
+
+.pick {
+  min-height: 44px;
+  margin-top: 4px;
+  padding: 8px 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font-size: 13px;
+  text-align: left;
+}
+
+.pick:active {
+  transform: scale(0.98);
+}
+
+.agentBody {
+  height: 480px;
+  margin-top: 8px;
+}
+
+.agentBody > * {
+  height: 100%;
+}
+
+.flyer[data-flight="true"] {
+  position: fixed;
+  left: 0;
+  top: 0;
+  margin: 0;
+  box-sizing: border-box;
+  transform-origin: center center;
+  will-change: transform;
+  pointer-events: none;
+}
+
+@media (max-width: 760px) {
+  .hud .hero {
+    padding: 20px 16px 0;
+  }
+
+  .hud .hero h1 {
+    font-size: 40px;
+    letter-spacing: -1.6px;
+  }
+
+  .cardHead h3 {
+    font-size: 28px;
+  }
+
+  .agentBody {
+    height: 440px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .canvas {
+    display: none;
+  }
+}
