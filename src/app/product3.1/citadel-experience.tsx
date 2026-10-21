@@ -10,9 +10,9 @@ import Lenis from "lenis";
 import "lenis/dist/lenis.css";
 import { createVelocityTracker } from "@/shared/motion";
 import { AgentReel } from "./agent-reel";
-import { dialGrab, dialRelease, dialStep, dialTo } from "./citadel-dial";
+import { dialGrab, dialRelease, dialStep, dialTo, follow } from "./citadel-dial";
 import { createAirDrag, setPageLenis } from "./citadel-lenis";
-import { BEATS, bandById, filmOf, holdFraction, phaseAt, type Phase, type ReelId } from "./citadel-math";
+import { BEATS, bandById, filmOf, holdFraction, phaseAt, snapTime, type Phase, type ReelId } from "./citadel-math";
 import { createDials, createRig, createStageDom, drumShot } from "./citadel-rig";
 import { FilmPrints, LensView, ReelControls, ReelLayer } from "./citadel-stage";
 import { ExploreDialog } from "./explore-dialog";
@@ -128,6 +128,30 @@ export function CitadelExperience() {
           });
           setPageLenis(lenis);
           lenis.on("scroll", ScrollTrigger.update);
+
+          //stopped near a display? glide the rest of the way in, so it is fully open and live, never half there
+          let rest = 0;
+          let snapping = false;
+          const settle = () => {
+            const track = trackRef.current;
+            if (!track || snapping || Math.abs(lenis.velocity) > 0.5) return;
+            const runway = track.offsetHeight - window.innerHeight;
+            const top = track.getBoundingClientRect().top + window.scrollY;
+            const next = snapTime(((window.scrollY - top) / runway) * BEATS.end);
+            if (next === null) return;
+            snapping = true;
+            lenis.scrollTo(top + (next / BEATS.end) * runway, {
+              duration: 0.9,
+              easing: (x: number) => 1 - Math.pow(1 - x, 3),
+              onComplete: () => {
+                snapping = false;
+              },
+            });
+          };
+          lenis.on("scroll", () => {
+            window.clearTimeout(rest);
+            if (!snapping) rest = window.setTimeout(settle, 180);
+          });
           const tick = (time: number) => lenis.raf(time * 1000);
           gsap.ticker.add(tick);
           gsap.ticker.lagSmoothing(0);
@@ -176,6 +200,7 @@ export function CitadelExperience() {
           void document.fonts.ready.then(() => ScrollTrigger.refresh());
 
           return () => {
+            window.clearTimeout(rest);
             gsap.ticker.remove(tick);
             gsap.ticker.lagSmoothing(500, 33);
             lenis.destroy();
@@ -230,6 +255,7 @@ export function CitadelExperience() {
           }
         }
         dial.pose = origin - dx / dial.framePx;
+        follow(dial);
         tracker.add(ev.clientX);
       };
       const up = (ev: PointerEvent) => {

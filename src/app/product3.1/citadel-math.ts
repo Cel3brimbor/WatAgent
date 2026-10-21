@@ -110,15 +110,36 @@ export const BEATS = {
 
 export type Phase = "orbit" | "calendar" | "features" | "agents" | "done";
 
-//which view owns input at timeline time t. a little slack each side so a scrub settling short still counts.
+//which view owns input at timeline time t. the slack covers the tail of each open (power2.inOut is ~92% open
+//at 80% of the beat, which is when the live cards appear), so a view that looks ready is ready.
 export function phaseAt(t: number): Phase {
-  const slack = 0.06;
+  const slack = 0.24;
   const within = ([start, end]: readonly [number, number]) => t >= start - slack && t <= end + slack;
   if (t >= BEATS.exit[1]) return "done";
   if (within(BEATS.calendarHold)) return "calendar";
   if (within(BEATS.featuresHold)) return "features";
   if (within(BEATS.agentsHold)) return "agents";
   return "orbit";
+}
+
+const HOLDS = [
+  { open: BEATS.lensOpen, hold: BEATS.calendarHold, close: BEATS.lensClose },
+  { open: BEATS.featuresOpen, hold: BEATS.featuresHold, close: BEATS.featuresClose },
+  { open: BEATS.agentsOpen, hold: BEATS.agentsHold, close: BEATS.agentsClose },
+] as const;
+
+//where to settle when scrolling stops at timeline time t, or null to leave it be. stopping in the back half of an
+//open, or the front half of a close, counts as near a display: glide into the hold, just inside its edge.
+export function snapTime(t: number): number | null {
+  const inset = 0.15;
+  for (const { open, hold, close } of HOLDS) {
+    const from = open[0] + (open[1] - open[0]) * 0.4;
+    const to = close[0] + (close[1] - close[0]) * 0.6;
+    if (t < from || t > to) continue;
+    const settled = Math.min(hold[1] - inset, Math.max(hold[0] + inset, t));
+    return Math.abs(settled - t) > 0.02 ? settled : null;
+  }
+  return null;
 }
 
 //scroll fraction of the runway where a beat's hold is centred, for anchors

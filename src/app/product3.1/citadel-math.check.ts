@@ -12,6 +12,7 @@ import {
   frameTheta,
   breakCut,
   phaseAt,
+  snapTime,
 } from "./citadel-math";
 import { createDial, dialRelease, dialStep, stepDial } from "./citadel-dial";
 import { createAirDrag } from "./citadel-lenis";
@@ -117,6 +118,18 @@ assert.ok(throwAt(-3).pose < 0);
     return value;
   };
   assert.ok(fling(80) < 0.6 && fling(160) < fling(80));
+}
+
+//stopping near a display glides into it; inside a hold or far from one, the page is left alone
+assert.ok(snapTime(BEATS.featuresOpen[1] - 0.2)! >= BEATS.featuresHold[0]);
+assert.ok(snapTime(BEATS.agentsClose[0] + 0.3)! <= BEATS.agentsHold[1]);
+assert.equal(snapTime((BEATS.featuresHold[0] + BEATS.featuresHold[1]) / 2), null);
+assert.equal(snapTime(BEATS.hero[0]), null);
+assert.equal(snapTime(BEATS.exit[1]), null);
+//every snap lands where its view owns input
+for (let t = 0; t < BEATS.end; t += 0.05) {
+  const snapped = snapTime(t);
+  if (snapped !== null) assert.notEqual(phaseAt(snapped), "orbit", `snap from ${t} lands in orbit`);
 }
 
 console.log("citadel math ok");

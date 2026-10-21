@@ -26,7 +26,7 @@ export type Dial = {
   coast: { from: number; speed: number; decel: number; time: number; duration: number } | null;
   //on-screen width of the front frame, so a drag of one frame width turns one frame
   framePx: number;
-  //where the reel is headed (dots follow this) and where it came to rest (the live card follows this)
+  //the slide nearest the front (dots follow this) and where the reel came to rest (the live card follows this)
   onSettle: ((item: number) => void) | null;
   onArrive: ((item: number) => void) | null;
   lastItem: number;
@@ -56,8 +56,9 @@ export function itemAt(dial: Dial, pose: number): number {
   return wrap(Math.round(pose), dial.items);
 }
 
-function announce(dial: Dial) {
-  const item = itemAt(dial, dial.target);
+//the dots follow the slide nearest the front as the reel actually turns, under a hand or on its own
+export function follow(dial: Dial) {
+  const item = itemAt(dial, dial.pose);
   if (item === dial.lastItem) return;
   dial.lastItem = item;
   dial.onSettle?.(item);
@@ -70,7 +71,6 @@ function aim(dial: Dial, target: number, response = GLIDE) {
   dial.target = target;
   dial.response = response;
   dial.moving = true;
-  announce(dial);
 }
 
 //nearest frame showing `item`, whichever way round is shorter
@@ -113,7 +113,6 @@ export function dialRelease(dial: Dial, release: number) {
   dial.target = landed;
   dial.velocity = v;
   dial.moving = true;
-  announce(dial);
 }
 
 function arrive(dial: Dial) {
@@ -124,6 +123,7 @@ function arrive(dial: Dial) {
 
 //true while still moving
 export function stepDial(dial: Dial, dt: number): boolean {
+  follow(dial);
   if (dial.dragging) {
     dial.lead = dial.pose;
     return true;
