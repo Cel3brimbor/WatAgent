@@ -25,6 +25,7 @@ type Face = "front" | "outer" | "back" | "inner";
 
 //box-section ring built as two half arcs, so it can snap open at the cuts without stretching a triangle.
 //groups: 0 the outer skin (engraving or film), 1 the flat lips, 2 the inner skin.
+//accent bands carry their engraving on both skins; the inner copy runs mirrored so it reads from inside.
 export function createBandGeometry(band: BandSpec): BufferGeometry {
   const r0 = band.radius - band.width / 2;
   const r1 = band.radius + band.width / 2;
@@ -75,7 +76,7 @@ export function createBandGeometry(band: BandSpec): BufferGeometry {
           breaks.push(Math.cos(mid), Math.sin(mid), spin);
           //outer reads from outside, counterclockwise, bottom to top; inner reads from inside, so u runs back
           if (face === "outer") uvs.push(band.film ? t + shift : t, band.film ? v : TEXT_V + v * (1 - TEXT_V));
-          else if (face === "inner") uvs.push(band.film ? 1 - t : t, band.film ? 1 - v : BLANK_V);
+          else if (face === "inner") uvs.push(1 - t, band.film ? 1 - v : TEXT_V + (1 - v) * (1 - TEXT_V));
           else uvs.push(t, BLANK_V);
         }
       }
@@ -142,6 +143,12 @@ const WINDOW_PATCH = /* glsl */ `
 vMapUv.y = uWindowCenter + (uv.y - 0.5) * uWindow;
 `;
 
+//the inner skin's engraving sits in its middle rows, so its slice stays centred whatever the prints do
+const INNER_WINDOW_PATCH = /* glsl */ `
+#include <uv_vertex>
+vMapUv.y = 0.5 + (uv.y - 0.5) * uWindow;
+`;
+
 //film is unlit so the prints read like the cards they are; facing does the shading instead of lights
 const FILM_VERTEX = /* glsl */ `
 varying vec2 vFilm;
@@ -196,7 +203,7 @@ function bend(material: Material, uniforms: BandUniforms, key: string, windowed 
     let vertex = shader.vertexShader
       .replace("#include <beginnormal_vertex>", NORMAL_PATCH)
       .replace("#include <begin_vertex>", POSITION_PATCH);
-    if (windowed) vertex = vertex.replace("#include <uv_vertex>", WINDOW_PATCH);
+    if (windowed) vertex = vertex.replace("#include <uv_vertex>", INNER_WINDOW_PATCH);
     shader.vertexShader = VERTEX_HEAD + vertex;
   };
   //every band of one kind shares a program

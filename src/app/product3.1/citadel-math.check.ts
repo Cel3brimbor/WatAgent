@@ -13,6 +13,8 @@ import {
   breakCut,
   phaseAt,
 } from "./citadel-math";
+import { createDial, dialRelease, dialStep, stepDial } from "./citadel-dial";
+import { createAirDrag } from "./citadel-lenis";
 import { AGENT_SCENARIOS } from "./product-demo-conversations";
 
 //feature-reel.tsx pulls in css, so its five sides are counted here by hand
@@ -69,6 +71,52 @@ for (const band of BANDS) {
     front.set(Math.cos(theta), Math.sin(theta), 0).applyQuaternion(q);
     assert.ok(front.z > 0.98 && Math.abs(front.x) < 1e-9, `${band.id} pose ${pose} faces ${front.toArray()}`);
   }
+}
+
+//a thrown reel: faster throws go further and take longer, every throw rests exactly on a slide,
+//and even a gentle throw carries on to the next slide rather than springing back
+function throwAt(speed: number, from = 0.3) {
+  const dial = createDial(15, 5);
+  dial.pose = from;
+  dial.dragging = true;
+  dialRelease(dial, speed);
+  let time = 0;
+  while (stepDial(dial, 1 / 120) && time < 10) time += 1 / 120;
+  return { pose: dial.pose, time };
+}
+const gentle = throwAt(0.8);
+const hard = throwAt(5);
+for (const run of [gentle, hard, throwAt(-3), throwAt(7, 2.9)]) assert.ok(Math.abs(run.pose - Math.round(run.pose)) < 1e-6, `stopped between slides at ${run.pose}`);
+assert.ok(gentle.pose >= 1, "a gentle throw sprang back");
+assert.ok(hard.pose > gentle.pose + 2 && hard.time > gentle.time, "a harder throw should travel further and longer");
+assert.ok(throwAt(-3).pose < 0);
+
+//a button step glides: no frame of it moves more than a sliver
+{
+  const dial = createDial(15, 5);
+  dialStep(dial, 1);
+  let last = dial.pose;
+  let biggest = 0;
+  while (stepDial(dial, 1 / 60)) {
+    biggest = Math.max(biggest, Math.abs(dial.pose - last));
+    last = dial.pose;
+  }
+  assert.ok(biggest < 0.08 && Math.abs(dial.pose - 1) < 1e-9, `step jumped ${biggest.toFixed(3)} of a slide in one frame`);
+}
+
+//air drag: calm scrolling is untouched, a fling is slowed, and harder flings harder
+{
+  const calm = createAirDrag();
+  let factor = 1;
+  for (let i = 0; i < 20; i += 1) factor = calm(20, i * 16);
+  assert.equal(factor, 1);
+  const fling = (delta: number) => {
+    const drag = createAirDrag();
+    let value = 1;
+    for (let i = 0; i < 20; i += 1) value = drag(delta, i * 16);
+    return value;
+  };
+  assert.ok(fling(80) < 0.6 && fling(160) < fling(80));
 }
 
 console.log("citadel math ok");

@@ -1,6 +1,7 @@
-import { AGENT_ITEMS } from "./agent-reel";
+import { AGENT_ITEMS, scenarioOf } from "./agent-reel";
 import { FEATURES } from "./feature-reel";
 import { filmOf, frameSize, type BandSpec, type ReelId } from "./citadel-math";
+import type { AgentScenarioId } from "./product-demo-conversations";
 
 //one strip per film band: frame k holds item k mod n. once the real cards have been photographed,
 //each frame is that photograph, so a slide on the side is exactly the card it turns into at the front.
@@ -72,7 +73,8 @@ export function paintFilm(canvas: HTMLCanvasElement, band: BandSpec, id: ReelId,
   }
 }
 
-//inner skin: every frame's title engraved behind it, read from inside the ring (so mirrored round the band).
+//inner skin, read from inside the ring (so it runs mirrored round the band). behind every feature print
+//sits its title; behind every assistant print, the prompt that starts its turn, over several lines.
 //glyphs are pre-squeezed so they land undistorted once the band is a drum; a thin band shows the middle rows.
 export function paintInner(canvas: HTMLCanvasElement, band: BandSpec, id: ReelId, palette: FilmPalette) {
   const ctx = canvas.getContext("2d");
@@ -82,42 +84,82 @@ export function paintInner(canvas: HTMLCanvasElement, band: BandSpec, id: ReelId
   const { height: frameHeight } = frameSize(band);
   const innerRadius = band.radius - band.width / 2;
   const squeeze = frameHeight / canvas.height / ((Math.PI * 2 * innerRadius) / canvas.width);
-  //the orbit window is band.depth / frameHeight of the rows, centred; the title fills most of it
+  //the orbit window is band.depth / frameHeight of the rows, centred
   const rows = (band.depth / frameHeight) * canvas.height;
+  const mid = canvas.height / 2;
+  //one frame's span, in unsqueezed glyph pixels, less a margin each side
+  const span = (canvas.width / film.frames / squeeze) * 0.86;
 
   ctx.fillStyle = palette.metal;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.strokeStyle = palette.engrave;
   ctx.globalAlpha = 0.5;
-  ctx.lineWidth = Math.max(1, rows * 0.03);
-  for (const y of [canvas.height / 2 - rows * 0.36, canvas.height / 2 + rows * 0.36]) {
+  ctx.lineWidth = Math.max(1, rows * 0.025);
+  for (const y of [mid - rows * 0.4, mid + rows * 0.4]) {
     ctx.beginPath();
     ctx.moveTo(0, y);
     ctx.lineTo(canvas.width, y);
     ctx.stroke();
   }
-  ctx.globalAlpha = 0.9;
   ctx.fillStyle = palette.engrave;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.font = `600 ${Math.round(rows * 0.34)}px ${palette.sans}`;
+
+  const prompt = (index: number) =>
+    scenarioOf(items[index].id as AgentScenarioId).messages.find((message) => message.role === "user")?.content ?? items[index].title;
+
   for (let k = 0; k < film.frames; k += 1) {
-    const title = items[k % items.length].title.toUpperCase();
+    const index = k % items.length;
     const x = (1 - k / film.frames) * canvas.width;
-    for (const offset of [0, -canvas.width, canvas.width]) {
-      ctx.save();
-      ctx.translate(x + offset, canvas.height / 2);
-      ctx.scale(squeeze, 1);
-      ctx.fillText(title.split("").join(String.fromCharCode(8202)), 0, 0);
-      ctx.restore();
+    let lines: string[];
+    let size: number;
+    if (id === "agents") {
+      size = rows * 0.13;
+      ctx.font = `500 ${size}px ${palette.sans}`;
+      lines = wrapLines(ctx, `“${prompt(index)}”`, span, 5);
+    } else {
+      size = rows * 0.32;
+      ctx.font = `600 ${size}px ${palette.sans}`;
+      lines = [items[index].title.toUpperCase().split("").join(String.fromCharCode(8202))];
     }
-    //a dot between titles, where the prints meet on the far side
+    const leading = size * 1.22;
+    ctx.globalAlpha = 0.9;
+    for (const offset of [0, -canvas.width, canvas.width]) {
+      lines.forEach((line, i) => {
+        ctx.save();
+        ctx.translate(x + offset, mid + (i - (lines.length - 1) / 2) * leading);
+        ctx.scale(squeeze, 1);
+        ctx.fillText(line, 0, 0);
+        ctx.restore();
+      });
+    }
+    //a dot between entries, where the prints meet on the far side
     const between = (1 - (k + 0.5) / film.frames) * canvas.width;
     ctx.beginPath();
-    ctx.arc(between, canvas.height / 2, rows * 0.05, 0, Math.PI * 2);
+    ctx.arc(between, mid, rows * 0.04, 0, Math.PI * 2);
     ctx.fill();
   }
   ctx.globalAlpha = 1;
+}
+
+function wrapLines(ctx: CanvasRenderingContext2D, value: string, width: number, max: number): string[] {
+  const words = value.split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
+  let line = "";
+  for (const word of words) {
+    const next = line ? `${line} ${word}` : word;
+    if (ctx.measureText(next).width <= width || !line) {
+      line = next;
+      continue;
+    }
+    lines.push(line);
+    line = word;
+    if (lines.length === max) break;
+  }
+  if (lines.length < max && line) lines.push(line);
+  //ran out of room: the last line ends on an ellipsis
+  if (lines.join(" ").length < words.join(" ").length) lines[lines.length - 1] = fit(ctx, `${lines[lines.length - 1]}…`, width);
+  return lines;
 }
 
 function header(ctx: CanvasRenderingContext2D, frame: Frame, palette: FilmPalette, kicker: string, title: string) {

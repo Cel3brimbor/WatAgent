@@ -86,7 +86,7 @@ function CardFace({ reel, index, front, onAskAgent }: { reel: ReelId; index: num
         ) : (
           <div className={productStyles.agentCardBody}>
             {/* a new card streams its turn from the top every time it comes round */}
-            <DemoThread messages={scenarioOf(item.id as AgentScenarioId).messages} playing={front} visible />
+            <DemoThread messages={scenarioOf(item.id as AgentScenarioId).messages} playing={front} visible rest="prompt" />
             <button type="button" className={productStyles.ask} onClick={onAskAgent}>Ask with your own week</button>
           </div>
         )}
@@ -96,16 +96,18 @@ function CardFace({ reel, index, front, onAskAgent }: { reel: ReelId; index: num
 }
 
 //one live card per item, glued by the scene onto the drum face nearest the front that shows it
+//`arrived` is the card the reel last came to rest on: it stays live while the reel turns away from it,
+//and the next one only goes live (and starts streaming) once the reel has landed there
 export function ReelLayer({
   reel,
   dom,
-  active,
+  arrived,
   live,
   onAskAgent,
 }: {
   reel: ReelId;
   dom: StageDom;
-  active: number;
+  arrived: number;
   live: boolean;
   onAskAgent: () => void;
 }) {
@@ -118,7 +120,7 @@ export function ReelLayer({
       aria-hidden={!live}
     >
       {items.map((item, index) => {
-        const front = live && index === active;
+        const front = live && index === arrived;
         return (
           <article
             key={item.id}

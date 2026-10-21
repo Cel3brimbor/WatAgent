@@ -188,8 +188,19 @@ function Bubble({
   );
 }
 
-//visible overrides the viewport check, for cards the scene moves with transforms only
-export function DemoThread({ messages, playing, visible }: { messages: ChatMessage[]; playing: boolean; visible?: boolean }) {
+//visible overrides the viewport check, for cards the scene moves with transforms only.
+//rest "prompt" shows just the question while idle: exactly how a turn looks the moment it starts playing.
+export function DemoThread({
+  messages,
+  playing,
+  visible,
+  rest = "full",
+}: {
+  messages: ChatMessage[];
+  playing: boolean;
+  visible?: boolean;
+  rest?: "full" | "prompt";
+}) {
   const user = messages.find((message) => message.role === "user");
   const assistant = messages.find((message) => message.role === "assistant");
   const [view, setView] = useState<ThreadView>({ kind: "rest" });
@@ -308,7 +319,7 @@ export function DemoThread({ messages, playing, visible }: { messages: ChatMessa
   }, [playing, view]);
 
   const live = view.kind === "live";
-  const showAssistant = live ? view.assistant : view.kind === "rest" && Boolean(assistant);
+  const showAssistant = live ? view.assistant : view.kind === "rest" && rest === "full" && Boolean(assistant);
   const activity = live ? view.activity : assistant?.activity;
   const answer = live ? view.content : assistant?.content ?? "";
   const streaming = live && view.streaming;

@@ -62,7 +62,7 @@ const ENGRAVE = "#2b2219";
 const LIP = 0.016;
 //inner skin texture: one turn of engraved titles
 const INNER_W = 4096;
-const INNER_H = 256;
+const INNER_H = 512;
 
 type Props = {
   rig: MutableRefObject<Rig>;

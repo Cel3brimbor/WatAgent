@@ -11,7 +11,7 @@ import "lenis/dist/lenis.css";
 import { createVelocityTracker } from "@/shared/motion";
 import { AgentReel } from "./agent-reel";
 import { dialGrab, dialRelease, dialStep, dialTo } from "./citadel-dial";
-import { setPageLenis } from "./citadel-lenis";
+import { createAirDrag, setPageLenis } from "./citadel-lenis";
 import { BEATS, bandById, filmOf, holdFraction, phaseAt, type Phase, type ReelId } from "./citadel-math";
 import { createDials, createRig, createStageDom, drumShot } from "./citadel-rig";
 import { FilmPrints, LensView, ReelControls, ReelLayer } from "./citadel-stage";
@@ -53,6 +53,7 @@ export function CitadelExperience() {
   const [phase, setPhase] = useState<Phase>("orbit");
   const phaseRef = useRef<Phase>("orbit");
   const [active, setActive] = useState<Record<ReelId, number>>({ features: 0, agents: 0 });
+  const [arrived, setArrived] = useState<Record<ReelId, number>>({ features: 0, agents: 0 });
   const [ask, setAsk] = useState(false);
   //front-frame size the band's photographs were taken at; retaken when the viewport settles on a new size
   const [printPx, setPrintPx] = useState(0);
@@ -83,9 +84,13 @@ export function CitadelExperience() {
   useEffect(() => {
     for (const reel of Object.keys(dials) as ReelId[]) {
       dials[reel].onSettle = (item) => setActive((current) => (current[reel] === item ? current : { ...current, [reel]: item }));
+      dials[reel].onArrive = (item) => setArrived((current) => (current[reel] === item ? current : { ...current, [reel]: item }));
     }
     return () => {
-      for (const reel of Object.keys(dials) as ReelId[]) dials[reel].onSettle = null;
+      for (const reel of Object.keys(dials) as ReelId[]) {
+        dials[reel].onSettle = null;
+        dials[reel].onArrive = null;
+      }
     };
   }, [dials]);
 
@@ -103,7 +108,24 @@ export function CitadelExperience() {
           setMotion("full");
           enter("orbit");
 
-          const lenis = new Lenis({ lerp: 0.085, smoothWheel: true, autoRaf: false });
+          //only the pinned runway gets air drag; the page below scrolls as it always has
+          const drag = createAirDrag();
+          const onRunway = () => {
+            const track = trackRef.current;
+            if (!track) return false;
+            const top = track.getBoundingClientRect().top;
+            return top <= 1 && top + track.offsetHeight - window.innerHeight > 1;
+          };
+          const lenis = new Lenis({
+            lerp: 0.085,
+            smoothWheel: true,
+            autoRaf: false,
+            virtualScroll: (data) => {
+              const factor = drag(data.deltaY);
+              if (onRunway()) data.deltaY *= factor;
+              return true;
+            },
+          });
           setPageLenis(lenis);
           lenis.on("scroll", ScrollTrigger.update);
           const tick = (time: number) => lenis.raf(time * 1000);
@@ -299,8 +321,8 @@ export function CitadelExperience() {
           ) : null}
           {animated ? (
             <>
-              <ReelLayer reel="features" dom={dom} active={active.features} live={phase === "features"} onAskAgent={() => setAsk(true)} />
-              <ReelLayer reel="agents" dom={dom} active={active.agents} live={phase === "agents"} onAskAgent={() => setAsk(true)} />
+              <ReelLayer reel="features" dom={dom} arrived={arrived.features} live={phase === "features"} onAskAgent={() => setAsk(true)} />
+              <ReelLayer reel="agents" dom={dom} arrived={arrived.agents} live={phase === "agents"} onAskAgent={() => setAsk(true)} />
             </>
           ) : null}
 
